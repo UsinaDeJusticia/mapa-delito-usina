@@ -30,7 +30,7 @@ export function SelectorDelito({
       <select
         value={value || ''}
         onChange={(e) => onChange(e.target.value || undefined)}
-        className="text-sm text-[#2D1B4E] bg-transparent border-none outline-none cursor-pointer font-medium"
+        className="text-sm text-usina-900 bg-transparent border-none outline-none cursor-pointer font-medium"
         aria-label="Filtrar por tipo de delito"
       >
         <option value="">Todos los delitos</option>

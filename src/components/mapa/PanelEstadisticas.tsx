@@ -64,7 +64,7 @@ export function PanelEstadisticas({
   return (
     <div className="absolute top-0 right-0 w-full sm:w-[420px] h-full bg-white/95 backdrop-blur-sm shadow-2xl z-30 overflow-y-auto">
       {/* Header */}
-      <div className="sticky top-0 bg-[#2D1B4E] text-white px-6 py-4 flex items-center justify-between">
+      <div className="sticky top-0 bg-usina-900 text-white px-6 py-4 flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold">{provincia.provincia}</h2>
           <p className="text-sm text-purple-200">Datos {anio} · Fuente SNIC</p>
@@ -80,14 +80,14 @@ export function PanelEstadisticas({
 
       {/* Resumen */}
       <div className="px-6 py-4 grid grid-cols-2 gap-4">
-        <div className="bg-purple-50 rounded-xl p-4">
-          <p className="text-2xl font-bold text-[#2D1B4E]">
+        <div className="bg-usina-50 rounded-xl p-4">
+          <p className="text-2xl font-bold text-usina-900">
             {provincia.totalHechos.toLocaleString('es-AR')}
           </p>
           <p className="text-xs text-gray-500 mt-1">Hechos registrados</p>
         </div>
-        <div className="bg-purple-50 rounded-xl p-4">
-          <p className="text-2xl font-bold text-[#2D1B4E]">
+        <div className="bg-usina-50 rounded-xl p-4">
+          <p className="text-2xl font-bold text-usina-900">
             {provincia.totalVictimas.toLocaleString('es-AR')}
           </p>
           <p className="text-xs text-gray-500 mt-1">Víctimas</p>

@@ -171,7 +171,7 @@ export default function MapaDelito() {
       {/* Barra superior con controles */}
       <div className="absolute top-4 left-4 right-4 z-10 flex flex-wrap items-center gap-3">
         <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg px-4 py-3 flex items-center gap-4">
-          <h1 className="text-lg font-bold text-[#2D1B4E]">
+          <h1 className="text-lg font-bold text-usina-900">
             Mapa Nacional del Delito
           </h1>
           <span className="text-sm text-gray-500">
@@ -197,8 +197,8 @@ export default function MapaDelito() {
       {loading && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/60 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-3">
-            <div className="w-10 h-10 border-4 border-[#2D1B4E] border-t-transparent rounded-full animate-spin" />
-            <p className="text-[#2D1B4E] font-medium">Cargando datos...</p>
+            <div className="w-10 h-10 border-4 border-usina-900 border-t-transparent rounded-full animate-spin" />
+            <p className="text-usina-900 font-medium">Cargando datos...</p>
           </div>
         </div>
       )}

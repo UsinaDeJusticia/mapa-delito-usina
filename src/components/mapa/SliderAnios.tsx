@@ -24,11 +24,11 @@ export function SliderAnios({
         step={1}
         value={anioSeleccionado}
         onChange={(e) => onChange(parseInt(e.target.value))}
-        className="w-32 sm:w-48 accent-[#2D1B4E]"
+        className="w-32 sm:w-48 accent-usina-900"
         aria-label="Seleccionar año"
       />
       <span className="text-xs text-gray-500 min-w-[32px]">{max}</span>
-      <span className="text-base font-bold text-[#2D1B4E] min-w-[48px] text-center">
+      <span className="text-base font-bold text-usina-900 min-w-[48px] text-center">
         {anioSeleccionado}
       </span>
     </div>
