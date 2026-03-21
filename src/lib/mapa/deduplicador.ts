@@ -1,0 +1,255 @@
+/**
+ * Deduplicador inteligente de hechos delictivos.
+ *
+ * Cuando llega una noticia nueva, determina si es:
+ * A) Un hecho delictivo NUEVO → crea HechoDelictivo + primera CoberturaMediatica
+ * B) Cobertura de un hecho EXISTENTE → solo crea CoberturaMediatica vinculada
+ *
+ * La decisión se basa en:
+ * 1. URL duplicada (ya procesada)
+ * 2. Proximidad temporal (hechos en los últimos 30 días)
+ * 3. Misma provincia + mismo tipo de delito
+ * 4. Confirmación por IA cuando hay ambigüedad
+ */
+
+import { PrismaClient, Prisma } from '@prisma/client'
+import OpenAI from 'openai'
+
+const prisma = new PrismaClient()
+
+const openrouter = new OpenAI({
+  baseURL: 'https://openrouter.ai/api/v1',
+  apiKey: process.env.OPENROUTER_API_KEY || '',
+  defaultHeaders: {
+    'HTTP-Referer': 'https://usinadejusticia.org.ar',
+    'X-Title': 'Mapa del Delito - Deduplicador',
+  },
+})
+
+// ════════════════════════════════════════════
+// TIPOS
+// ════════════════════════════════════════════
+
+export interface DatosNoticia {
+  tipoHecho: string
+  codigoSnicEstimado: number
+  ubicacion: {
+    provincia: string | null
+    ciudad: string | null
+  }
+  fecha: string | null
+  titulo: string
+  resumen: string | null
+  medio: string
+  medioTipo: 'provincial' | 'nacional'
+  url: string
+}
+
+export interface ResultadoDeduplicacion {
+  esNuevo: boolean
+  hechoDelictivoId: string | null
+  confianza: number
+  razon: string
+  urlDuplicada: boolean
+}
+
+// ════════════════════════════════════════════
+// BÚSQUEDA DE CANDIDATOS
+// ════════════════════════════════════════════
+
+async function buscarHechosSimilares(datos: DatosNoticia) {
+  const fechaNoticia = datos.fecha ? new Date(datos.fecha) : new Date()
+  const hace30Dias = new Date(fechaNoticia)
+  hace30Dias.setDate(hace30Dias.getDate() - 30)
+
+  const where: Prisma.HechoDelictivoWhereInput = {
+    esAgregado: false,
+    tipoDelito: {
+      codigoSnic: datos.codigoSnicEstimado,
+    },
+    fechaHecho: {
+      gte: hace30Dias,
+      lte: new Date(),
+    },
+  }
+
+  // Filtrar por provincia si está disponible
+  if (datos.ubicacion.provincia) {
+    where.ubicacion = {
+      provincia: {
+        contains: datos.ubicacion.provincia,
+        mode: 'insensitive',
+      },
+    }
+  }
+
+  return prisma.hechoDelictivo.findMany({
+    where,
+    include: {
+      ubicacion: { select: { provincia: true, departamento: true } },
+      tipoDelito: { select: { nombre: true } },
+      coberturas: {
+        select: { titulo: true, medio: true, url: true },
+        orderBy: { fechaPublicacion: 'desc' },
+        take: 5,
+      },
+    },
+    orderBy: { fechaHecho: 'desc' },
+    take: 10,
+  })
+}
+
+// ════════════════════════════════════════════
+// CONFIRMACIÓN POR IA
+// ════════════════════════════════════════════
+
+async function confirmarConIA(
+  datos: DatosNoticia,
+  candidatos: Awaited<ReturnType<typeof buscarHechosSimilares>>
+): Promise<{ esNuevo: boolean; candidatoId: string | null; confianza: number; razon: string }> {
+
+  if (candidatos.length === 0) {
+    return {
+      esNuevo: true,
+      candidatoId: null,
+      confianza: 95,
+      razon: 'Sin candidatos similares en los últimos 30 días',
+    }
+  }
+
+  const candidatosTexto = candidatos.map((c, i) => {
+    const coberturas = c.coberturas.map(cob => `  - ${cob.medio}: "${cob.titulo}"`).join('\n')
+    return `CANDIDATO ${i + 1}:
+  ID: ${c.id}
+  Tipo: ${c.tipoDelito.nombre}
+  Fecha: ${c.fechaHecho.toISOString().split('T')[0]}
+  Ubicación: ${c.ubicacion.provincia}${c.ubicacion.departamento ? ', ' + c.ubicacion.departamento : ''}
+  Coberturas existentes:
+${coberturas || '  (ninguna aún)'}`
+  }).join('\n\n')
+
+  const prompt = `Sos un analista que determina si una noticia policial refiere a un crimen ya registrado o es un crimen nuevo.
+
+NOTICIA NUEVA:
+  Título: "${datos.titulo}"
+  Tipo: ${datos.tipoHecho}
+  Fecha: ${datos.fecha || 'no especificada'}
+  Ubicación: ${datos.ubicacion.provincia || 'desconocida'}${datos.ubicacion.ciudad ? ', ' + datos.ubicacion.ciudad : ''}
+  Medio: ${datos.medio}
+
+HECHOS YA REGISTRADOS:
+${candidatosTexto}
+
+¿La noticia nueva es cobertura de alguno de los candidatos, o es un crimen diferente?
+
+Respondé SOLO con JSON, sin texto adicional:
+{"esNuevo": true, "candidatoId": null, "confianza": 90, "razon": "explicación breve"}
+o
+{"esNuevo": false, "candidatoId": "ID-del-candidato", "confianza": 85, "razon": "explicación breve"}`
+
+  try {
+    const modelo = process.env.OPENROUTER_MODEL || 'deepseek/deepseek-chat-v3-0324'
+
+    const respuesta = await openrouter.chat.completions.create({
+      model: modelo,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.1,
+      max_tokens: 300,
+    })
+
+    const contenido = respuesta.choices[0]?.message?.content?.trim() || ''
+    const jsonLimpio = contenido
+      .replace(/^```json\n?/i, '')
+      .replace(/\n?```$/i, '')
+      .trim()
+
+    return JSON.parse(jsonLimpio)
+
+  } catch (error) {
+    console.error('Error en deduplicación IA:', error)
+    // En caso de error, asumir nuevo (más seguro duplicar que perder)
+    return {
+      esNuevo: true,
+      candidatoId: null,
+      confianza: 30,
+      razon: 'Error en IA, asumido como nuevo por precaución',
+    }
+  }
+}
+
+// ════════════════════════════════════════════
+// FUNCIÓN PRINCIPAL
+// ════════════════════════════════════════════
+
+/**
+ * Determina si una noticia es un hecho nuevo o cobertura de uno existente.
+ *
+ * Flujo:
+ * 1. Verificar si la URL ya fue procesada → duplicado
+ * 2. Buscar hechos similares (mismo tipo, provincia, últimos 30 días)
+ * 3. Si no hay candidatos → es nuevo (sin consultar IA)
+ * 4. Si hay candidatos → confirmar con IA
+ */
+export async function deduplicar(datos: DatosNoticia): Promise<ResultadoDeduplicacion> {
+
+  // 1. Verificar URL duplicada
+  const coberturaExistente = await prisma.coberturaMediatica.findUnique({
+    where: { url: datos.url },
+  })
+
+  if (coberturaExistente) {
+    return {
+      esNuevo: false,
+      hechoDelictivoId: coberturaExistente.hechoDelictivoId,
+      confianza: 100,
+      razon: 'URL ya procesada',
+      urlDuplicada: true,
+    }
+  }
+
+  // 2. Buscar candidatos similares
+  const candidatos = await buscarHechosSimilares(datos)
+
+  // 3. Sin candidatos → nuevo
+  if (candidatos.length === 0) {
+    return {
+      esNuevo: true,
+      hechoDelictivoId: null,
+      confianza: 95,
+      razon: 'Sin hechos similares en los últimos 30 días',
+      urlDuplicada: false,
+    }
+  }
+
+  // 4. Con candidatos → confirmar con IA
+  const resultado = await confirmarConIA(datos, candidatos)
+  return {
+    esNuevo: resultado.esNuevo,
+    hechoDelictivoId: resultado.candidatoId,
+    confianza: resultado.confianza,
+    razon: resultado.razon,
+    urlDuplicada: false,
+  }
+}
+
+// ════════════════════════════════════════════
+// CLASIFICADOR DE COBERTURA
+// ════════════════════════════════════════════
+
+/**
+ * Clasifica el tipo de cobertura de una noticia.
+ * Se llama DESPUÉS de determinar que es cobertura de un hecho existente.
+ */
+export function clasificarCobertura(titulo: string, texto: string): string {
+  const contenido = (titulo + ' ' + texto).toLowerCase()
+
+  if (/detenid|detenci[oó]n|apres[oó]|captur|arrestar/.test(contenido)) return 'DETENCION'
+  if (/march[aó]|reclam|pidi[oó] justicia|familiares|movilizaci/.test(contenido)) return 'MARCHA_RECLAMO'
+  if (/juicio|tribunal|fiscal[ií]a|imput|acusad|elevad|audiencia/.test(contenido)) return 'PROCESO_JUDICIAL'
+  if (/conden[aó]|absuelto|sentencia|veredicto|pena de|culpable/.test(contenido)) return 'SENTENCIA'
+  if (/aniversario|a \d+ año|homenaje|recordar|conmemor/.test(contenido)) return 'ANIVERSARIO'
+  if (/opini[oó]n|editorial|columna|an[aá]lisis|reflexi/.test(contenido)) return 'OPINION_EDITORIAL'
+  if (/nuevo[s]? dato|investig|autopsia|peri[tc]ia|evidencia/.test(contenido)) return 'ACTUALIZACION'
+
+  return 'ACTUALIZACION'
+}
