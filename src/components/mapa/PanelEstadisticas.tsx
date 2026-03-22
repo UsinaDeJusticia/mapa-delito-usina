@@ -67,7 +67,7 @@ export function PanelEstadisticas({
       <div className="sticky top-0 bg-usina-900 text-white px-6 py-4 flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold">{provincia.provincia}</h2>
-          <p className="text-sm text-purple-200">Datos {anio} · Fuente SNIC</p>
+          <p className="text-sm text-usina-200">Datos {anio} · Fuente SNIC</p>
         </div>
         <button
           onClick={onClose}
@@ -112,7 +112,7 @@ export function PanelEstadisticas({
             <Tooltip
               formatter={(value: number) => [value.toLocaleString('es-AR'), 'Hechos']}
             />
-            <Bar dataKey="hechos" fill="#6B3FA0" radius={[0, 4, 4, 0]} />
+            <Bar dataKey="hechos" fill="#15305B" radius={[0, 4, 4, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -138,9 +138,9 @@ export function PanelEstadisticas({
               <Line
                 type="monotone"
                 dataKey="hechos"
-                stroke="#2D1B4E"
+                stroke="#1E427C"
                 strokeWidth={2}
-                dot={{ fill: '#2D1B4E', r: 3 }}
+                dot={{ fill: '#1E427C', r: 3 }}
               />
             </LineChart>
           </ResponsiveContainer>

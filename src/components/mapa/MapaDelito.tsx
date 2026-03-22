@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { APIProvider, Map, useMap, useMapsLibrary } from '@vis.gl/react-google-maps'
+import { APIProvider, Map, useMap } from '@vis.gl/react-google-maps'
 import { PanelEstadisticas } from './PanelEstadisticas'
 import { SliderAnios } from './SliderAnios'
 import { SelectorDelito } from './SelectorDelito'
+import { MAPA_STYLE_USINA } from '@/config/mapStyles'
 
 // Tipos
 interface ProvinciaData {
@@ -30,13 +31,13 @@ const ARGENTINA_ZOOM = 4
 
 // Paleta de colores Usina (violeta → rojo por intensidad)
 function getColorByRate(hechos: number, maxHechos: number): string {
-  if (maxHechos === 0) return '#F3EEFB' // Violeta muy claro
+  if (maxHechos === 0) return '#C5D1E4'
   const ratio = hechos / maxHechos
-  if (ratio < 0.15) return '#F3EEFB'
-  if (ratio < 0.30) return '#D8C4F0'
-  if (ratio < 0.45) return '#B794E0'
-  if (ratio < 0.60) return '#8B5CC6'
-  if (ratio < 0.75) return '#6B3FA0'
+  if (ratio < 0.15) return '#C5D1E4'
+  if (ratio < 0.30) return '#9BB1CF'
+  if (ratio < 0.45) return '#4A71A5'
+  if (ratio < 0.60) return '#1E427C'
+  if (ratio < 0.75) return '#15305B'
   if (ratio < 0.90) return '#DC2626'
   return '#991B1B'
 }
@@ -52,17 +53,19 @@ function MapaContenido({
   onProvinciaClick: (provincia: ProvinciaData | null) => void
 }) {
   const map = useMap()
-  const markerLibrary = useMapsLibrary('marker')
 
   useEffect(() => {
-    if (!map || datos.length === 0 || !markerLibrary) return
+    if (!map || datos.length === 0) return
+
+    map.setOptions({ styles: MAPA_STYLE_USINA })
+    console.log('Estilos aplicados:', MAPA_STYLE_USINA.length, 'reglas')
 
     // Filtrar datos válidos
     const datosValidos = datos.filter(d => d && d.totalHechos !== undefined && d.totalHechos != null)
     if (datosValidos.length === 0) return
 
     // Limpiar marcadores anteriores
-    const markers: google.maps.marker.AdvancedMarkerElement[] = []
+    const markers: google.maps.Marker[] = []
     const maxHechos = Math.max(...datosValidos.map(d => d.totalHechos || 0))
 
     datosValidos.forEach(provincia => {
@@ -103,10 +106,9 @@ function MapaContenido({
         markerContent.style.transform = 'scale(1)'
       })
 
-      const marker = new markerLibrary.AdvancedMarkerElement({
-        map,
+      const marker = new google.maps.Marker({
         position: { lat: provincia.latitud, lng: provincia.longitud },
-        content: markerContent,
+        map,
         title: `${provincia.provincia}: ${totalHechos.toLocaleString('es-AR')} hechos`,
       })
 
@@ -118,9 +120,9 @@ function MapaContenido({
     })
 
     return () => {
-      markers.forEach(m => (m.map = null))
+      markers.forEach(m => m.setMap(null))
     }
-  }, [map, datos, onProvinciaClick, markerLibrary])
+  }, [map, datos, onProvinciaClick])
 
   return null
 }
@@ -219,7 +221,6 @@ export default function MapaDelito() {
             disableDefaultUI={false}
             mapTypeControl={false}
             streetViewControl={false}
-            mapId="DEMO_MAP_ID"
             style={{ width: '100%', height: '100%' }}
           >
             <MapaContenido
@@ -244,7 +245,7 @@ export default function MapaDelito() {
       <div className="absolute bottom-6 left-4 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg px-4 py-3 z-10">
         <p className="text-xs font-medium text-gray-600 mb-2">Hechos registrados</p>
         <div className="flex items-center gap-1">
-          {['#F3EEFB', '#D8C4F0', '#B794E0', '#8B5CC6', '#6B3FA0', '#DC2626', '#991B1B'].map((color, i) => (
+          {['#C5D1E4', '#9BB1CF', '#4A71A5', '#1E427C', '#15305B', '#B91C1C', '#991B1B'].map((color, i) => (
             <div key={i} className="w-5 h-3 rounded-sm" style={{ backgroundColor: color }} />
           ))}
         </div>
