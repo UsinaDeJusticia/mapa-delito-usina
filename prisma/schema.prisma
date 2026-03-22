@@ -144,6 +144,8 @@ model HechoDelictivo {
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
+  coberturas        CoberturaMediatica[]
+
   @@index([anio])
   @@index([tipoDelitoId])
   @@index([ubicacionId])
@@ -202,4 +204,45 @@ model EstadisticaAgregada {
   @@index([provinciaId])
   @@index([anio, provinciaId])
   @@map("estadisticas_agregadas")
+}
+
+// ============================================
+// TABLA: Coberturas mediáticas (N por hecho)
+// ============================================
+model CoberturaMediatica {
+  id              String   @id @default(uuid())
+
+  // Vínculo al hecho real
+  hechoDelictivoId String  @map("hecho_delictivo_id")
+  hechoDelictivo   HechoDelictivo @relation(fields: [hechoDelictivoId], references: [id])
+
+  // Datos de la nota periodística
+  medio           String   // "Infobae", "Rosario3", "Clarín", etc.
+  medioTipo       String   @map("medio_tipo") // "nacional", "provincial"
+  titulo          String
+  url             String   @unique // Deduplicación: una URL = una cobertura
+  fechaPublicacion DateTime @map("fecha_publicacion")
+  resumen         String?  @db.Text // Resumen generado por IA
+
+  // Clasificación del contenido de la nota
+  tipoCobertura   TipoCobertura @default(HECHO_INICIAL) @map("tipo_cobertura")
+
+  // Auditoría
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([hechoDelictivoId])
+  @@index([medio])
+  @@index([fechaPublicacion])
+  @@map("coberturas_mediaticas")
+}
+
+enum TipoCobertura {
+  HECHO_INICIAL      // Primera nota que reporta el crimen
+  ACTUALIZACION      // Nuevos datos sobre el mismo hecho
+  DETENCION          // Detención de sospechoso/s
+  MARCHA_RECLAMO     // Marcha de familiares, pedido de justicia
+  PROCESO_JUDICIAL   // Elevación a juicio, audiencias
+  SENTENCIA          // Condena o absolución
+  ANIVERSARIO        // Notas a 1 año, 5 años, etc.
+  OPINION_EDITORIAL  // Columnas de opinión, editoriales
 }
