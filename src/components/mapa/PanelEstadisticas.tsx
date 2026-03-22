@@ -110,7 +110,7 @@ export function PanelEstadisticas({
               tickFormatter={(v: string) => v.length > 20 ? v.slice(0, 20) + '…' : v}
             />
             <Tooltip
-              formatter={(value: number) => [value.toLocaleString('es-AR'), 'Hechos']}
+              formatter={(value) => [`${Number(value).toLocaleString('es-AR')}`, 'Hechos']}
             />
             <Bar dataKey="hechos" fill="#15305B" radius={[0, 4, 4, 0]} />
           </BarChart>
@@ -133,7 +133,7 @@ export function PanelEstadisticas({
               <XAxis dataKey="anio" tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} />
               <Tooltip
-                formatter={(value: number) => [value.toLocaleString('es-AR'), 'Hechos']}
+                formatter={(value) => [`${Number(value).toLocaleString('es-AR')}`, 'Hechos']}
               />
               <Line
                 type="monotone"

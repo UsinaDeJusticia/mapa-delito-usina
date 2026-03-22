@@ -29,6 +29,7 @@
     "recharts": "^3.8.0"
   },
   "devDependencies": {
+    "@types/geojson": "^7946.0.16",
     "@types/node": "^20",
     "@types/papaparse": "^5.5.2",
     "@types/react": "^18",

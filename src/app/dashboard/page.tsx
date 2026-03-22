@@ -23,7 +23,7 @@ interface TipoDelito {
 
 export default function Dashboard() {
   const [tiposDelito, setTiposDelito] = useState<TipoDelito[]>([])
-  const [año, setAño] = useState(2024)
+  const [anio, setAnio] = useState(2024)
   const [tipoDelitoId, setTipoDelitoId] = useState<string>('')
 
   useEffect(() => {
@@ -49,8 +49,8 @@ export default function Dashboard() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Año</label>
             <select
-              value={año}
-              onChange={(e) => setAño(Number(e.target.value))}
+              value={anio}
+              onChange={(e) => setAnio(Number(e.target.value))}
               className="border border-gray-300 rounded px-3 py-2"
             >
               <option value={2024}>2024</option>
@@ -79,7 +79,7 @@ export default function Dashboard() {
 
         <div className="h-[600px] bg-white rounded-lg shadow-md overflow-hidden">
           {tipoDelitoId && (
-            <MapaDelito año={año} tipoDelitoId={tipoDelitoId} />
+            <MapaDelito anio={anio} tipoDelitoId={tipoDelitoId} />
           )}
         </div>
       </main>

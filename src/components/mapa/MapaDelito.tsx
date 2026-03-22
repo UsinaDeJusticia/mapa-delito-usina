@@ -1,13 +1,23 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { APIProvider, Map, useMap } from '@vis.gl/react-google-maps'
 import { PanelEstadisticas } from './PanelEstadisticas'
 import { SliderAnios } from './SliderAnios'
 import { SelectorDelito } from './SelectorDelito'
 import { MAPA_STYLE_USINA } from '@/config/mapStyles'
 
-// Tipos
+import {
+  MascaraPaises,
+  CapaProvincias,
+  CapaDepartamentos,
+  MarcadoresCirculares,
+} from './capas'
+
+import { useGeolocalizacion } from './hooks/useGeolocalizacion'
+import { precargarGeoJSON } from './hooks/useGeoJSON'
+
+// ─── Tipos ───────────────────────────────────────────────
 interface ProvinciaData {
   provincia: string
   provinciaId: string
@@ -25,121 +35,98 @@ interface EstadisticasResponse {
   totalRegistros: number
 }
 
-// Centro de Argentina
-const ARGENTINA_CENTER = { lat: -38.4161, lng: -63.6167 }
-const ARGENTINA_ZOOM = 4
-
-// Paleta de colores Usina (violeta → rojo por intensidad)
-function getColorByRate(hechos: number, maxHechos: number): string {
-  if (maxHechos === 0) return '#C5D1E4'
-  const ratio = hechos / maxHechos
-  if (ratio < 0.15) return '#C5D1E4'
-  if (ratio < 0.30) return '#9BB1CF'
-  if (ratio < 0.45) return '#4A71A5'
-  if (ratio < 0.60) return '#1E427C'
-  if (ratio < 0.75) return '#15305B'
-  if (ratio < 0.90) return '#DC2626'
-  return '#991B1B'
+interface MapaDelitoProps {
+  anio?: number
+  tipoDelitoId?: string
 }
 
-// Componente interno que accede al mapa
-function MapaContenido({
-  datos,
-  provinciaSeleccionada,
-  onProvinciaClick,
-}: {
-  datos: ProvinciaData[]
-  provinciaSeleccionada: string | null
-  onProvinciaClick: (provincia: ProvinciaData | null) => void
-}) {
+// ─── Configuración ───────────────────────────────────────
+const ARGENTINA_CENTER = { lat: -38.4161, lng: -63.6167 }
+const ARGENTINA_ZOOM = 4
+const QUILMES_DEPTO_ID = '06658'
+
+// ─── Componente interno para precarga inteligente ────────
+function PrecargaInteligente() {
   const map = useMap()
 
   useEffect(() => {
-    if (!map || datos.length === 0) return
+    if (!map) return
 
-    map.setOptions({ styles: MAPA_STYLE_USINA })
-    console.log('Estilos aplicados:', MAPA_STYLE_USINA.length, 'reglas')
-
-    // Filtrar datos válidos
-    const datosValidos = datos.filter(d => d && d.totalHechos !== undefined && d.totalHechos != null)
-    if (datosValidos.length === 0) return
-
-    // Limpiar marcadores anteriores
-    const markers: google.maps.Marker[] = []
-    const maxHechos = Math.max(...datosValidos.map(d => d.totalHechos || 0))
-
-    datosValidos.forEach(provincia => {
-      if (!provincia.latitud || !provincia.longitud) return
-      
-      const totalHechos = provincia.totalHechos || 0
-      const color = getColorByRate(totalHechos, maxHechos)
-
-      // Crear marcador circular con tamaño proporcional
-      const size = Math.max(20, Math.min(60, maxHechos > 0 ? (totalHechos / maxHechos) * 60 : 30))
-
-      const markerContent = document.createElement('div')
-      markerContent.style.cssText = `
-        width: ${size}px;
-        height: ${size}px;
-        border-radius: 50%;
-        background: ${color};
-        border: 2px solid rgba(255,255,255,0.8);
-        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: ${Math.max(9, size / 4)}px;
-        font-weight: 600;
-        color: white;
-        text-shadow: 0 1px 2px rgba(0,0,0,0.5);
-        transition: transform 0.2s;
-      `
-      markerContent.textContent = totalHechos > 999
-        ? `${Math.round(totalHechos / 1000)}k`
-        : `${totalHechos}`
-
-      markerContent.addEventListener('mouseenter', () => {
-        markerContent.style.transform = 'scale(1.2)'
-      })
-      markerContent.addEventListener('mouseleave', () => {
-        markerContent.style.transform = 'scale(1)'
-      })
-
-      const marker = new google.maps.Marker({
-        position: { lat: provincia.latitud, lng: provincia.longitud },
-        map,
-        title: `${provincia.provincia}: ${totalHechos.toLocaleString('es-AR')} hechos`,
-      })
-
-      marker.addListener('click', () => {
-        onProvinciaClick(provincia)
-      })
-
-      markers.push(marker)
+    // Cuando el usuario empieza a hacer zoom, precargar departamentos
+    const listener = map.addListener('zoom_changed', () => {
+      const zoom = map.getZoom() ?? 4
+      if (zoom >= 5) {
+        precargarGeoJSON('departamentos-poligonos.geojson')
+        google.maps.event.removeListener(listener)
+      }
     })
 
+    // También precargar después de 3s idle (el usuario ya cargó el mapa)
+    const timer = setTimeout(() => {
+      precargarGeoJSON('departamentos-poligonos.geojson')
+    }, 3000)
+
     return () => {
-      markers.forEach(m => m.setMap(null))
+      google.maps.event.removeListener(listener)
+      clearTimeout(timer)
     }
-  }, [map, datos, onProvinciaClick])
+  }, [map])
 
   return null
 }
 
-// Componente principal exportado
-export default function MapaDelito() {
-  const [anioSeleccionado, setAnioSeleccionado] = useState(2024)
+// ─── Botón recentrar ubicación ───────────────────────────
+function BotonRecentrar({
+  disponible,
+  onClick,
+}: {
+  disponible: boolean
+  onClick: () => void
+}) {
+  if (!disponible) return null
+
+  return (
+    <button
+      onClick={onClick}
+      className="absolute bottom-6 right-4 z-10 bg-white/95 backdrop-blur-sm rounded-full shadow-lg w-10 h-10 flex items-center justify-center hover:bg-white transition-colors"
+      title="Ir a mi ubicación"
+      aria-label="Centrar en mi ubicación"
+    >
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="#1E427C"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <circle cx="12" cy="12" r="3" />
+        <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+      </svg>
+    </button>
+  )
+}
+
+// ─── Componente principal ────────────────────────────────
+export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoProp }: MapaDelitoProps) {
+  const [anioSeleccionado, setAnioSeleccionado] = useState(anioProp ?? 2024)
   const [aniosDisponibles, setAniosDisponibles] = useState<number[]>([])
   const [datos, setDatos] = useState<ProvinciaData[]>([])
   const [provinciaSeleccionada, setProvinciaSeleccionada] = useState<ProvinciaData | null>(null)
-  const [tipoDelitoId, setTipoDelitoId] = useState<string | undefined>()
+  const [tipoDelitoId, setTipoDelitoId] = useState<string | undefined>(tipoDelitoProp)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [provinciaHover, setProvinciaHover] = useState<string | null>(null)
+  const mapRef = useRef<google.maps.Map | null>(null)
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || ''
 
-  // Fetch datos del mapa
+  // Geolocalización
+  const { ubicacion, cargando: geoCargando, disponible: geoDisponible } = useGeolocalizacion()
+
+  // ─── Fetch datos ─────────────────────────────────────
   const fetchDatos = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -160,23 +147,55 @@ export default function MapaDelito() {
     }
   }, [anioSeleccionado, tipoDelitoId])
 
-  useEffect(() => {
-    fetchDatos()
-  }, [fetchDatos])
+  useEffect(() => { fetchDatos() }, [fetchDatos])
 
-  const handleProvinciaClick = useCallback((provincia: ProvinciaData | null) => {
+  // ─── Handlers ────────────────────────────────────────
+  const handleProvinciaClick = useCallback((provincia: ProvinciaData) => {
     setProvinciaSeleccionada(provincia)
   }, [])
 
+  const handleProvinciaGeoClick = useCallback((_id: string, nombre: string) => {
+    const normalizar = (s: string) =>
+      s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+
+    const match = datos.find(
+      d => normalizar(d.provincia) === normalizar(nombre) || d.provinciaId === _id
+    )
+    if (match) setProvinciaSeleccionada(match)
+  }, [datos])
+
+  const handleRecentrar = useCallback(() => {
+    if (mapRef.current && geoDisponible) {
+      mapRef.current.panTo({ lat: ubicacion.lat, lng: ubicacion.lng })
+      mapRef.current.setZoom(ubicacion.zoom)
+    }
+  }, [ubicacion, geoDisponible])
+
+  // ─── Datos derivados ─────────────────────────────────
+  const estadisticasProvincias = datos.map(d => ({
+    provinciaId: d.provinciaId,
+    provincia: d.provincia,
+    totalHechos: d.totalHechos,
+  }))
+
+  const totalNacional = datos.reduce((acc, d) => acc + (d.totalHechos || 0), 0)
+  const totalVictimas = datos.reduce((acc, d) => acc + (d.totalVictimas || 0), 0)
+
+  // Centro y zoom: usar geolocalización si está disponible
+  const centroInicial = geoCargando
+    ? ARGENTINA_CENTER
+    : { lat: ubicacion.lat, lng: ubicacion.lng }
+  const zoomInicial = geoCargando ? ARGENTINA_ZOOM : ubicacion.zoom
+
   return (
     <div className="relative w-full h-screen flex flex-col">
-      {/* Barra superior con controles */}
-      <div className="absolute top-4 left-4 right-4 z-10 flex flex-wrap items-center gap-3">
-        <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg px-4 py-3 flex items-center gap-4">
-          <h1 className="text-lg font-bold text-usina-900">
+      {/* ─── Barra superior ─────────────────────────────── */}
+      <div className="absolute top-4 left-4 right-4 z-10 flex flex-wrap items-center gap-2 sm:gap-3">
+        <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg px-3 py-2 sm:px-4 sm:py-3 flex items-center gap-2 sm:gap-4">
+          <h1 className="text-sm sm:text-lg font-bold text-[#1E427C]">
             Mapa Nacional del Delito
           </h1>
-          <span className="text-sm text-gray-500">
+          <span className="text-xs sm:text-sm text-gray-500 hidden sm:inline">
             Usina de Justicia
           </span>
         </div>
@@ -193,46 +212,101 @@ export default function MapaDelito() {
             onChange={setAnioSeleccionado}
           />
         )}
+
+        {!loading && totalNacional > 0 && (
+          <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg px-3 py-1.5 sm:px-4 sm:py-2 flex items-center gap-3 sm:gap-4 text-xs sm:text-sm">
+            <div>
+              <span className="text-gray-500">Hechos:</span>{' '}
+              <span className="font-bold text-[#1E427C]">
+                {totalNacional.toLocaleString('es-AR')}
+              </span>
+            </div>
+            <div className="w-px h-4 sm:h-5 bg-gray-200" />
+            <div>
+              <span className="text-gray-500">Víctimas:</span>{' '}
+              <span className="font-bold text-[#1E427C]">
+                {totalVictimas.toLocaleString('es-AR')}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Loading / Error */}
-      {loading && (
+      {/* ─── Tooltip hover ──────────────────────────────── */}
+      {provinciaHover && (
+        <div className="absolute top-16 sm:top-20 left-1/2 -translate-x-1/2 z-10 bg-white/95 backdrop-blur-sm rounded-lg shadow-md px-3 py-1.5 text-sm font-medium text-[#1E427C] pointer-events-none">
+          {provinciaHover}
+        </div>
+      )}
+
+      {/* ─── Loading ────────────────────────────────────── */}
+      {(loading || geoCargando) && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/60 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-3">
-            <div className="w-10 h-10 border-4 border-usina-900 border-t-transparent rounded-full animate-spin" />
-            <p className="text-usina-900 font-medium">Cargando datos...</p>
+            <div className="w-10 h-10 border-4 border-[#1E427C] border-t-transparent rounded-full animate-spin" />
+            <p className="text-[#1E427C] font-medium">
+              {geoCargando ? 'Obteniendo ubicación...' : 'Cargando datos...'}
+            </p>
           </div>
         </div>
       )}
 
       {error && (
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg">
+        <div className="absolute top-16 sm:top-20 left-1/2 -translate-x-1/2 z-20 bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg text-sm">
           {error}
         </div>
       )}
 
-      {/* Mapa */}
+      {/* ─── Mapa ───────────────────────────────────────── */}
       <div className="flex-1">
         <APIProvider apiKey={apiKey}>
           <Map
-            defaultCenter={ARGENTINA_CENTER}
-            defaultZoom={ARGENTINA_ZOOM}
+            defaultCenter={centroInicial}
+            defaultZoom={zoomInicial}
             gestureHandling="greedy"
             disableDefaultUI={false}
             mapTypeControl={false}
             streetViewControl={false}
+            fullscreenControl={false}
+            styles={MAPA_STYLE_USINA}
             style={{ width: '100%', height: '100%' }}
+            onIdle={(e) => {
+              // Guardar referencia al mapa para recentrar
+              if (e.map && !mapRef.current) {
+                mapRef.current = e.map
+              }
+            }}
           >
-            <MapaContenido
+            {/* Precarga inteligente de departamentos en background */}
+            <PrecargaInteligente />
+
+            {/* Capa 0: Máscara */}
+            <MascaraPaises />
+
+            {/* Capa 1: Provincias */}
+            <CapaProvincias
+              estadisticas={estadisticasProvincias}
+              onProvinciaClick={handleProvinciaGeoClick}
+              onProvinciaHover={setProvinciaHover}
+            />
+
+            {/* Capa 2: Departamentos (lazy loaded) */}
+            <CapaDepartamentos
+              zoomMinimo={7}
+              provinciaIdFiltro={provinciaSeleccionada?.provinciaId ?? null}
+              destacados={[QUILMES_DEPTO_ID]}
+            />
+
+            {/* Capa 3: Marcadores circulares */}
+            <MarcadoresCirculares
               datos={datos}
-              provinciaSeleccionada={provinciaSeleccionada?.provincia || null}
               onProvinciaClick={handleProvinciaClick}
             />
           </Map>
         </APIProvider>
       </div>
 
-      {/* Panel lateral de estadísticas */}
+      {/* ─── Panel estadísticas ─────────────────────────── */}
       {provinciaSeleccionada && (
         <PanelEstadisticas
           provincia={provinciaSeleccionada}
@@ -241,22 +315,43 @@ export default function MapaDelito() {
         />
       )}
 
-      {/* Leyenda */}
-      <div className="absolute bottom-6 left-4 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg px-4 py-3 z-10">
-        <p className="text-xs font-medium text-gray-600 mb-2">Hechos registrados</p>
-        <div className="flex items-center gap-1">
-          {['#C5D1E4', '#9BB1CF', '#4A71A5', '#1E427C', '#15305B', '#B91C1C', '#991B1B'].map((color, i) => (
-            <div key={i} className="w-5 h-3 rounded-sm" style={{ backgroundColor: color }} />
-          ))}
+      {/* ─── Botón recentrar ────────────────────────────── */}
+      <BotonRecentrar
+        disponible={geoDisponible}
+        onClick={handleRecentrar}
+      />
+
+      {/* ─── Leyenda ────────────────────────────────────── */}
+      <div className="absolute bottom-6 left-4 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg px-3 py-2 sm:px-4 sm:py-3 z-10 max-w-[200px] sm:max-w-xs">
+        <p className="text-[10px] sm:text-xs font-semibold text-gray-700 mb-1.5 sm:mb-2">Intensidad por provincia</p>
+        <div className="flex items-center gap-0.5">
+          {['#C5D1E4', '#9BB1CF', '#4A71A5', '#1E427C', '#15305B', '#0E2240', '#091729'].map(
+            (color, i) => (
+              <div
+                key={i}
+                className="w-5 sm:w-6 h-2.5 sm:h-3 first:rounded-l-sm last:rounded-r-sm"
+                style={{ backgroundColor: color }}
+              />
+            )
+          )}
         </div>
-        <div className="flex justify-between mt-1">
-          <span className="text-[10px] text-gray-400">Menor</span>
-          <span className="text-[10px] text-gray-400">Mayor</span>
+        <div className="flex justify-between mt-1 text-[9px] sm:text-[10px] text-gray-400">
+          <span>Menor</span>
+          <span>Mayor</span>
         </div>
-        <p className="text-[10px] text-gray-400 mt-2">
-          Fuente: SNIC — Ministerio de Seguridad · {anioSeleccionado}
+
+        <div className="mt-2 sm:mt-3 pt-1.5 sm:pt-2 border-t border-gray-100 space-y-1">
+          <div className="flex items-center gap-2 text-[9px] sm:text-[10px] text-gray-500">
+            <div className="w-3 h-2 rounded-sm border border-red-500 bg-red-500/15 shrink-0" />
+            Caso registrado (medios)
+          </div>
+        </div>
+
+        <p className="text-[8px] sm:text-[10px] text-gray-400 mt-2 sm:mt-3">
+          Fuente: SNIC — Min. de Seguridad · {anioSeleccionado}
         </p>
       </div>
     </div>
   )
 }
+
