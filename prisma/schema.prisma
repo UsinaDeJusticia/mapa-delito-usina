@@ -89,6 +89,7 @@ model Ubicacion {
   departamentoId  String? @map("departamento_id") // Código INDEC
   localidad       String?
   direccion       String?
+  fuenteUbicacion String?  @map("fuente_ubicacion")
   latitud         Decimal @db.Decimal(10, 7)
   longitud        Decimal @db.Decimal(10, 7)
   esCentroide     Boolean @default(false) @map("es_centroide") // true = centroide departamental, false = ubicación exacta
@@ -134,6 +135,35 @@ model HechoDelictivo {
   confianza         NivelConfianza @default(OFICIAL)
   urlFuente         String?  @map("url_fuente") // URL de la noticia o dataset
   esAgregado        Boolean  @default(false) @map("es_agregado") // true = dato anual SNIC, false = microdato/hecho individual
+
+  // Clasificación detallada (SAT)
+  subtipo                  String?
+  diaSemana                String?
+  hora                     String?
+  lugarHecho               String?
+
+  // Medio empleado / arma
+  medioComision            String?
+  medioDetalle             String?
+
+  // Datos víctima
+  victimaSexo              String?
+  victimaEdad              Int?
+  victimaRangoEdad         String?
+  victimaNacionalidad      String?
+
+  // Contexto del hecho
+  contexto                 String?
+  vinculoVictimaVictimario String?
+  femicidio                String?
+
+  // Datos victimario/inculpado
+  victimarioSexo           String?
+  victimarioEdad           Int?
+  situacionVictimario      String?
+
+  // Cantidades
+  cantidadImputados        Int?
 
   // Capa Usina
   esCasoUsina       Boolean  @default(false) @map("es_caso_usina")
