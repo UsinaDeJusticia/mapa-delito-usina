@@ -48,7 +48,7 @@ enum NivelConfianza {
 // ============================================
 model TipoDelito {
   id          String  @id @default(uuid())
-  codigoSnic  Int     @unique @map("codigo_snic") // 1-29 del SNIC
+  codigoSnic  String  @unique @map("codigo_snic") // "1", "2", "11_1", "21_3", etc.
   nombre      String  // "Homicidios dolosos", "Robos", etc.
   categoria   CategoriaDelito
   descripcion String?

@@ -147,7 +147,7 @@ def ingest(dry_run=False):
         for raw in reader:
             anio = safe_int(raw.get("anio", ""))
             depto_id = pad_depto_id(raw.get("departamento_id", ""))
-            codigo_snic = safe_int(raw.get("codigo_delito_snic_id", ""))
+            codigo_snic = raw.get("codigo_delito_snic_id", "").strip()
 
             if not anio or not depto_id or not codigo_snic:
                 skipped += 1
