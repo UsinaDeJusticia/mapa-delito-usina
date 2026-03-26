@@ -32,7 +32,7 @@ const openrouter = new OpenAI({
 
 export interface DatosNoticia {
   tipoHecho: string
-  codigoSnicEstimado: number
+  codigoSnicEstimado: string
   ubicacion: {
     provincia: string | null
     ciudad: string | null

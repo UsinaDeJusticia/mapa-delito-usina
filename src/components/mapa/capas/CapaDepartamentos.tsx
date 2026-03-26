@@ -11,6 +11,7 @@ const USINA_ROJO = '#DC2626'
 interface Props {
   zoomMinimo?: number
   provinciaIdFiltro?: string | null
+  departamentoIdFiltro?: string | null
   destacados?: string[]
   onDepartamentoClick?: (deptoId: string, nombre: string, provinciaId: string) => void
 }
@@ -21,6 +22,7 @@ const MAX_LABELS = 80
 export function CapaDepartamentos({
   zoomMinimo = 7,
   provinciaIdFiltro = null,
+  departamentoIdFiltro = null,
   destacados = [],
   onDepartamentoClick,
 }: Props) {
@@ -120,7 +122,7 @@ export function CapaDepartamentos({
     const fontSize = zoom >= 11 ? 11 : zoom >= 9 ? 10 : 9
 
     // Filtrar features en viewport + destacados
-    const enViewport: Array<{ props: Record<string, any>; esDestacado: boolean }> = []
+    const enViewport: Array<{ props: Record<string, unknown>; esDestacado: boolean }> = []
 
     for (const feature of geojson.features) {
       const props = feature.properties
@@ -136,6 +138,11 @@ export function CapaDepartamentos({
         if (provId !== provinciaIdFiltro) continue
       }
 
+      // Filtro por departamento si aplica
+      if (departamentoIdFiltro && props.id !== departamentoIdFiltro) {
+        continue
+      }
+
       const esDestacado = ds.has(props.id)
       const enBounds = bounds.contains({ lat, lng: lon })
 
@@ -149,8 +156,11 @@ export function CapaDepartamentos({
 
     // Crear labels
     for (const { props, esDestacado } of enViewport) {
+      const centroide = props.centroide as { lat: number; lon: number } | undefined
+      if (!centroide) continue
+      
       const marker = new google.maps.Marker({
-        position: { lat: props.centroide.lat, lng: props.centroide.lon },
+        position: { lat: centroide.lat, lng: centroide.lon },
         map,
         icon: { path: google.maps.SymbolPath.CIRCLE, scale: 0 },
         label: {
@@ -166,7 +176,7 @@ export function CapaDepartamentos({
       })
       labelsRef.current.push(marker)
     }
-  }, [map, geojson, zoomMinimo, provinciaIdFiltro])
+  }, [map, geojson, zoomMinimo, provinciaIdFiltro, departamentoIdFiltro])
 
   // Setup principal
   useEffect(() => {
@@ -175,13 +185,26 @@ export function CapaDepartamentos({
     const dataLayer = new google.maps.Data({ map })
     dataLayerRef.current = dataLayer
 
-    if (provinciaIdFiltro) {
+    if (provinciaIdFiltro || departamentoIdFiltro) {
       const filtered: FeatureCollection = {
         type: 'FeatureCollection',
         features: geojson.features.filter(f => {
-          const prov = f.properties?.provincia
-          const provId = typeof prov === 'object' && prov !== null ? prov.id : prov
-          return provId === provinciaIdFiltro
+          const props = f.properties
+          if (!props) return false
+
+          // Filtro por departamento (prioridad)
+          if (departamentoIdFiltro) {
+            return props.id === departamentoIdFiltro
+          }
+
+          // Filtro por provincia
+          if (provinciaIdFiltro) {
+            const prov = props.provincia
+            const provId = typeof prov === 'object' && prov !== null ? prov.id : prov
+            return provId === provinciaIdFiltro
+          }
+
+          return true
         }),
       }
       dataLayer.addGeoJson(filtered)
@@ -239,7 +262,7 @@ export function CapaDepartamentos({
       labelsRef.current.forEach(m => m.setMap(null))
       labelsRef.current = []
     }
-  }, [map, geojson, provinciaIdFiltro, aplicarEstilos, actualizarLabels, onDepartamentoClick])
+  }, [map, geojson, provinciaIdFiltro, departamentoIdFiltro, aplicarEstilos, actualizarLabels, onDepartamentoClick])
 
   return null
 }

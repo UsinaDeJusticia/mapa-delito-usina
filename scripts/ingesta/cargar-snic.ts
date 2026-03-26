@@ -45,9 +45,9 @@ const PROVINCIA_POR_NOMBRE: Record<string, string> = Object.fromEntries(
 
 const DIRECTORIO_DATOS = path.join(process.cwd(), 'data', 'snic')
 
-const cacheTipoDelito = new Map<number, TipoDelito | null>()
+const cacheTipoDelito = new Map<string, TipoDelito | null>()
 const cacheUbicacion = new Map<string, string>()
-const erroresCodigoDelito = new Set<number>()
+const erroresCodigoDelito = new Set<string>()
 
 let totalFilasProcesadas = 0
 
@@ -55,7 +55,7 @@ interface FilaSNIC {
   anio: number
   provincia?: string
   provinciaId?: string
-  codigoDelito: number
+  codigoDelito: string
   cantidadHechos: number
   cantidadVictimas?: number
 }
@@ -68,21 +68,21 @@ function esColumnaDelitoProvincia(columna: string): boolean {
   return /^delito_\d+_(hechos|victi)_.+$/.test(columna)
 }
 
-function extraerCodigoDelitoProvincia(columna: string): { codigo: number; provincia: string } | null {
+function extraerCodigoDelitoProvincia(columna: string): { codigo: string; provincia: string } | null {
   const match = columna.match(/^delito_(\d+)_(hechos|victi)_(.+)$/)
   if (!match) return null
   return {
-    codigo: parseInt(match[1], 10),
+    codigo: match[1],
     provincia: match[3],
   }
 }
 
-function extraerCodigoDelitoPais(columna: string): number | null {
+function extraerCodigoDelitoPais(columna: string): string | null {
   const match = columna.match(/^delito_(\d+)_(hechos|victimas)$/)
-  return match ? parseInt(match[1], 10) : null
+  return match ? match[1] : null
 }
 
-async function obtenerTipoDelito(codigoSnic: number): Promise<TipoDelito | null> {
+async function obtenerTipoDelito(codigoSnic: string): Promise<TipoDelito | null> {
   if (erroresCodigoDelito.has(codigoSnic)) {
     return null
   }

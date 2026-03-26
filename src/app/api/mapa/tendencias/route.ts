@@ -3,7 +3,7 @@ import { getTendencias } from '@/lib/mapa/queries'
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
-  const codigoSnic = parseInt(searchParams.get('codigo_snic') || '1')
+  const codigoSnic = searchParams.get('codigo_snic') || '1'
   const provinciaId = searchParams.get('provincia_id') || undefined
 
   try {

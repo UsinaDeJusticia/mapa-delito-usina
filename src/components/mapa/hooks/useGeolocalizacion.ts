@@ -9,11 +9,12 @@ interface Ubicacion {
   origen: 'gps' | 'default'
 }
 
+// Bounding box de Argentina (incluye Tierra del Fuego)
 const ARG_BOUNDS = {
-  latMin: -55.2,
-  latMax: -21.7,
-  lngMin: -73.6,
-  lngMax: -53.6,
+  latMin: -56.0,
+  latMax: -21.0,
+  lngMin: -74.0,
+  lngMax: -53.0,
 }
 
 const DEFAULT: Ubicacion = {
@@ -32,6 +33,12 @@ function estaEnArgentina(lat: number, lng: number): boolean {
   )
 }
 
+/**
+ * Hook de geolocalización.
+ * 
+ * v2: timeout extendido a 8s, enableHighAccuracy false para respuesta rápida,
+ * maximumAge 10min para usar cache del browser.
+ */
 export function useGeolocalizacion() {
   const [ubicacion, setUbicacion] = useState<Ubicacion>(DEFAULT)
   const [cargando, setCargando] = useState(true)
@@ -45,7 +52,7 @@ export function useGeolocalizacion() {
 
     const timeout = setTimeout(() => {
       setCargando(false)
-    }, 5000)
+    }, 8000)
 
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -53,7 +60,7 @@ export function useGeolocalizacion() {
         const { latitude: lat, longitude: lng } = pos.coords
 
         if (estaEnArgentina(lat, lng)) {
-          setUbicacion({ lat, lng, zoom: 10, origen: 'gps' })
+          setUbicacion({ lat, lng, zoom: 9, origen: 'gps' })
           setDisponible(true)
         }
         setCargando(false)
@@ -64,8 +71,8 @@ export function useGeolocalizacion() {
       },
       {
         enableHighAccuracy: false,
-        timeout: 4500,
-        maximumAge: 300000,
+        timeout: 7000,
+        maximumAge: 600000, // 10 minutos de cache
       }
     )
 

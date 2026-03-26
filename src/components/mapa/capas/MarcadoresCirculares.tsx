@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 import { useMap } from '@vis.gl/react-google-maps'
 
 const USINA_AZUL = '#1E427C'
+const USINA_NARANJA = '#D85A30'
 
 interface ProvinciaData {
   provincia: string
@@ -15,19 +16,28 @@ interface ProvinciaData {
   delitos: Array<{ nombre: string; hechos: number; victimas: number }>
 }
 
-function getColor(ratio: number): string {
-  if (ratio < 0.12) return '#C5D1E4'
-  if (ratio < 0.25) return '#9BB1CF'
-  if (ratio < 0.40) return '#4A71A5'
-  if (ratio < 0.55) return USINA_AZUL
-  if (ratio < 0.70) return '#15305B'
-  if (ratio < 0.85) return '#0E2240'
-  return '#091729'
+function getColor(ratio: number, filtrado: boolean = false): string {
+  if (!filtrado) {
+    if (ratio < 0.12) return '#C5D1E4'
+    if (ratio < 0.25) return '#9BB1CF'
+    if (ratio < 0.40) return '#4A71A5'
+    if (ratio < 0.55) return USINA_AZUL
+    if (ratio < 0.70) return '#15305B'
+    if (ratio < 0.85) return '#0E2240'
+    return '#091729'
+  }
+  if (ratio < 0.12) return '#FAECE7'
+  if (ratio < 0.25) return '#F5C4B3'
+  if (ratio < 0.40) return '#F0997B'
+  if (ratio < 0.55) return USINA_NARANJA
+  if (ratio < 0.70) return '#993C1D'
+  if (ratio < 0.85) return '#712B13'
+  return '#4A1B0C'
 }
 
-function crearIconoSVG(hechos: number, maxHechos: number): { url: string; size: number } {
+function crearIconoSVG(hechos: number, maxHechos: number, filtrado: boolean = false): { url: string; size: number } {
   const ratio = maxHechos > 0 ? hechos / maxHechos : 0
-  const color = getColor(ratio)
+  const color = getColor(ratio, filtrado)
 
   const size = Math.round(22 + ratio * 32)
   const half = size / 2
@@ -53,9 +63,10 @@ function crearIconoSVG(hechos: number, maxHechos: number): { url: string; size: 
 interface Props {
   datos: ProvinciaData[]
   onProvinciaClick: (provincia: ProvinciaData) => void
+  filtroActivo?: boolean
 }
 
-export function MarcadoresCirculares({ datos, onProvinciaClick }: Props) {
+export function MarcadoresCirculares({ datos, onProvinciaClick, filtroActivo = false }: Props) {
   const map = useMap()
   const markersRef = useRef<google.maps.Marker[]>([])
   const infoWindowRef = useRef<google.maps.InfoWindow | null>(null)
@@ -74,7 +85,7 @@ export function MarcadoresCirculares({ datos, onProvinciaClick }: Props) {
     const maxHechos = Math.max(...datosValidos.map(d => d.totalHechos || 0), 1)
 
     datosValidos.forEach(provincia => {
-      const { url, size } = crearIconoSVG(provincia.totalHechos || 0, maxHechos)
+      const { url, size } = crearIconoSVG(provincia.totalHechos || 0, maxHechos, filtroActivo)
 
       const marker = new google.maps.Marker({
         position: { lat: provincia.latitud, lng: provincia.longitud },
@@ -146,7 +157,7 @@ export function MarcadoresCirculares({ datos, onProvinciaClick }: Props) {
       markersRef.current = []
       infoWindow.close()
     }
-  }, [map, datos, onProvinciaClick])
+  }, [map, datos, onProvinciaClick, filtroActivo])
 
   return null
 }

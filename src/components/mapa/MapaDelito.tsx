@@ -5,6 +5,10 @@ import { APIProvider, Map, useMap } from '@vis.gl/react-google-maps'
 import { PanelEstadisticas } from './PanelEstadisticas'
 import { SliderAnios } from './SliderAnios'
 import { SelectorDelito } from './SelectorDelito'
+import { BuscadorProvincia } from './BuscadorProvincia'
+import { FiltroDepartamento } from './FiltroDepartamento'
+import { SelectorFuente } from './SelectorFuente'
+import { FiltrosSAT, FiltrosActivos } from './FiltrosSAT'
 import { MAPA_STYLE_USINA } from '@/config/mapStyles'
 
 import {
@@ -115,41 +119,102 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
   const [aniosDisponibles, setAniosDisponibles] = useState<number[]>([])
   const [datos, setDatos] = useState<ProvinciaData[]>([])
   const [provinciaSeleccionada, setProvinciaSeleccionada] = useState<ProvinciaData | null>(null)
+  const [departamentoSeleccionado, setDepartamentoSeleccionado] = useState<string | null>(null)
   const [tipoDelitoId, setTipoDelitoId] = useState<string | undefined>(tipoDelitoProp)
+  const [fuenteSeleccionada, setFuenteSeleccionada] = useState<'snic' | 'sat'>('snic')
+  const [filtrosSAT, setFiltrosSAT] = useState<FiltrosActivos>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [provinciaHover, setProvinciaHover] = useState<string | null>(null)
   const mapRef = useRef<google.maps.Map | null>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || ''
 
-  // Geolocalización
+  // Geolocalización (no bloquea la carga — el mapa aparece de inmediato)
   const { ubicacion, cargando: geoCargando, disponible: geoDisponible } = useGeolocalizacion()
+
+  // Cuando la geolocalización llega, mover el mapa suavemente
+  useEffect(() => {
+    if (!geoCargando && ubicacion.origen === 'gps' && mapRef.current) {
+      mapRef.current.panTo({ lat: ubicacion.lat, lng: ubicacion.lng })
+      mapRef.current.setZoom(ubicacion.zoom)
+    }
+  }, [geoCargando, ubicacion])
 
   // ─── Fetch datos ─────────────────────────────────────
   const fetchDatos = useCallback(async () => {
+    // Cancelar fetch anterior si existe
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+
     setLoading(true)
     setError(null)
     try {
-      const params = new URLSearchParams({ anio: anioSeleccionado.toString() })
-      if (tipoDelitoId) params.set('tipo_delito_id', tipoDelitoId)
+      const params = new URLSearchParams({
+        anio: anioSeleccionado.toString(),
+        fuente: fuenteSeleccionada,
+      })
+      if (fuenteSeleccionada === 'snic' && tipoDelitoId) {
+        params.set('tipo_delito_id', tipoDelitoId)
+      }
+      // Filtros SAT
+      if (fuenteSeleccionada === 'sat') {
+        if (filtrosSAT.sexo) params.set('sexo', filtrosSAT.sexo)
+        if (filtrosSAT.arma) params.set('arma', filtrosSAT.arma)
+        if (filtrosSAT.vinculo) params.set('vinculo', filtrosSAT.vinculo)
+        if (filtrosSAT.lugar) params.set('lugar', filtrosSAT.lugar)
+      }
 
-      const res = await fetch(`/api/mapa/estadisticas?${params}`)
+      const res = await fetch(`/api/mapa/estadisticas?${params}`, {
+        signal: controller.signal,
+      })
+
       if (!res.ok) throw new Error('Error al cargar datos')
 
       const data: EstadisticasResponse = await res.json()
-      setDatos(data.provincias)
-      setAniosDisponibles(data.aniosDisponibles)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error desconocido')
-    } finally {
-      setLoading(false)
-    }
-  }, [anioSeleccionado, tipoDelitoId])
 
-  useEffect(() => { fetchDatos() }, [fetchDatos])
+      // Solo actualizar si este fetch no fue cancelado
+      if (!controller.signal.aborted) {
+        setDatos(data.provincias)
+        setAniosDisponibles(data.aniosDisponibles)
+      }
+    } catch (err) {
+      // Ignorar errores de abort
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      if (!controller.signal.aborted) {
+        setError(err instanceof Error ? err.message : 'Error desconocido')
+      }
+    } finally {
+      if (!controller.signal.aborted) {
+        setLoading(false)
+      }
+    }
+  }, [anioSeleccionado, tipoDelitoId, fuenteSeleccionada, filtrosSAT])
+
+  useEffect(() => {
+    fetchDatos()
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
+  }, [fetchDatos])
 
   // ─── Handlers ────────────────────────────────────────
+  const handleFuenteChange = useCallback((fuente: 'snic' | 'sat') => {
+    setFuenteSeleccionada(fuente)
+    setProvinciaSeleccionada(null)
+    if (fuente === 'sat') {
+      setTipoDelitoId(undefined)
+    }
+    // Limpiar filtros SAT al cambiar fuente
+    setFiltrosSAT({})
+  }, [])
+
   const handleProvinciaClick = useCallback((provincia: ProvinciaData) => {
     setProvinciaSeleccionada(provincia)
   }, [])
@@ -171,6 +236,53 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
     }
   }, [ubicacion, geoDisponible])
 
+  // Búsqueda de provincia → volar al centroide SIN abrir panel
+  // El usuario toca el marcador o polígono para ver estadísticas
+  const [toastProvincia, setToastProvincia] = useState<string | null>(null)
+
+  const handleBuscarProvincia = useCallback((provincia: { provincia: string; provinciaId: string; latitud: number; longitud: number }) => {
+    const map = mapRef.current
+    if (!map) return
+
+    const destino = { lat: provincia.latitud, lng: provincia.longitud }
+    const zoomActual = map.getZoom() ?? 4
+
+    // Si ya estamos en zoom alto, hacer efecto fly: zoom out → pan → zoom in
+    // Si estamos en vista nacional, pan directo
+    if (zoomActual >= 6) {
+      // Paso 1: zoom out para dar contexto del movimiento
+      map.setZoom(5)
+      // Paso 2: después de la animación de zoom, pan al destino
+      setTimeout(() => {
+        map.panTo(destino)
+        // Paso 3: zoom in al destino
+        setTimeout(() => {
+          map.setZoom(7)
+        }, 400)
+      }, 300)
+    } else {
+      // Vista nacional: pan + zoom directo (el pan se anima naturalmente)
+      map.panTo(destino)
+      setTimeout(() => {
+        map.setZoom(7)
+      }, 200)
+    }
+
+    setToastProvincia(provincia.provincia)
+    setTimeout(() => setToastProvincia(null), 3000)
+  }, [])
+
+  // Cerrar panel → zoom cómodo para ver la provincia en contexto
+  const handleCerrarPanel = useCallback(() => {
+    const prov = provinciaSeleccionada
+    setProvinciaSeleccionada(null)
+    if (mapRef.current && prov) {
+      // Zoom 6 = provincia visible con contexto de vecinas
+      mapRef.current.panTo({ lat: prov.latitud, lng: prov.longitud })
+      mapRef.current.setZoom(6)
+    }
+  }, [provinciaSeleccionada])
+
   // ─── Datos derivados ─────────────────────────────────
   const estadisticasProvincias = datos.map(d => ({
     provinciaId: d.provinciaId,
@@ -181,11 +293,9 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
   const totalNacional = datos.reduce((acc, d) => acc + (d.totalHechos || 0), 0)
   const totalVictimas = datos.reduce((acc, d) => acc + (d.totalVictimas || 0), 0)
 
-  // Centro y zoom: usar geolocalización si está disponible
-  const centroInicial = geoCargando
-    ? ARGENTINA_CENTER
-    : { lat: ubicacion.lat, lng: ubicacion.lng }
-  const zoomInicial = geoCargando ? ARGENTINA_ZOOM : ubicacion.zoom
+  // Siempre arranca en vista nacional — geo mueve el mapa cuando llega
+  const centroInicial = ARGENTINA_CENTER
+  const zoomInicial = ARGENTINA_ZOOM
 
   return (
     <div className="relative w-full h-screen flex flex-col">
@@ -200,10 +310,39 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
           </span>
         </div>
 
-        <SelectorDelito
-          value={tipoDelitoId}
-          onChange={setTipoDelitoId}
+        {/* Selector de fuente SNIC/SAT */}
+        <SelectorFuente
+          value={fuenteSeleccionada}
+          onChange={handleFuenteChange}
         />
+
+        {/* Buscador de provincia */}
+        <BuscadorProvincia
+          provincias={datos.map(d => ({
+            provincia: d.provincia,
+            provinciaId: d.provinciaId,
+            latitud: d.latitud,
+            longitud: d.longitud,
+          }))}
+          onSeleccionar={handleBuscarProvincia}
+        />
+
+        {fuenteSeleccionada === 'snic' && (
+          <SelectorDelito
+            value={tipoDelitoId}
+            onChange={setTipoDelitoId}
+          />
+        )}
+
+        {/* Filtro departamento — oculto hasta Fase 2
+        <div className="hidden sm:block">
+          <FiltroDepartamento 
+            provinciaId={provinciaSeleccionada?.provinciaId} 
+            onChange={setDepartamentoSeleccionado}
+            value={departamentoSeleccionado}
+          />
+        </div>
+        */}
 
         {aniosDisponibles.length > 0 && (
           <SliderAnios
@@ -232,6 +371,13 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
         )}
       </div>
 
+      {/* ─── Filtros SAT (barra secundaria) ─────────────── */}
+      <FiltrosSAT
+        filtros={filtrosSAT}
+        onChange={setFiltrosSAT}
+        visible={fuenteSeleccionada === 'sat'}
+      />
+
       {/* ─── Tooltip hover ──────────────────────────────── */}
       {provinciaHover && (
         <div className="absolute top-16 sm:top-20 left-1/2 -translate-x-1/2 z-10 bg-white/95 backdrop-blur-sm rounded-lg shadow-md px-3 py-1.5 text-sm font-medium text-[#1E427C] pointer-events-none">
@@ -239,14 +385,19 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
         </div>
       )}
 
-      {/* ─── Loading ────────────────────────────────────── */}
-      {(loading || geoCargando) && (
+      {/* ─── Toast después de buscar provincia ─────────── */}
+      {toastProvincia && (
+        <div className="absolute bottom-24 sm:bottom-20 left-1/2 -translate-x-1/2 z-10 bg-[#1E427C] text-white rounded-lg shadow-lg px-4 py-2 text-sm font-medium pointer-events-none animate-pulse">
+          Tocá {toastProvincia} para ver estadísticas
+        </div>
+      )}
+
+      {/* ─── Loading (solo datos, geo no bloquea) ───────── */}
+      {loading && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/60 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-3">
             <div className="w-10 h-10 border-4 border-[#1E427C] border-t-transparent rounded-full animate-spin" />
-            <p className="text-[#1E427C] font-medium">
-              {geoCargando ? 'Obteniendo ubicación...' : 'Cargando datos...'}
-            </p>
+            <p className="text-[#1E427C] font-medium">Cargando datos...</p>
           </div>
         </div>
       )}
@@ -301,6 +452,7 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
             <MarcadoresCirculares
               datos={datos}
               onProvinciaClick={handleProvinciaClick}
+              filtroActivo={fuenteSeleccionada === 'sat' && Object.values(filtrosSAT).some(v => v !== undefined)}
             />
           </Map>
         </APIProvider>
@@ -311,7 +463,8 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
         <PanelEstadisticas
           provincia={provinciaSeleccionada}
           anio={anioSeleccionado}
-          onClose={() => setProvinciaSeleccionada(null)}
+          fuente={fuenteSeleccionada}
+          onClose={handleCerrarPanel}
         />
       )}
 
@@ -348,10 +501,9 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
         </div>
 
         <p className="text-[8px] sm:text-[10px] text-gray-400 mt-2 sm:mt-3">
-          Fuente: SNIC — Min. de Seguridad · {anioSeleccionado}
+          Fuente: {fuenteSeleccionada === 'snic' ? 'SNIC — Min. de Seguridad' : 'SAT — Homicidios dolosos'} · {anioSeleccionado}
         </p>
       </div>
     </div>
   )
 }
-

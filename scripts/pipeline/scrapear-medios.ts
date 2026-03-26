@@ -518,7 +518,7 @@ async function main() {
       // ── Deduplicación inteligente ──
       const dedup = await deduplicar({
         tipoHecho: datos.tipoHecho || '',
-        codigoSnicEstimado: datos.codigoSnicEstimado || 15,
+        codigoSnicEstimado: datos.codigoSnicEstimado ? String(datos.codigoSnicEstimado) : '15',
         ubicacion: datos.ubicacion,
         fecha: datos.fecha,
         titulo: noticia.titulo,
@@ -546,8 +546,8 @@ async function main() {
 
       // Mapear tipo de delito
       const tipoDelito = datos.codigoSnicEstimado
-        ? tipoPorCodigo.get(datos.codigoSnicEstimado)
-        : tipoPorCodigo.get(15) // Default: Robo
+        ? tipoPorCodigo.get(String(datos.codigoSnicEstimado))
+        : tipoPorCodigo.get('15') // Default: Robo
 
       if (!tipoDelito) {
         log('⚠️', `Código SNIC ${datos.codigoSnicEstimado} no mapeado`)

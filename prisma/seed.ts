@@ -7,38 +7,38 @@ async function main() {
 
   // ── Tipos de delito SNIC (códigos oficiales 1-29, 30, 31, 32) ──
   const tiposDelito = [
-    { codigoSnic: 1,  nombre: 'Homicidios dolosos', categoria: CategoriaDelito.CONTRA_PERSONAS },
-    { codigoSnic: 2,  nombre: 'Homicidios dolosos en grado de tentativa', categoria: CategoriaDelito.CONTRA_PERSONAS },
-    { codigoSnic: 3,  nombre: 'Muertes en siniestros viales', categoria: CategoriaDelito.VIAL },
-    { codigoSnic: 4,  nombre: 'Homicidios culposos por otros hechos', categoria: CategoriaDelito.CONTRA_PERSONAS },
-    { codigoSnic: 5,  nombre: 'Lesiones dolosas', categoria: CategoriaDelito.CONTRA_PERSONAS },
-    { codigoSnic: 6,  nombre: 'Lesiones culposas en siniestros viales', categoria: CategoriaDelito.VIAL },
-    { codigoSnic: 7,  nombre: 'Lesiones culposas por otros hechos', categoria: CategoriaDelito.CONTRA_PERSONAS },
-    { codigoSnic: 8,  nombre: 'Otros delitos contra las personas', categoria: CategoriaDelito.CONTRA_PERSONAS },
-    { codigoSnic: 9,  nombre: 'Delitos contra el honor', categoria: CategoriaDelito.OTROS },
-    { codigoSnic: 10, nombre: 'Violaciones', categoria: CategoriaDelito.CONTRA_INTEGRIDAD_SEXUAL },
-    { codigoSnic: 11, nombre: 'Otros delitos contra la integridad sexual', categoria: CategoriaDelito.CONTRA_INTEGRIDAD_SEXUAL },
-    { codigoSnic: 12, nombre: 'Delitos contra el estado civil', categoria: CategoriaDelito.OTROS },
-    { codigoSnic: 13, nombre: 'Amenazas', categoria: CategoriaDelito.CONTRA_LIBERTAD },
-    { codigoSnic: 14, nombre: 'Otros delitos contra la libertad', categoria: CategoriaDelito.CONTRA_LIBERTAD },
-    { codigoSnic: 15, nombre: 'Robos', categoria: CategoriaDelito.CONTRA_PROPIEDAD },
-    { codigoSnic: 16, nombre: 'Tentativas de robo', categoria: CategoriaDelito.CONTRA_PROPIEDAD },
-    { codigoSnic: 17, nombre: 'Robos agravados por resultado de lesiones y/o muertes', categoria: CategoriaDelito.CONTRA_PROPIEDAD },
-    { codigoSnic: 18, nombre: 'Tentativas de robo agravado por resultado de lesiones y/o muertes', categoria: CategoriaDelito.CONTRA_PROPIEDAD },
-    { codigoSnic: 19, nombre: 'Hurtos', categoria: CategoriaDelito.CONTRA_PROPIEDAD },
-    { codigoSnic: 20, nombre: 'Tentativas de hurto', categoria: CategoriaDelito.CONTRA_PROPIEDAD },
-    { codigoSnic: 21, nombre: 'Otros delitos contra la propiedad', categoria: CategoriaDelito.CONTRA_PROPIEDAD },
-    { codigoSnic: 22, nombre: 'Delitos contra la seguridad pública', categoria: CategoriaDelito.OTROS },
-    { codigoSnic: 23, nombre: 'Delitos contra el orden público', categoria: CategoriaDelito.OTROS },
-    { codigoSnic: 24, nombre: 'Delitos contra la seguridad de la nación', categoria: CategoriaDelito.OTROS },
-    { codigoSnic: 25, nombre: 'Delitos contra los poderes públicos y el orden constitucional', categoria: CategoriaDelito.OTROS },
-    { codigoSnic: 26, nombre: 'Delitos contra la administración pública', categoria: CategoriaDelito.OTROS },
-    { codigoSnic: 27, nombre: 'Delitos contra la fe pública', categoria: CategoriaDelito.OTROS },
-    { codigoSnic: 28, nombre: 'Ley 23.737 (estupefacientes)', categoria: CategoriaDelito.OTROS },
-    { codigoSnic: 29, nombre: 'Otros delitos previstos en leyes especiales', categoria: CategoriaDelito.OTROS },
-    { codigoSnic: 31, nombre: 'Suicidios consumados', categoria: CategoriaDelito.OTROS },
-    { codigoSnic: 30, nombre: 'Otros delitos s/seguridad pública', categoria: CategoriaDelito.OTROS },
-    { codigoSnic: 32, nombre: 'Delitos s/Leyes Especiales', categoria: CategoriaDelito.OTROS },
+    { codigoSnic: '1',  nombre: 'Homicidios dolosos', categoria: CategoriaDelito.CONTRA_PERSONAS },
+    { codigoSnic: '2',  nombre: 'Homicidios dolosos en grado de tentativa', categoria: CategoriaDelito.CONTRA_PERSONAS },
+    { codigoSnic: '3',  nombre: 'Muertes en siniestros viales', categoria: CategoriaDelito.VIAL },
+    { codigoSnic: '4',  nombre: 'Homicidios culposos por otros hechos', categoria: CategoriaDelito.CONTRA_PERSONAS },
+    { codigoSnic: '5',  nombre: 'Lesiones dolosas', categoria: CategoriaDelito.CONTRA_PERSONAS },
+    { codigoSnic: '6',  nombre: 'Lesiones culposas en siniestros viales', categoria: CategoriaDelito.VIAL },
+    { codigoSnic: '7',  nombre: 'Lesiones culposas por otros hechos', categoria: CategoriaDelito.CONTRA_PERSONAS },
+    { codigoSnic: '8',  nombre: 'Otros delitos contra las personas', categoria: CategoriaDelito.CONTRA_PERSONAS },
+    { codigoSnic: '9',  nombre: 'Delitos contra el honor', categoria: CategoriaDelito.OTROS },
+    { codigoSnic: '10', nombre: 'Violaciones', categoria: CategoriaDelito.CONTRA_INTEGRIDAD_SEXUAL },
+    { codigoSnic: '11', nombre: 'Otros delitos contra la integridad sexual', categoria: CategoriaDelito.CONTRA_INTEGRIDAD_SEXUAL },
+    { codigoSnic: '12', nombre: 'Delitos contra el estado civil', categoria: CategoriaDelito.OTROS },
+    { codigoSnic: '13', nombre: 'Amenazas', categoria: CategoriaDelito.CONTRA_LIBERTAD },
+    { codigoSnic: '14', nombre: 'Otros delitos contra la libertad', categoria: CategoriaDelito.CONTRA_LIBERTAD },
+    { codigoSnic: '15', nombre: 'Robos', categoria: CategoriaDelito.CONTRA_PROPIEDAD },
+    { codigoSnic: '16', nombre: 'Tentativas de robo', categoria: CategoriaDelito.CONTRA_PROPIEDAD },
+    { codigoSnic: '17', nombre: 'Robos agravados por resultado de lesiones y/o muertes', categoria: CategoriaDelito.CONTRA_PROPIEDAD },
+    { codigoSnic: '18', nombre: 'Tentativas de robo agravado por resultado de lesiones y/o muertes', categoria: CategoriaDelito.CONTRA_PROPIEDAD },
+    { codigoSnic: '19', nombre: 'Hurtos', categoria: CategoriaDelito.CONTRA_PROPIEDAD },
+    { codigoSnic: '20', nombre: 'Tentativas de hurto', categoria: CategoriaDelito.CONTRA_PROPIEDAD },
+    { codigoSnic: '21', nombre: 'Otros delitos contra la propiedad', categoria: CategoriaDelito.CONTRA_PROPIEDAD },
+    { codigoSnic: '22', nombre: 'Delitos contra la seguridad pública', categoria: CategoriaDelito.OTROS },
+    { codigoSnic: '23', nombre: 'Delitos contra el orden público', categoria: CategoriaDelito.OTROS },
+    { codigoSnic: '24', nombre: 'Delitos contra la seguridad de la nación', categoria: CategoriaDelito.OTROS },
+    { codigoSnic: '25', nombre: 'Delitos contra los poderes públicos y el orden constitucional', categoria: CategoriaDelito.OTROS },
+    { codigoSnic: '26', nombre: 'Delitos contra la administración pública', categoria: CategoriaDelito.OTROS },
+    { codigoSnic: '27', nombre: 'Delitos contra la fe pública', categoria: CategoriaDelito.OTROS },
+    { codigoSnic: '28', nombre: 'Ley 23.737 (estupefacientes)', categoria: CategoriaDelito.OTROS },
+    { codigoSnic: '29', nombre: 'Otros delitos previstos en leyes especiales', categoria: CategoriaDelito.OTROS },
+    { codigoSnic: '31', nombre: 'Suicidios consumados', categoria: CategoriaDelito.OTROS },
+    { codigoSnic: '30', nombre: 'Otros delitos s/seguridad pública', categoria: CategoriaDelito.OTROS },
+    { codigoSnic: '32', nombre: 'Delitos s/Leyes Especiales', categoria: CategoriaDelito.OTROS },
   ]
 
   for (const tipo of tiposDelito) {
@@ -51,8 +51,8 @@ async function main() {
   console.log(`  ✅ ${tiposDelito.length} tipos de delito cargados`)
 
   // ── Sub-tipos relevantes para Usina ──
-  const homicidio = await prisma.tipoDelito.findUnique({ where: { codigoSnic: 1 } })
-  if (homicidio) {
+  const homicide = await prisma.tipoDelito.findUnique({ where: { codigoSnic: '1' } })
+  if (homicide) {
     const subTipos = [
       'Femicidio',
       'Robo seguido de muerte',
@@ -66,7 +66,7 @@ async function main() {
       await prisma.subTipoDelito.upsert({
         where: { id: `sub-${nombre.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')}` },
         update: {},
-        create: { id: `sub-${nombre.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')}`, nombre, tipoDelitoId: homicidio.id },
+        create: { id: `sub-${nombre.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')}`, nombre, tipoDelitoId: homicide.id },
       })
     }
     console.log(`  ✅ ${subTipos.length} sub-tipos de homicidio cargados`)
