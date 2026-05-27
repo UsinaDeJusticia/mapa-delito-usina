@@ -105,7 +105,8 @@ export function CapaDepartamentos({
     })
   }, [zoomMinimo])
 
-  // Labels optimizados: máximo MAX_LABELS, solo en viewport
+  // Labels optimizados: máximo MAX_LABELS, solo en viewport.
+  // setMap(null) en cada llamada previene memory leaks al cambiar zoom/viewport.
   const actualizarLabels = useCallback(() => {
     if (!map || !geojson) return
 
