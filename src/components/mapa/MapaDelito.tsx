@@ -6,7 +6,7 @@ import { PanelEstadisticas } from './PanelEstadisticas'
 import { SliderAnios } from './SliderAnios'
 import { SelectorDelito } from './SelectorDelito'
 import { BuscadorProvincia } from './BuscadorProvincia'
-import { FiltroDepartamento } from './FiltroDepartamento'
+// import { FiltroDepartamento } from './FiltroDepartamento' // Fase 2
 import { SelectorFuente } from './SelectorFuente'
 import { FiltrosSAT, FiltrosActivos } from './FiltrosSAT'
 import { MAPA_STYLE_USINA } from '@/config/mapStyles'
@@ -115,7 +115,7 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
   const [aniosDisponibles, setAniosDisponibles] = useState<number[]>([])
   const [datos, setDatos] = useState<ProvinciaData[]>([])
   const [provinciaSeleccionada, setProvinciaSeleccionada] = useState<ProvinciaData | null>(null)
-  const [departamentoSeleccionado, setDepartamentoSeleccionado] = useState<string | null>(null)
+  // const [departamentoSeleccionado, setDepartamentoSeleccionado] = useState<string | null>(null) // Fase 2
   const [tipoDelitoId, setTipoDelitoId] = useState<string | undefined>(tipoDelitoProp)
   const [fuenteSeleccionada, setFuenteSeleccionada] = useState<'snic' | 'sat'>('snic')
   const [filtrosSAT, setFiltrosSAT] = useState<FiltrosActivos>({})
