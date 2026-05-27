@@ -99,4 +99,21 @@ Para ejecutar los tests de validación, usar una máquina con Chrome disponible.
 |-------|-------|-----------|-------|
 | (anterior) | infobae | ✅ VALIDADO | Script dedicado en package.json |
 | (anterior) | rosario3 | ✅ VALIDADO | Script dedicado en package.json |
-| 2026-05-27 | ellitoral, lmneuquen, norte, eltribuno, eldia, lavoz | ⏳ Pendiente | Requiere browser real |
+| 2026-05-27 | ellitoral, lmneuquen, norte, eltribuno, eldia, lavoz | ⏳ PENDIENTE | agent-browser disponible (v0.21.4) pero Chrome no instalable — red restringida en entorno CI |
+
+## Resultado dry-run 2026-05-27
+
+```
+agent-browser 0.21.4 ✅ instalado
+Chrome ❌ no disponible — error descargando desde googlechromelabs.github.io
+```
+
+**Acción requerida**: ejecutar desde máquina con Chrome instalado:
+```bash
+PIPELINE_DRY_RUN=true PIPELINE_MAX_NOTICIAS=3 npm run pipeline:dry
+```
+
+El pipeline fue actualizado con el flag `activo` en cada medio:
+- `activo: true` → Grupo A (8 medios sin paywall)  
+- `activo: false` → Grupo B (clarin, lanacion — paywall)
+Los medios inactivos se omiten automáticamente salvo que se invoquen con `--medio=id`.
