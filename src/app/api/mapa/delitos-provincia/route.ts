@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/mapa/queries'
+import { CACHE_SNIC } from '@/lib/mapa/cache-headers'
 
 /**
  * GET /api/mapa/delitos-provincia?provincia_id=06&anio=2024
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
       victimas: Number(r.total_victimas),
     }))
 
-    return NextResponse.json({ delitos })
+    return NextResponse.json({ delitos }, { headers: CACHE_SNIC })
   } catch (error) {
     console.error('Error en /api/mapa/delitos-provincia:', error)
     return NextResponse.json({ error: 'Error al obtener delitos' }, { status: 500 })

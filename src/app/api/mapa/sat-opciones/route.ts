@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/mapa/queries'
+import { CACHE_SNIC } from '@/lib/mapa/cache-headers'
 
 /**
  * GET /api/mapa/sat-opciones
@@ -48,7 +49,7 @@ export async function GET() {
       femicidio: femicidios.map(r => ({ valor: r.valor, total: Number(r.total) })),
       vinculo: vinculos.map(r => ({ valor: r.valor, total: Number(r.total) })),
       lugar: lugares.map(r => ({ valor: r.valor, total: Number(r.total) })),
-    })
+    }, { headers: CACHE_SNIC })
   } catch (error) {
     console.error('Error en /api/mapa/sat-opciones:', error)
     return NextResponse.json({ error: 'Error al obtener opciones' }, { status: 500 })

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getEstadisticasPorProvincia, getEstadisticasSATFiltrado, FuenteDatos } from '@/lib/mapa/queries'
+import { CACHE_SNIC, CACHE_MEDIOS } from '@/lib/mapa/cache-headers'
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -24,12 +25,13 @@ export async function GET(request: NextRequest) {
       data = await getEstadisticasPorProvincia(anio, tipoDelitoId, fuente)
     }
 
+    const cacheHeaders = fuente === 'snic' ? CACHE_SNIC : CACHE_MEDIOS
     return NextResponse.json({
       anio,
       fuente,
       ...data,
       totalRegistros: data.provincias.length,
-    })
+    }, { headers: cacheHeaders })
   } catch (error) {
     console.error('Error en /api/mapa/estadisticas:', error)
     return NextResponse.json({ error: 'Error al obtener estadísticas' }, { status: 500 })
