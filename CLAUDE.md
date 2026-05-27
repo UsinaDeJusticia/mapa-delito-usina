@@ -248,3 +248,90 @@ export { MascaraPaises } from './MascaraPaises'
 - **Español**: todos los nombres de componentes, variables de UI y comentarios van en español. Tipos TypeScript y keys de objetos van en inglés o camelCase español.
 - **GeoJSON en `public/data/`**: servidos estáticamente vía `/data/nombre.geojson`. No moverlos.
 - **IDs de provincias**: código INDEC de 2 dígitos con cero a la izquierda (`'06'` = Buenos Aires). Siempre `padStart(2, '0')` al normalizar desde BD.
+
+---
+
+## 7. Contexto de negocio y restricciones
+
+**Organización:** Usina de Justicia — ONG argentina de derechos de
+víctimas de homicidio y femicidio. Herramienta pública de alto impacto.
+
+**Paleta oficial (NO violar):**
+- Primario: `#1E427C` (usina-500)
+- Secundario: `#A7A8AC`
+- Fondo: blanco
+- ⚠️ NUNCA usar violeta/púrpura — paleta anterior descartada
+
+**Audiencia:** víctimas, familiares, periodistas, funcionarios.
+Mobile 4G argentino es el caso de uso crítico.
+
+---
+
+## 8. Prioridades activas (en orden)
+
+1. **Performance y caché** — ver sección 9
+2. **Refactor visual** — terminar distinción entre capa SNIC
+   (agregados) y capa PRELIMINAR (hechos individuales de medios)
+3. **Activar 36 medios** en pipeline (hoy solo Infobae y Rosario3)
+4. **Deploy a Vercel**
+5. **Página de metodología** (antes del deploy público)
+
+---
+
+## 9. Optimizaciones de performance requeridas
+
+El usuario objetivo está en mobile 4G argentino.
+Cada KB y cada ms importan.
+
+### 9.1 Cache-Control en API routes
+- Datos SNIC (cambian una vez al año):
+  `Cache-Control: public, s-maxage=3600, stale-while-revalidate=86400`
+- Datos PRELIMINAR de medios (cambian frecuente):
+  `Cache-Control: public, s-maxage=300, stale-while-revalidate=600`
+- Aplicar en: estadisticas, tendencias, tipos-delito,
+  provincias, delitos-provincia, sat-opciones
+
+### 9.2 GeoJSON — lazy loading estricto
+- `provincias-poligonos.geojson` (~600KB): cargar al inicio
+  pero con `precargarGeoJSON()` en background, no bloqueante
+- `departamentos-poligonos.geojson` (~1.2MB): SOLO cuando
+  zoom >= 6 (ya implementado en CapaDepartamentos — verificar
+  que no se precargue antes)
+- Objetivo: 0 bytes de departamentos en carga inicial
+
+### 9.3 Labels de departamentos
+- Límite de 80 labels ya implementado — mantener
+- Verificar que los Markers se destruyan correctamente al
+  salir del zoom threshold (memory leak común)
+
+### 9.4 Dynamic imports
+- Verificar que TODO lo que usa Google Maps esté detrás de
+  `next/dynamic` con `ssr: false`
+- No importar `@vis.gl/react-google-maps` en ningún
+  Server Component
+
+### 9.5 Medición obligatoria
+Antes y después de cada optimización, medir con:
+- Chrome DevTools → Network → throttling "Slow 4G"
+- Registrar: KB transferidos en carga inicial,
+  Time to Interactive, tiempo hasta primer tile del mapa
+
+---
+
+## 10. Skill de diseño frontend
+
+Antes de crear o modificar cualquier componente visual,
+aplicar estos principios:
+
+- **Propósito**: herramienta cívica de alto impacto, no decorativa
+- **Tono**: editorial/institucional — datos claros sobre estética
+- **Diferenciador**: el mapa debe comunicar urgencia y precisión,
+  no ser bonito por ser bonito
+- **Tipografía**: las fuentes Geist ya definidas en layout.tsx
+  son correctas — no cambiar
+- **Animaciones**: solo donde aporten claridad (transición de
+  capas al cambiar año/fuente). Nada decorativo que agregue JS
+- **Mobile first**: cada componente nuevo debe probarse en
+  viewport 390px antes de desktop
+- **NO**: gradientes purple, sombras exageradas, glassmorphism,
+  patrones que no existen en la paleta Usina
