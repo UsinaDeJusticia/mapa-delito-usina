@@ -56,23 +56,19 @@ function PrecargaInteligente() {
   useEffect(() => {
     if (!map) return
 
-    // Cuando el usuario empieza a hacer zoom, precargar departamentos
+    // Precargar departamentos solo cuando el usuario hace zoom >= 6
+    // (alineado con el threshold de CapaDepartamentos — zoomMinimo - 1 = 6)
+    // Sin timer: 0 bytes de departamentos en carga inicial
     const listener = map.addListener('zoom_changed', () => {
       const zoom = map.getZoom() ?? 4
-      if (zoom >= 5) {
+      if (zoom >= 6) {
         precargarGeoJSON('departamentos-poligonos.geojson')
         google.maps.event.removeListener(listener)
       }
     })
 
-    // También precargar después de 3s idle (el usuario ya cargó el mapa)
-    const timer = setTimeout(() => {
-      precargarGeoJSON('departamentos-poligonos.geojson')
-    }, 3000)
-
     return () => {
       google.maps.event.removeListener(listener)
-      clearTimeout(timer)
     }
   }, [map])
 
