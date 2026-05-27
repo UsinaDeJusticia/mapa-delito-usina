@@ -638,7 +638,7 @@ async function main() {
             urlFuente: noticia.url,
             esAgregado: false,
             esCasoUsina: false,
-            // requiereRevision: datos.requiereRevision ?? false, // activar tras migración ALTER TABLE
+            requiereRevision: datos.requiereRevision ?? false,
           }
         })
 
