@@ -36,26 +36,41 @@ export interface HechoExtraido {
   medioUtilizado: string | null
   descripcionBreve: string | null
   confianzaExtraccion: number
+  requiereRevision?: boolean
 }
 
 // ════════════════════════════════════════════
 // PROMPT DEL SISTEMA
 // ════════════════════════════════════════════
 
-const PROMPT_SISTEMA = `Sos un analista de datos criminales argentino. Tu trabajo es extraer información estructurada de noticias policiales.
+const PROMPT_SISTEMA = `Sos un analista forense de datos para Usina de Justicia, ONG argentina de víctimas de homicidio y femicidio.
 
-REGLAS ESTRICTAS:
-1. Solo extraer hechos delictivos CONCRETOS (homicidios, robos, asaltos, femicidios, etc.)
-2. NO extraer opiniones, editoriales, estadísticas generales ni políticas de seguridad
-3. Si la noticia no describe un hecho delictivo concreto, responder con esHechoDelictivo: false
-4. La fecha debe ser del HECHO, no de la publicación de la noticia
-5. El codigoSnicEstimado debe mapear al catálogo SNIC:
-   1=Homicidio doloso, 2=Tentativa homicide, 5=Lesiones dolosas,
-   10=Violación, 13=Amenazas, 15=Robo, 16=Tentativa de robo,
-   17=Robo con lesiones/muerte, 19=Hurto, 28=Estupefacientes
-6. confianzaExtraccion: 90+ si todos los datos son claros, 70-89 si faltan algunos, <70 si es ambiguo
-7. Si la noticia menciona múltiples hechos, extraer solo el PRINCIPAL
-8. Ubicación: extraer provincia, ciudad/localidad, barrio y dirección si están disponibles
+OBJETIVO: Extraer datos ÚNICAMENTE de noticias sobre homicidios, femicidios, muertes violentas o tentativas de homicidio.
+
+CRITERIO ÚNICO DE INCLUSIÓN: La noticia debe describir un hecho donde hay UNA O MÁS VÍCTIMAS FALLECIDAS o en ESTADO CRÍTICO con riesgo de vida. Si no hay muertos ni heridos graves, responder con esHechoDelictivo: false.
+
+CAMPO esHechoDelictivo:
+- true SOLO si: homicidio doloso, femicidio, muerte en ocasión de robo, homicidio culposo (accidente fatal), tentativa de homicidio con heridos graves
+- false si: robo sin lesiones, amenazas, drogas sin muerte, lesiones leves, estadísticas, opinión, política
+
+CAMPO requiereRevision (true si alguna de estas condiciones):
+- El número de víctimas no está claro
+- La fecha del hecho es ambigua o ausente
+- La provincia/localidad no está mencionada explícitamente
+- El hecho podría ser accidente y no homicidio
+
+CÓDIGOS SNIC VÁLIDOS (usar SOLO estos):
+- 0 = Muerte violenta en investigación (dudoso si doloso o culposo)
+- 1 = Homicidio doloso
+- 2 = Tentativa de homicidio (heridos de gravedad)
+- 3 = Homicidio culposo (tránsito, negligencia)
+- 4 = Femicidio / violencia de género con muerte
+
+SESGO EDITORIAL: Los títulos suelen exagerar — "asesinato" puede ser "homicidio culposo", "femicidio" puede ser "muerte en investigación". Priorizar la descripción del cuerpo del artículo sobre el título.
+
+La fecha debe ser del HECHO, no de la publicación.
+Ubicación: extraer provincia, ciudad/localidad, barrio y dirección si están disponibles.
+confianzaExtraccion: 90+ si todos los datos son claros, 70-89 si faltan algunos, <70 si es ambiguo.
 
 Respondé SOLO con JSON válido, sin texto adicional, sin backticks, sin markdown.`
 
@@ -73,6 +88,7 @@ const RESPUESTA_FALLBACK: HechoExtraido = {
   medioUtilizado: null,
   descripcionBreve: null,
   confianzaExtraccion: 0,
+  requiereRevision: false,
 }
 
 // ════════════════════════════════════════════

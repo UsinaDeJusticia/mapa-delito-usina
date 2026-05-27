@@ -29,7 +29,30 @@ const prisma = new PrismaClient()
 const DRY_RUN = process.argv.includes('--dry-run') || process.env.PIPELINE_DRY_RUN === 'true'
 const MAX_NOTICIAS = parseInt(process.env.PIPELINE_MAX_NOTICIAS || '20')
 const MEDIO_ESPECIFICO = process.argv.find(a => a.startsWith('--medio='))?.split('=')[1]
-const CONFIANZA_MINIMA = 75
+const CONFIANZA_MINIMA = 85
+
+// ════════════════════════════════════════════
+// FILTRO DE HOMICIDIOS
+// ════════════════════════════════════════════
+
+const PALABRAS_CLAVE_HOMICIDIO = [
+  'matar', 'mató', 'mataron',
+  'asesi', // asesinó, asesinaron, asesinato
+  'homicid', // homicidio, homicida
+  'femicid', // femicidio
+  'murió', 'murio', 'murieron',
+  'falleci', // falleció, fallecieron, fallecida
+  'cadáver', 'cadaver',
+  'cuerpo sin vida',
+  'baleado', 'balearon',
+  'apuñalado', 'apuñalaron',
+  'muertos', 'muerto',
+  'víctima fatal', 'victima fatal',
+  'herido de gravedad', 'heridos de gravedad',
+  'estado crítico', 'estado critico',
+  'tiroteo mortal',
+  'crimen',
+]
 
 // ════════════════════════════════════════════
 // TIPOS
@@ -333,29 +356,7 @@ async function scrapearMedio(medio: MedioConfig, yaPrewarmed: boolean): Promise<
 
     log('📊', `${medio.nombre}: ${noticias.length} noticias extraídas`)
 
-    // Filtrar noticias que parecen ser delictivas antes de enviar a OpenRouter
-    const noticiasRelevantes = noticias.filter(n => {
-      const textoLower = (n.titulo + ' ' + n.texto.slice(0, 200)).toLowerCase()
-      const palabrasClave = [
-        'matar', 'mató', 'asesi', 'homicid', 'femicid',
-        'robo', 'robó', 'robaron', 'asalt', 'baleado', 'balearon',
-        'apuñal', 'puñal', 'arma', 'disparo', 'tirote',
-        'detenid', 'detención', 'preso', 'cárcel',
-        'crimen', 'criminal', 'delito', 'denuncia',
-        'víctima', 'muerto', 'cadáver', 'cuerpo',
-        'policía', 'policial', 'fiscal', 'juez',
-        'secuestr', 'violación', 'abuso', 'golpe',
-        'narco', 'droga', 'estupefaciente',
-        'inseguridad', 'salidera', 'entradera', 'motochorro',
-      ]
-      return palabrasClave.some(p => textoLower.includes(p))
-    })
-
-    if (noticiasRelevantes.length < noticias.length) {
-      log('🔍', `Filtrado: ${noticiasRelevantes.length}/${noticias.length} noticias parecen delictivas`)
-    }
-
-    return noticiasRelevantes
+    return noticias
 
   } catch (error) {
     log('❌', `Error general en ${medio.nombre}: ${String(error).slice(0, 150)}`)
@@ -493,8 +494,21 @@ async function main() {
   for (const medio of medios) {
     log('', '─'.repeat(60))
 
-    const noticias = await scrapearMedio(medio, yaPrewarmed)
-    totalScrapeadas += noticias.length
+    const noticiasRaw = await scrapearMedio(medio, yaPrewarmed)
+    totalScrapeadas += noticiasRaw.length
+
+    // Filtro homicidio: descartar antes de gastar tokens en OpenRouter
+    const noticias = noticiasRaw.filter(n => {
+      const textoLower = (n.titulo + ' ' + n.texto.slice(0, 300)).toLowerCase()
+      return PALABRAS_CLAVE_HOMICIDIO.some(p => textoLower.includes(p))
+    })
+
+    for (const n of noticiasRaw) {
+      if (!noticias.includes(n)) {
+        log('⏭️', `Sin indicadores de muerte: "${n.titulo.slice(0, 60)}" — ${n.url}`)
+        totalDescartadas++
+      }
+    }
 
     for (const noticia of noticias) {
 
@@ -503,13 +517,13 @@ async function main() {
       const datos = await extraerDatosNoticia(noticia.texto, noticia.url)
 
       if (!datos.esHechoDelictivo) {
-        log('⏭️', `No es hecho delictivo`)
+        log('⏭️', `No es hecho delictivo: "${noticia.titulo.slice(0, 60)}" — ${noticia.url}`)
         totalDescartadas++
         continue
       }
 
       if (datos.confianzaExtraccion < CONFIANZA_MINIMA) {
-        log('⏭️', `Confianza baja (${datos.confianzaExtraccion}%)`)
+        log('⏭️', `Confianza baja (${datos.confianzaExtraccion}%): "${noticia.titulo.slice(0, 60)}" — ${noticia.url}`)
         totalDescartadas++
         continue
       }
@@ -519,7 +533,7 @@ async function main() {
       // ── Deduplicación inteligente ──
       const dedup = await deduplicar({
         tipoHecho: datos.tipoHecho || '',
-        codigoSnicEstimado: datos.codigoSnicEstimado ? String(datos.codigoSnicEstimado) : '15',
+        codigoSnicEstimado: datos.codigoSnicEstimado ? String(datos.codigoSnicEstimado) : '',
         ubicacion: datos.ubicacion,
         fecha: datos.fecha,
         titulo: noticia.titulo,
@@ -540,18 +554,18 @@ async function main() {
       const geo = await georreferenciar(provinciaParaGeoref, datos.ubicacion.ciudad)
 
       if (!geo) {
-        log('⚠️', `No se pudo georreferenciar: ${provinciaParaGeoref}`)
+        log('⚠️', `No se pudo georreferenciar (${provinciaParaGeoref}): "${noticia.titulo.slice(0, 60)}" — ${noticia.url}`)
         totalDescartadas++
         continue
       }
 
-      // Mapear tipo de delito
+      // Mapear tipo de delito — sin default, el LLM debe asignar código
       const tipoDelito = datos.codigoSnicEstimado
         ? tipoPorCodigo.get(String(datos.codigoSnicEstimado))
-        : tipoPorCodigo.get('15') // Default: Robo
+        : null
 
       if (!tipoDelito) {
-        log('⚠️', `Código SNIC ${datos.codigoSnicEstimado} no mapeado`)
+        log('⚠️', `Código SNIC ${datos.codigoSnicEstimado ?? 'null'} no mapeado: "${noticia.titulo.slice(0, 60)}" — ${noticia.url}`)
         totalDescartadas++
         continue
       }
@@ -567,11 +581,22 @@ async function main() {
 
       // ── DRY RUN: solo mostrar ──
       if (DRY_RUN) {
-        log('🔍', `[DRY RUN] ${dedup.esNuevo ? 'NUEVO' : 'COBERTURA'}: ${datos.tipoHecho} en ${provinciaParaGeoref} (${dedup.razon})`)
+        log('🔍', `[DRY RUN] ${dedup.esNuevo ? 'NUEVO' : 'COBERTURA'}: ${datos.tipoHecho} | SNIC:${datos.codigoSnicEstimado} | ${provinciaParaGeoref} | confianza:${datos.confianzaExtraccion}% | revision:${datos.requiereRevision ? '⚠️ SI' : 'no'} | ${noticia.url}`)
         if (dedup.esNuevo) totalInsertadas++
         else totalVinculadas++
         continue
       }
+
+      /*
+       * MIGRACIÓN REQUERIDA antes de activar requiereRevision en producción:
+       *
+       * ALTER TABLE hechos_delictivos
+       *   ADD COLUMN IF NOT EXISTS requiere_revision BOOLEAN NOT NULL DEFAULT false;
+       *
+       * CREATE INDEX IF NOT EXISTS idx_hechos_requiere_revision
+       *   ON hechos_delictivos (requiere_revision)
+       *   WHERE requiere_revision = true;
+       */
 
       // ── INSERCIÓN REAL ──
       if (dedup.esNuevo) {
@@ -613,6 +638,7 @@ async function main() {
             urlFuente: noticia.url,
             esAgregado: false,
             esCasoUsina: false,
+            // requiereRevision: datos.requiereRevision ?? false, // activar tras migración ALTER TABLE
           }
         })
 
