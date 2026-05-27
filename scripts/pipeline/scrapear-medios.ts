@@ -51,7 +51,17 @@ const PALABRAS_CLAVE_HOMICIDIO = [
   'herido de gravedad', 'heridos de gravedad',
   'estado crítico', 'estado critico',
   'tiroteo mortal',
-  'crimen',
+  // 'crimen' eliminado — matchea "crimen organizado" en noticias de drogas
+]
+
+// Descarte inmediato: si el TÍTULO contiene alguna de estas palabras
+// y NO contiene indicadores de muerte, se descarta sin gastar tokens.
+const PALABRAS_DESCARTE_INMEDIATO = [
+  'detuvieron', 'detuvo', 'fue detenido', 'fue arrestado',
+  'incautaron', 'secuestraron droga', 'tráfico de',
+  'narcotráfico', 'estupefacientes', 'cocaína',
+  'marihuana', 'droga', 'condenaron', 'fue condenado',
+  'sentencia', 'años de prisión', 'fue imputado',
 ]
 
 // ════════════════════════════════════════════
@@ -499,7 +509,17 @@ async function main() {
 
     // Filtro homicidio: descartar antes de gastar tokens en OpenRouter
     const noticias = noticiasRaw.filter(n => {
-      const textoLower = (n.titulo + ' ' + n.texto.slice(0, 300)).toLowerCase()
+      const tituloLower = n.titulo.toLowerCase()
+
+      // 1. Descarte inmediato por título: droga/detención sin muerte → skip
+      const tieneDescarte = PALABRAS_DESCARTE_INMEDIATO.some(p => tituloLower.includes(p))
+      if (tieneDescarte) {
+        const tieneMuerte = PALABRAS_CLAVE_HOMICIDIO.some(p => tituloLower.includes(p))
+        if (!tieneMuerte) return false
+      }
+
+      // 2. Filtro positivo: título + inicio del texto debe tener indicador de muerte
+      const textoLower = (tituloLower + ' ' + n.texto.slice(0, 300).toLowerCase())
       return PALABRAS_CLAVE_HOMICIDIO.some(p => textoLower.includes(p))
     })
 
@@ -524,6 +544,13 @@ async function main() {
 
       if (datos.confianzaExtraccion < CONFIANZA_MINIMA) {
         log('⏭️', `Confianza baja (${datos.confianzaExtraccion}%): "${noticia.titulo.slice(0, 60)}" — ${noticia.url}`)
+        totalDescartadas++
+        continue
+      }
+
+      if (datos.codigoSnicEstimado !== null &&
+          ![0, 1, 2, 3, 4].includes(datos.codigoSnicEstimado)) {
+        log('⏭️', `Código SNIC inválido para homicidios: ${datos.codigoSnicEstimado} — "${noticia.titulo.slice(0, 60)}" — ${noticia.url}`)
         totalDescartadas++
         continue
       }
