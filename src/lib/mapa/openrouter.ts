@@ -1,21 +1,13 @@
 /**
- * Cliente OpenRouter para extracción estructurada de noticias policiales.
- * Usa la compatibilidad con OpenAI SDK para llamar modelos económicos
- * (DeepSeek V3, Qwen) a través de OpenRouter.
- *
- * Costo estimado: < $0.50 USD/mes para 100 noticias/día.
+ * Cliente OpenRouter/Ollama para extracción estructurada de noticias policiales.
+ * El proveedor y modelo se seleccionan mediante PIPELINE_PERFIL_MODELO:
+ *   economico (default) → DeepSeek V3 via OpenRouter
+ *   preciso             → Claude Haiku via OpenRouter
+ *   local               → Ollama (OLLAMA_MODEL + OLLAMA_BASE_URL)
  */
 
 import OpenAI from 'openai'
-
-const openrouter = new OpenAI({
-  baseURL: 'https://openrouter.ai/api/v1',
-  apiKey: process.env.OPENROUTER_API_KEY || '',
-  defaultHeaders: {
-    'HTTP-Referer': 'https://usinadejusticia.org.ar',
-    'X-Title': 'Mapa Nacional del Delito - Usina de Justicia',
-  },
-})
+import { getConfigActiva } from '@/config/modelos-pipeline'
 
 // ════════════════════════════════════════════
 // TIPO DE DATO EXTRAÍDO
@@ -106,17 +98,36 @@ export async function extraerDatosNoticia(
   textoNoticia: string,
   urlFuente: string,
 ): Promise<HechoExtraido> {
-  const modelo = process.env.OPENROUTER_MODEL || 'deepseek/deepseek-chat-v3-0324'
+  const config = getConfigActiva()
+  console.log(`🤖 ${config.descripcion}`)
 
-  // Verificar que hay API key
-  if (!process.env.OPENROUTER_API_KEY) {
+  // Validar API key para proveedores remotos
+  if (config.proveedor === 'openrouter' && !process.env.OPENROUTER_API_KEY) {
     console.error('❌ OPENROUTER_API_KEY no configurada en .env')
     return RESPUESTA_FALLBACK
   }
 
+  const apiKey = config.proveedor === 'ollama'
+    ? 'ollama'
+    : process.env.OPENROUTER_API_KEY || ''
+
+  // Ollama usa /v1 como sufijo para compatibilidad OpenAI
+  const baseURL = config.proveedor === 'ollama'
+    ? `${config.baseUrl}/v1`
+    : config.baseUrl
+
+  const cliente = new OpenAI({
+    baseURL,
+    apiKey,
+    defaultHeaders: config.proveedor === 'openrouter' ? {
+      'HTTP-Referer': 'https://usinadejusticia.org.ar',
+      'X-Title': 'Mapa Nacional del Delito - Usina de Justicia',
+    } : {},
+  })
+
   try {
-    const respuesta = await openrouter.chat.completions.create({
-      model: modelo,
+    const respuesta = await cliente.chat.completions.create({
+      model: config.modelo,
       messages: [
         { role: 'system', content: PROMPT_SISTEMA },
         {
@@ -131,7 +142,7 @@ export async function extraerDatosNoticia(
     const contenido = respuesta.choices[0]?.message?.content?.trim() || ''
 
     if (!contenido) {
-      console.error('⚠️ OpenRouter devolvió respuesta vacía')
+      console.error('⚠️ Modelo devolvió respuesta vacía')
       return RESPUESTA_FALLBACK
     }
 
