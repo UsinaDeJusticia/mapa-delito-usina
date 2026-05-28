@@ -181,6 +181,51 @@ const MEDIOS: MedioConfig[] = [
 
   // ── La Rioja ──
   { id: 'nuevarioja',        nombre: 'Nueva Rioja',                  provincia: 'La Rioja',           urlBase: 'http://nuevarioja.com.ar',                urlPoliciales: 'http://nuevarioja.com.ar/policiales/',                              activo: true,  tienePaywall: false },
+
+  // ── Catamarca ──
+  { id: 'catamarcactual',       nombre: 'Catamarca Actual',              provincia: 'Catamarca',          urlBase: 'https://www.catamarcactual.com.ar',       urlPoliciales: 'https://www.catamarcactual.com.ar/policiales/',                      activo: true,  tienePaywall: false },
+  { id: 'elancasti',            nombre: 'El Ancasti',                    provincia: 'Catamarca',          urlBase: 'https://www.elancasti.com.ar',            urlPoliciales: 'https://www.elancasti.com.ar/policiales/',                           activo: true,  tienePaywall: false },
+
+  // ── Chaco adicionales ──
+  { id: 'diariochaco',          nombre: 'Diario Chaco',                  provincia: 'Chaco',              urlBase: 'https://www.diariochaco.com',             urlPoliciales: 'https://www.diariochaco.com/seccion/policiales-y-judiciales/',      activo: true,  tienePaywall: false },
+  { id: 'datachaco',            nombre: 'DataChaco',                     provincia: 'Chaco',              urlBase: 'https://www.datachaco.com',               urlPoliciales: 'https://www.datachaco.com/notas/policiales/',                        activo: true,  tienePaywall: false },
+
+  // ── Jujuy adicionales ──
+  { id: 'todojujuy',            nombre: 'TodoJujuy',                     provincia: 'Jujuy',              urlBase: 'https://www.todojujuy.com',               urlPoliciales: 'https://www.todojujuy.com/policiales/',                              activo: true,  tienePaywall: false },
+  { id: 'eltribunojujuy',       nombre: 'El Tribuno Jujuy',              provincia: 'Jujuy',              urlBase: 'https://www.eltribuno.com',               urlPoliciales: 'https://www.eltribuno.com/jujuy/policiales/',                        activo: true,  tienePaywall: false },
+
+  // ── Tucumán adicionales ──
+  { id: 'losprimeros',          nombre: 'Los Primeros TV',               provincia: 'Tucumán',            urlBase: 'https://www.losprimeros.tv',              urlPoliciales: 'https://www.losprimeros.tv/policiales/',                             activo: true,  tienePaywall: false },
+  { id: 'contextotucuman',      nombre: 'Contexto Tucumán',              provincia: 'Tucumán',            urlBase: 'https://www.contextotucuman.com',         urlPoliciales: 'https://www.contextotucuman.com/policiales/',                        activo: true,  tienePaywall: false },
+
+  // ── Córdoba adicional ──
+  { id: 'eldoce',               nombre: 'El Doce',                       provincia: 'Córdoba',            urlBase: 'https://www.eldoce.tv',                   urlPoliciales: 'https://www.eldoce.tv/policiales/',                                  activo: true,  tienePaywall: false },
+
+  // ── Corrientes adicionales ──
+  { id: 'ellitoralcorrientes',  nombre: 'El Litoral Corrientes',         provincia: 'Corrientes',         urlBase: 'https://www.ellitoral.com.ar',            urlPoliciales: 'https://www.ellitoral.com.ar/policiales/',                           activo: true,  tienePaywall: false },
+  { id: 'radiodos',             nombre: 'Radio Dos Corrientes',          provincia: 'Corrientes',         urlBase: 'https://www.radiodos.com.ar',             urlPoliciales: 'https://www.radiodos.com.ar/notas/policiales/',                      activo: true,  tienePaywall: false },
+
+  // ── Entre Ríos adicionales ──
+  { id: 'ahoraentrerios',       nombre: 'AHORA Entre Ríos',              provincia: 'Entre Ríos',         urlBase: 'https://www.ahora.com.ar',                urlPoliciales: 'https://www.ahora.com.ar/policiales/',                               activo: true,  tienePaywall: false },
+  { id: 'entreriosya',          nombre: 'EntreRíosYA',                   provincia: 'Entre Ríos',         urlBase: 'https://www.entreriosya.com.ar',          urlPoliciales: 'https://www.entreriosya.com.ar/policiales/',                         activo: true,  tienePaywall: false },
+
+  // ── Patagonia ──
+  { id: 'elpatagonico',         nombre: 'El Patagónico',                 provincia: 'Chubut',             urlBase: 'https://www.elpatagonico.com',            urlPoliciales: 'https://www.elpatagonico.com/policiales/',                           activo: true,  tienePaywall: false },
+  { id: 'diarioprensatdf',      nombre: 'Diario Prensa TDF',             provincia: 'Tierra del Fuego',   urlBase: 'https://www.diarioprensa.com.ar',         urlPoliciales: 'https://www.diarioprensa.com.ar/category/policial/',                 activo: true,  tienePaywall: false },
+  { id: 'anbariloche',          nombre: 'ANB Bariloche',                 provincia: 'Río Negro',          urlBase: 'https://www.anbariloche.com.ar',          urlPoliciales: 'https://www.anbariloche.com.ar/policiales/',                         activo: true,  tienePaywall: false },
+
+  // ── La Rioja adicionales ──
+  { id: 'elindependienterioja', nombre: 'El Independiente La Rioja',     provincia: 'La Rioja',           urlBase: 'https://www.elindependiente.com.ar',      urlPoliciales: 'https://www.elindependiente.com.ar/policiales/',                     activo: true,  tienePaywall: false },
+  { id: 'cadenaargentina',      nombre: 'Cadena Argentina',              provincia: 'La Rioja',           urlBase: 'https://www.cadenaargentina.com.ar',      urlPoliciales: 'https://www.cadenaargentina.com.ar/policiales/',                     activo: true,  tienePaywall: false },
+
+  // ── San Juan adicional ──
+  { id: 'diariodecuyo',         nombre: 'Diario de Cuyo',                provincia: 'San Juan',           urlBase: 'https://www.diariodecuyo.com.ar',         urlPoliciales: 'https://www.diariodecuyo.com.ar/policiales/',                        activo: true,  tienePaywall: false },
+
+  // ── La Pampa adicional ──
+  { id: 'pampadiario',          nombre: 'Pampa Diario',                  provincia: 'La Pampa',           urlBase: 'https://www.pampadiario.com',             urlPoliciales: 'https://www.pampadiario.com/policial/',                              activo: true,  tienePaywall: false },
+
+  // ── Salta adicional ──
+  { id: 'informatesalta',       nombre: 'InformateSalta',                provincia: 'Salta',              urlBase: 'https://www.informatesalta.com.ar',       urlPoliciales: 'https://www.informatesalta.com.ar/policiales/',                      activo: true,  tienePaywall: false },
 ]
 
 // ════════════════════════════════════════════
