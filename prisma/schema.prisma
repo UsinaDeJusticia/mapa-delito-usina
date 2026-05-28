@@ -133,6 +133,7 @@ model HechoDelictivo {
   fuenteId          String   @map("fuente_id")
   fuente            Fuente   @relation(fields: [fuenteId], references: [id])
   confianza         NivelConfianza @default(OFICIAL)
+  requiereRevision  Boolean  @default(false) @map("requiere_revision")
   urlFuente         String?  @map("url_fuente") // URL de la noticia o dataset
   esAgregado        Boolean  @default(false) @map("es_agregado") // true = dato anual SNIC, false = microdato/hecho individual
 
