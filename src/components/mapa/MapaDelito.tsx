@@ -499,6 +499,20 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
         <p className="text-[8px] sm:text-[10px] text-gray-400 mt-2 sm:mt-3">
           Fuente: {fuenteSeleccionada === 'snic' ? 'SNIC — Min. de Seguridad' : 'SAT — Homicidios dolosos'} · {anioSeleccionado}
         </p>
+        <div className="flex gap-2 mt-1.5">
+          <a
+            href="/metodologia"
+            className="text-[8px] sm:text-[9px] text-gray-400 hover:text-gray-600 underline"
+          >
+            Metodología
+          </a>
+          <a
+            href="/admin/revisiones"
+            className="text-[8px] sm:text-[9px] text-gray-400 hover:text-gray-600 underline"
+          >
+            Revisión
+          </a>
+        </div>
       </div>
     </div>
   )
