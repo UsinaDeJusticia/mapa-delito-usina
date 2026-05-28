@@ -104,25 +104,20 @@ const MEDIOS: MedioConfig[] = [
   { id: 'eldia',       nombre: 'El Día (La Plata)',       url: 'https://www.eldia.com/seccion/policiales/',             tipo: 'provincial', provincia: 'Buenos Aires',  activo: true },
   { id: 'lavoz',       nombre: 'La Voz del Interior',     url: 'https://www.lavoz.com.ar/sucesos/',                     tipo: 'provincial', provincia: 'Córdoba',       activo: true },
 
-  // ── NACIONALES SIN PAYWALL ──
-  { id: 'cronica',     nombre: 'Crónica',                 url: 'https://www.cronica.com.ar/seccion/policiales/',        tipo: 'nacional',                                activo: true },
-  { id: 'a24',         nombre: 'A24',                     url: 'https://www.a24.com/policiales/',                       tipo: 'nacional',                                activo: true },
-  { id: 'ambito',      nombre: 'Ámbito',                  url: 'https://www.ambito.com/policiales-a5123084',            tipo: 'nacional',                                activo: true },
-
-  // ── GBA — ZONA CRÍTICA ──
-  { id: 'snonline',          nombre: 'SN Online',              url: 'https://www.snonline.com.ar/policiales/',                    tipo: 'provincial', provincia: 'Buenos Aires',  activo: true },
-  { id: 'zonasurdiario',     nombre: 'Zona Sur Diario',        url: 'https://zonasurdiario.com.ar/search/label/Policiales',        tipo: 'provincial', provincia: 'Buenos Aires',  activo: true },
-  { id: 'diarioconurbano',   nombre: 'Diario Conurbano',       url: 'https://www.diarioconurbano.com.ar/policiales/',              tipo: 'provincial', provincia: 'Buenos Aires',  activo: true },
-  { id: 'elnacionalmatanza', nombre: 'El Nacional de Matanza', url: 'https://www.elnacionaldematanza.com.ar/policiales/',          tipo: 'provincial', provincia: 'Buenos Aires',  activo: true },
-  { id: 'zonaoestediario',   nombre: 'Zona Oeste Diario',      url: 'https://zonaoestediario.com.ar/search/label/Policiales',      tipo: 'provincial', provincia: 'Buenos Aires',  activo: true },
-  { id: 'diariopopular',     nombre: 'Diario Popular',         url: 'https://www.diariopopular.com.ar/policiales/',                tipo: 'provincial', provincia: 'Buenos Aires',  activo: true },
-
   // ── GRUPO B: paywall — desactivados ──
   { id: 'clarin',      nombre: 'Clarín',                  url: 'https://www.clarin.com/policiales/',                    tipo: 'nacional',                                activo: false },
   { id: 'lanacion',    nombre: 'LA NACION',               url: 'https://www.lanacion.com.ar/seguridad/',                tipo: 'nacional',                                activo: false },
 
   // ── GBA y Buenos Aires ──
   { id: 'cronica',           nombre: 'Crónica',                      provincia: 'Nacional',           urlBase: 'https://www.cronica.com.ar',              urlPoliciales: 'https://www.cronica.com.ar/policiales/',                            activo: true,  tienePaywall: false },
+  { id: 'a24',               nombre: 'A24',                          provincia: 'Nacional',           urlBase: 'https://www.a24.com',                     urlPoliciales: 'https://www.a24.com/policiales/',                                    activo: true,  tienePaywall: false },
+  { id: 'ambito',            nombre: 'Ámbito',                       provincia: 'Nacional',           urlBase: 'https://www.ambito.com',                  urlPoliciales: 'https://www.ambito.com/policiales-a5123084',                         activo: true,  tienePaywall: false },
+  { id: 'snonline',          nombre: 'SN Online',                    provincia: 'Buenos Aires',       urlBase: 'https://www.snonline.com.ar',             urlPoliciales: 'https://www.snonline.com.ar/policiales/',                            activo: true,  tienePaywall: false },
+  { id: 'zonasurdiario',     nombre: 'Zona Sur Diario',              provincia: 'Buenos Aires',       urlBase: 'https://www.zonasurdiario.com.ar',        urlPoliciales: 'https://zonasurdiario.com.ar/search/label/Policiales',               activo: true,  tienePaywall: false },
+  { id: 'diarioconurbano',   nombre: 'Diario Conurbano',             provincia: 'Buenos Aires',       urlBase: 'https://www.diarioconurbano.com.ar',      urlPoliciales: 'https://www.diarioconurbano.com.ar/policiales/',                     activo: true,  tienePaywall: false },
+  { id: 'elnacionalmatanza', nombre: 'El Nacional de Matanza',       provincia: 'Buenos Aires',       urlBase: 'https://www.elnacionaldematanza.com.ar',  urlPoliciales: 'https://www.elnacionaldematanza.com.ar/policiales/',                 activo: true,  tienePaywall: false },
+  { id: 'zonaoestediario',   nombre: 'Zona Oeste Diario',            provincia: 'Buenos Aires',       urlBase: 'https://www.zonaoestediario.com.ar',      urlPoliciales: 'https://zonaoestediario.com.ar/search/label/Policiales',             activo: true,  tienePaywall: false },
+  { id: 'diariopopular',     nombre: 'Diario Popular',               provincia: 'Buenos Aires',       urlBase: 'https://www.diariopopular.com.ar',        urlPoliciales: 'https://www.diariopopular.com.ar/policiales/',                       activo: true,  tienePaywall: false },
   { id: 'infocielo',         nombre: 'InfoCielo',                    provincia: 'Buenos Aires',       urlBase: 'https://infocielo.com',                   urlPoliciales: 'https://infocielo.com/policiales/',                                 activo: true,  tienePaywall: false },
   { id: 'lacapital',         nombre: 'La Capital Mar del Plata',     provincia: 'Buenos Aires',       urlBase: 'https://www.lacapitalmdp.com',            urlPoliciales: 'https://www.lacapitalmdp.com/policiales/',                          activo: true,  tienePaywall: false },
 
