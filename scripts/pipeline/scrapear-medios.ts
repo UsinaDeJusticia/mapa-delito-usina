@@ -71,10 +71,13 @@ const PALABRAS_DESCARTE_INMEDIATO = [
 interface MedioConfig {
   id: string
   nombre: string
-  url: string
-  tipo: 'provincial' | 'nacional'
+  url?: string          // legado — medios originales
+  urlBase?: string
+  urlPoliciales?: string
+  tipo?: 'provincial' | 'nacional'
   provincia?: string
-  activo?: boolean // false = descartado o con paywall
+  activo?: boolean
+  tienePaywall?: boolean
 }
 
 interface NoticiaScrapeada {
@@ -104,6 +107,72 @@ const MEDIOS: MedioConfig[] = [
   // ── GRUPO B: paywall — desactivados ──
   { id: 'clarin',      nombre: 'Clarín',                  url: 'https://www.clarin.com/policiales/',                    tipo: 'nacional',                                activo: false },
   { id: 'lanacion',    nombre: 'LA NACION',               url: 'https://www.lanacion.com.ar/seguridad/',                tipo: 'nacional',                                activo: false },
+
+  // ── GBA y Buenos Aires ──
+  { id: 'cronica',           nombre: 'Crónica',                      provincia: 'Nacional',           urlBase: 'https://www.cronica.com.ar',              urlPoliciales: 'https://www.cronica.com.ar/policiales/',                            activo: true,  tienePaywall: false },
+  { id: 'infocielo',         nombre: 'InfoCielo',                    provincia: 'Buenos Aires',       urlBase: 'https://infocielo.com',                   urlPoliciales: 'https://infocielo.com/policiales/',                                 activo: true,  tienePaywall: false },
+  { id: 'lacapital',         nombre: 'La Capital Mar del Plata',     provincia: 'Buenos Aires',       urlBase: 'https://www.lacapitalmdp.com',            urlPoliciales: 'https://www.lacapitalmdp.com/policiales/',                          activo: true,  tienePaywall: false },
+
+  // ── Córdoba ──
+  { id: 'cadena3',           nombre: 'Cadena 3',                     provincia: 'Córdoba',            urlBase: 'https://www.cadena3.com',                 urlPoliciales: 'https://www.cadena3.com/categoria/policiales/',                     activo: true,  tienePaywall: false },
+
+  // ── Mendoza ──
+  { id: 'losandes',          nombre: 'Los Andes',                    provincia: 'Mendoza',            urlBase: 'https://www.losandes.com.ar',             urlPoliciales: 'https://www.losandes.com.ar/policiales/',                           activo: true,  tienePaywall: false },
+  { id: 'diariouno',         nombre: 'Diario Uno Mendoza',           provincia: 'Mendoza',            urlBase: 'https://www.diariouno.com.ar',            urlPoliciales: 'https://www.diariouno.com.ar/policiales/',                          activo: true,  tienePaywall: false },
+
+  // ── Tucumán ──
+  { id: 'lagaceta',          nombre: 'La Gaceta',                    provincia: 'Tucumán',            urlBase: 'https://www.lagaceta.com.ar',             urlPoliciales: 'https://www.lagaceta.com.ar/policiales/',                           activo: true,  tienePaywall: false },
+
+  // ── Santa Fe / Rosario ──
+  { id: 'airedesantafe',     nombre: 'Aire de Santa Fe',             provincia: 'Santa Fe',           urlBase: 'https://www.airedesantafe.com.ar',        urlPoliciales: 'https://www.airedesantafe.com.ar/policiales/',                      activo: true,  tienePaywall: false },
+  { id: 'lacapitalrosario',  nombre: 'La Capital Rosario',           provincia: 'Santa Fe',           urlBase: 'https://www.lacapital.com.ar',            urlPoliciales: 'https://www.lacapital.com.ar/policiales/',                          activo: false, tienePaywall: true  },
+
+  // ── Misiones ──
+  { id: 'misionesonline',    nombre: 'Misiones Online',              provincia: 'Misiones',           urlBase: 'https://misionesonline.net',              urlPoliciales: 'https://misionesonline.net/tema/policiales-judiciales/',            activo: true,  tienePaywall: false },
+  { id: 'elterritorio',      nombre: 'El Territorio',                provincia: 'Misiones',           urlBase: 'https://www.elterritorio.com.ar',         urlPoliciales: 'https://www.elterritorio.com.ar/policiales/',                       activo: true,  tienePaywall: false },
+
+  // ── Neuquén / Río Negro ──
+  { id: 'rionegro',          nombre: 'Diario Río Negro',             provincia: 'Río Negro',          urlBase: 'https://www.rionegro.com.ar',             urlPoliciales: 'https://www.rionegro.com.ar/policiales/',                           activo: true,  tienePaywall: false },
+
+  // ── Chubut ──
+  { id: 'jornada',           nombre: 'Jornada',                      provincia: 'Chubut',             urlBase: 'https://www.jornada.com.ar',              urlPoliciales: 'https://www.jornada.com.ar/policiales/',                            activo: true,  tienePaywall: false },
+
+  // ── San Juan ──
+  { id: 'tiemposanjuan',     nombre: 'Tiempo de San Juan',           provincia: 'San Juan',           urlBase: 'https://www.tiempodesanjuan.com',         urlPoliciales: 'https://www.tiempodesanjuan.com/policiales/',                       activo: true,  tienePaywall: false },
+
+  // ── Salta ──
+  { id: 'nuevodiariasalta',  nombre: 'Nuevo Diario Salta',           provincia: 'Salta',              urlBase: 'https://nuevodiariodesalta.com.ar',       urlPoliciales: 'https://nuevodiariodesalta.com.ar/category/seguridad/',             activo: true,  tienePaywall: false },
+
+  // ── Santiago del Estero ──
+  { id: 'elliberal',         nombre: 'El Liberal',                   provincia: 'Santiago del Estero', urlBase: 'https://www.elliberal.com.ar',           urlPoliciales: 'https://www.elliberal.com.ar/Policiales/',                          activo: true,  tienePaywall: false },
+  { id: 'nuevodiarioweb',    nombre: 'Nuevo Diario Web',             provincia: 'Santiago del Estero', urlBase: 'https://nuevodiarioweb.com.ar',          urlPoliciales: 'https://nuevodiarioweb.com.ar/policiales/',                         activo: true,  tienePaywall: false },
+
+  // ── Entre Ríos ──
+  { id: 'unoentrerios',      nombre: 'Uno Entre Ríos',               provincia: 'Entre Ríos',         urlBase: 'https://www.unoentrerios.com.ar',         urlPoliciales: 'https://www.unoentrerios.com.ar/policiales/',                       activo: true,  tienePaywall: false },
+
+  // ── Corrientes ──
+  { id: 'diariodecorrientes', nombre: 'Diario Época',                provincia: 'Corrientes',         urlBase: 'https://www.diarioepoca.com',             urlPoliciales: 'https://www.diarioepoca.com/policiales/',                           activo: true,  tienePaywall: false },
+
+  // ── La Pampa ──
+  { id: 'laarena',           nombre: 'La Arena',                     provincia: 'La Pampa',           urlBase: 'https://www.laarena.com.ar',              urlPoliciales: 'https://www.laarena.com.ar/tag/policiales/',                        activo: true,  tienePaywall: false },
+
+  // ── Jujuy ──
+  { id: 'somosjujuy',        nombre: 'Somos Jujuy',                  provincia: 'Jujuy',              urlBase: 'https://www.somosjujuy.com.ar',           urlPoliciales: 'https://www.somosjujuy.com.ar/policiales/',                         activo: true,  tienePaywall: false },
+
+  // ── Tierra del Fuego ──
+  { id: 'findelmundo',       nombre: 'El Diario del Fin del Mundo',  provincia: 'Tierra del Fuego',   urlBase: 'https://www.eldiariodelfindelmundo.com',  urlPoliciales: 'https://www.eldiariodelfindelmundo.com/policiales/',                activo: true,  tienePaywall: false },
+
+  // ── Santa Cruz ──
+  { id: 'tiemposur',         nombre: 'Tiempo Sur',                   provincia: 'Santa Cruz',         urlBase: 'https://www.tiemposur.com.ar',            urlPoliciales: 'https://www.tiemposur.com.ar/policiales/',                          activo: true,  tienePaywall: false },
+
+  // ── Formosa ──
+  { id: 'lamanana',          nombre: 'La Mañana de Formosa',         provincia: 'Formosa',            urlBase: 'https://www.lamananaonline.com.ar',       urlPoliciales: 'https://www.lamananaonline.com.ar/categorias/16/policiales/',       activo: true,  tienePaywall: false },
+
+  // ── San Luis ──
+  { id: 'eldiariorepublica', nombre: 'El Diario de la República',    provincia: 'San Luis',           urlBase: 'https://www.eldiariodelarepublica.com',   urlPoliciales: 'https://www.eldiariodelarepublica.com/seccion/policiales/',         activo: true,  tienePaywall: false },
+
+  // ── La Rioja ──
+  { id: 'nuevarioja',        nombre: 'Nueva Rioja',                  provincia: 'La Rioja',           urlBase: 'http://nuevarioja.com.ar',                urlPoliciales: 'http://nuevarioja.com.ar/policiales/',                              activo: true,  tienePaywall: false },
 ]
 
 // ════════════════════════════════════════════
@@ -239,12 +308,13 @@ function prewarmDaemon(): boolean {
  * 5. Cerrar browser
  */
 async function scrapearMedio(medio: MedioConfig, yaPrewarmed: boolean): Promise<NoticiaScrapeada[]> {
-  log('📰', `Scrapeando ${medio.nombre} (${medio.url})`)
+  const urlTarget = medio.urlPoliciales || medio.url || ''
+  log('📰', `Scrapeando ${medio.nombre} (${urlTarget})`)
   const noticias: NoticiaScrapeada[] = []
 
   try {
     // 1. Navegar a la sección policial
-    agentCmd(`open "${medio.url}"`, 30000)
+    agentCmd(`open "${urlTarget}"`, 30000)
     agentCmd('wait --load networkidle', 20000)
 
     // 2. Snapshot interactivo para obtener refs de links
@@ -343,7 +413,7 @@ async function scrapearMedio(medio: MedioConfig, yaPrewarmed: boolean): Promise<
             texto: texto.trim().slice(0, 5000),
             url: urlArticulo || '',
             medio: medio.nombre,
-            medioTipo: medio.tipo,
+            medioTipo: medio.tipo ?? (medio.provincia && medio.provincia !== 'Nacional' ? 'provincial' : 'nacional'),
             provinciaOrigen: medio.provincia,
           })
           log('✅', `  ${titulo.slice(0, 60)}...`)
