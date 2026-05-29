@@ -34,18 +34,33 @@ function CardRevision({
 }) {
   const [enviando, setEnviando] = useState<string | null>(null)
   const [saliendo, setSaliendo] = useState(false)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   async function clasificar(clasificacion: string) {
     setEnviando(clasificacion)
+    setErrorMsg(null)
     try {
-      await fetch('/api/admin/revisiones', {
+      const res = await fetch('/api/admin/revisiones', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hecho_id: hecho.id, clasificacion_humana: clasificacion }),
       })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        if (res.status === 401) {
+          setErrorMsg('Sesión expirada — volvé a iniciar sesión')
+        } else {
+          setErrorMsg(data.error ?? `Error ${res.status} — no se guardó`)
+        }
+        setEnviando(null)
+        return
+      }
+
       setSaliendo(true)
       setTimeout(() => onRevisado(hecho.id), 300)
     } catch {
+      setErrorMsg('Sin conexión — no se guardó')
       setEnviando(null)
     }
   }
@@ -110,6 +125,12 @@ function CardRevision({
           </a>
         )}
       </div>
+
+      {errorMsg && (
+        <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">
+          ⚠️ {errorMsg}
+        </p>
+      )}
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         {CLASIFICACIONES.map(c => (
