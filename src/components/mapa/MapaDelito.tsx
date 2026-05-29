@@ -16,7 +16,9 @@ import {
   CapaProvincias,
   CapaDepartamentos,
   MarcadoresCirculares,
+  CapaHechosMedios,
 } from './capas'
+import type { HechoMedio } from './capas'
 
 import { useGeolocalizacion } from './hooks/useGeolocalizacion'
 import { precargarGeoJSON } from './hooks/useGeoJSON'
@@ -123,6 +125,8 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
   const [error, setError] = useState<string | null>(null)
   const [provinciaHover, setProvinciaHover] = useState<string | null>(null)
   const [controlesExpandidos, setControlesExpandidos] = useState(false)
+  const [hechosMedias, setHechosMedias] = useState<HechoMedio[]>([])
+  const [mostrarMedias, setMostrarMedias] = useState(true)
   const mapRef = useRef<google.maps.Map | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
 
@@ -138,6 +142,14 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
       mapRef.current.setZoom(ubicacion.zoom)
     }
   }, [geoCargando, ubicacion])
+
+  // ─── Fetch hechos de medios (PRELIMINAR + VERIFICADO) ────
+  useEffect(() => {
+    fetch('/api/mapa/hechos-medios')
+      .then(r => r.json())
+      .then(d => setHechosMedias(d.hechos ?? []))
+      .catch(() => {})
+  }, [])
 
   // ─── Fetch datos ─────────────────────────────────────
   const fetchDatos = useCallback(async () => {
@@ -542,6 +554,12 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
               onProvinciaClick={handleProvinciaClick}
               filtroActivo={fuenteSeleccionada === 'sat' && Object.values(filtrosSAT).some(v => v !== undefined)}
             />
+
+            {/* Capa 4: Hechos individuales del pipeline de medios */}
+            <CapaHechosMedios
+              hechos={hechosMedias}
+              visible={mostrarMedias}
+            />
           </Map>
         </APIProvider>
       </div>
@@ -581,12 +599,29 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
           <span>Mayor</span>
         </div>
 
-        <div className="mt-2 sm:mt-3 pt-1.5 sm:pt-2 border-t border-gray-100 space-y-1">
-          <div className="flex items-center gap-2 text-[9px] sm:text-[10px] text-gray-500">
-            <div className="w-3 h-2 rounded-sm border border-red-500 bg-red-500/15 shrink-0" />
-            Caso registrado (medios)
+        {hechosMedias.length > 0 && (
+          <div className="mt-2 sm:mt-3 pt-1.5 sm:pt-2 border-t border-gray-100">
+            <button
+              onClick={() => setMostrarMedias(v => !v)}
+              className="flex items-center gap-2 text-[9px] sm:text-[10px] text-gray-500 hover:text-gray-700 transition-colors w-full text-left"
+              title={mostrarMedias ? 'Ocultar casos de medios' : 'Mostrar casos de medios'}
+            >
+              <div className="relative shrink-0 w-3 h-3">
+                <div className="absolute inset-0 rounded-full bg-red-500/20 border border-red-500" />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-red-500" />
+              </div>
+              <span>
+                Casos de medios
+                <span className="ml-1 font-semibold text-[#1E427C]">
+                  ({hechosMedias.filter(h => h.confianza === 'VERIFICADO').length}✓
+                  {hechosMedias.filter(h => h.confianza === 'PRELIMINAR').length > 0 &&
+                    ` + ${hechosMedias.filter(h => h.confianza === 'PRELIMINAR').length}⏳`})
+                </span>
+              </span>
+              <span className="ml-auto text-gray-300">{mostrarMedias ? '●' : '○'}</span>
+            </button>
           </div>
-        </div>
+        )}
 
         <p className="text-[8px] sm:text-[10px] text-gray-400 mt-2 sm:mt-3">
           Fuente: {fuenteSeleccionada === 'snic' ? 'SNIC — Min. de Seguridad' : 'SAT — Homicidios dolosos'} · {anioSeleccionado}
