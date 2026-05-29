@@ -8,6 +8,9 @@
 
 import OpenAI from 'openai'
 import { getConfigActiva } from '@/config/modelos-pipeline'
+import { PrismaClient } from '@prisma/client'
+
+const prisma = new PrismaClient()
 
 // ════════════════════════════════════════════
 // TIPO DE DATO EXTRAÍDO
@@ -177,11 +180,42 @@ export async function extraerDatosNoticia(
     } : {},
   })
 
+  // Recuperar hasta 3 casos verificados como ejemplos few-shot
+  const ejemplos = await prisma.$queryRaw<Array<{
+    resumen: string
+    clasificacion: string
+  }>>`
+    SELECT
+      cm.resumen,
+      rp.clasificacion_humana AS clasificacion
+    FROM revisiones_pipeline rp
+    JOIN hechos_delictivos hd ON rp.hecho_id = hd.id
+    JOIN coberturas_mediaticas cm ON cm.hecho_delictivo_id = hd.id
+    WHERE rp.clasificacion_humana != 'no_es_homicidio'
+      AND cm.resumen IS NOT NULL
+      AND LENGTH(cm.resumen) > 30
+    ORDER BY rp.revisado_at DESC
+    LIMIT 3
+  `.catch(() => [])
+
+  const fewShotMessages: Array<{ role: 'user' | 'assistant'; content: string }> = []
+  for (const ej of ejemplos) {
+    fewShotMessages.push({
+      role: 'user',
+      content: `Extraé los datos del siguiente texto:\n---\n${ej.resumen}\n---`,
+    })
+    fewShotMessages.push({
+      role: 'assistant',
+      content: JSON.stringify({ esHechoDelictivo: true, confianzaExtraccion: 90 }),
+    })
+  }
+
   try {
     const respuesta = await cliente.chat.completions.create({
       model: config.modelo,
       messages: [
         { role: 'system', content: PROMPT_SISTEMA },
+        ...fewShotMessages,
         {
           role: 'user',
           content: `Fecha actual de procesamiento: ${new Date().toISOString().slice(0, 10)}\nURL fuente: ${urlFuente}\n\nExtraé los datos del siguiente texto de noticia policial argentina siguiendo el formato JSON requerido:\n---\n${textoNoticia.slice(0, 3000)}\n---`,
