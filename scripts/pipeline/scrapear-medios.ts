@@ -30,7 +30,7 @@ const prisma = new PrismaClient()
 const DRY_RUN = process.argv.includes('--dry-run') || process.env.PIPELINE_DRY_RUN === 'true'
 const MAX_NOTICIAS = parseInt(process.env.PIPELINE_MAX_NOTICIAS || '20')
 const MEDIO_ESPECIFICO = process.argv.find(a => a.startsWith('--medio='))?.split('=')[1]
-const CONFIANZA_MINIMA = 85
+const CONFIANZA_MINIMA = 75
 
 // ════════════════════════════════════════════
 // TIPOS
@@ -265,30 +265,38 @@ async function identificarNoticiasConIA(
       messages: [
         {
           role: 'system',
-          content: `Sos un analista experto en noticias policiales argentinas. Tu tarea es identificar titulares de noticias donde hay una o más personas muertas por causas violentas.
+          content: `Sos un analista experto en seguridad y noticias policiales de Argentina. Tu tarea es revisar un snapshot de un sitio web e identificar ÚNICAMENTE los enlaces (links) que correspondan a noticias de crímenes o hechos policiales donde haya una o más personas muertas por causas violentas o dudosas.
 
-El periodismo argentino usa lenguaje variado para referirse a muertes:
-- Directo: "mataron", "asesinaron", "homicidio", "femicidio", "hallaron el cuerpo"
-- Indirecto: "perdió la vida", "falleció tras el ataque", "no sobrevivió a las heridas", "fue encontrado sin vida", "trágico desenlace", "ajuste de cuentas", "baleado y muerto", "víctima fatal"
-- Regional: "lo ultimaron", "lo ejecutaron", "cayó acribillado", "gatillo fácil con resultado muerte"
+El periodismo argentino usa un lenguaje muy variado para referirse a muertes:
+- Directo: "mataron", "asesinaron", "homicidio", "femicidio", "hallaron el cuerpo".
+- Indirecto: "perdió la vida", "falleció tras el ataque", "no sobrevivió a las heridas", "fue encontrado sin vida", "trágico desenlace", "ajuste de cuentas", "baleado y muerto", "víctima fatal".
+- Regional: "lo ultimaron", "lo ejecutaron", "cayó acribillado", "gatillo fácil con resultado muerte".
 
-INCLUIR si hay muerte confirmada o altamente probable:
-- homicidios, femicidios, transfemicidios, infanticidios
-- tiroteos/balaceras con muertos, apuñalamientos fatales
-- cuerpos hallados, personas desaparecidas y encontradas sin vida
-- muertes por violencia institucional (gatillo fácil)
+CRITERIOS DE INCLUSIÓN (Debe haber muerte confirmada o altamente probable):
+- Homicidios, femicidios, transfemicidios, infanticidios.
+- Ajustes de cuentas, linchamientos, tiroteos/balaceras con fallecidos.
+- Cuerpos hallados con signos de violencia o en circunstancias dudosas.
+- Muertes por violencia institucional (gatillo fácil).
+- Accidentes de tránsito O incidentes viales SOLO si el título/enlace expresa explícitamente que hay víctimas fatales.
 
-NO INCLUIR (aunque sean noticias policiales):
-- robos, asaltos, secuestros sin muerte confirmada
-- detenciones, arrestos, allanamientos, requisas
-- tráfico de drogas sin víctimas fatales
-- accidentes de tránsito (a menos que haya muertos y el título lo indique)
-- heridos en estado crítico sin confirmar muerte
-- política, economía, deportes, espectáculos
+CRITERIOS DE EXCLUSIÓN ESTRICTA (Ignorar por completo):
+- Robos, asaltos, secuestros, persecuciones o heridos graves SIN muerte confirmada.
+- Detenciones, juicios, condenas, allanamientos o narcotráfico sin cadáveres.
+- Suicidios (salvo que el contexto inicial sugiera dudas u homicidio oculto).
+- Accidentes domésticos, incendios accidentales o muertes naturales.
+- Todo lo ajeno a policiales (política, economía, deportes, espectáculos).
 
-Respondé ÚNICAMENTE con un JSON array sin texto adicional.
-Si no encontrás noticias con muertos, respondé exactamente: []
-Formato: [{"ref": "e123", "titulo": "Texto del link tal como aparece"}]
+FORMATO DE SALIDA (ESTRICTO):
+Respondé EXCLUSIVAMENTE con un JSON array válido.
+NUNCA envuelvas la respuesta en bloques de código Markdown (no uses las tres comillas invertidas ni la palabra "json").
+NUNCA agregues texto de introducción, saludos, notas aclaratorias ni texto de cierre. La respuesta debe empezar con [ y terminar con ].
+
+Si no encontrás noticias que cumplan los criterios, devolvé exactamente un array vacío: []
+
+Formato requerido:
+[
+  {"ref": "ID_O_URL_DEL_LINK", "titulo": "Texto del link o titular exacto"}
+]
 Máximo 10 resultados, ordenados de más a menos relevante.`
         },
         {

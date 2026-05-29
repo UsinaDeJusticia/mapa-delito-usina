@@ -35,36 +35,88 @@ export interface HechoExtraido {
 // PROMPT DEL SISTEMA
 // ════════════════════════════════════════════
 
-const PROMPT_SISTEMA = `Sos un analista forense de datos para Usina de Justicia, ONG argentina de víctimas de homicidio y femicidio.
+const PROMPT_SISTEMA = `Sos un analista forense de datos para Usina de Justicia, ONG argentina de víctimas de homicidio y femicidio. Tu objetivo es procesar noticias policiales y estructurar la información de forma estricta.
 
-OBJETIVO: Extraer datos ÚNICAMENTE de noticias sobre homicidios, femicidios, muertes violentas o tentativas de homicidio.
+CRITERIO DE INCLUSIÓN:
+- La noticia debe describir un hecho donde hay UNA O MÁS VÍCTIMAS FALLECIDAS o en ESTADO CRÍTICO/RESERVADO con riesgo inminente de vida.
+- Si no hay muertos ni heridos graves, seteá "esHechoDelictivo": false y completá el resto de los campos en null o vacíos.
 
-CRITERIO ÚNICO DE INCLUSIÓN: La noticia debe describir un hecho donde hay UNA O MÁS VÍCTIMAS FALLECIDAS o en ESTADO CRÍTICO con riesgo de vida. Si no hay muertos ni heridos graves, responder con esHechoDelictivo: false.
+CÓDIGOS SNIC REGLAMENTARIOS:
+Asigná obligatoriamente uno de estos códigos según el hecho principal:
+- 1 = Homicidio doloso (incluye muertes en ocasión de robo, sicariato, linchamientos).
+- 2 = Homicidio doloso en grado de tentativa (heridos graves por ataques letales).
+- 3 = Homicidio culposo (accidentes de tránsito fatales, negligencia médica, accidentes laborales).
+- 4 = Femicidio / Transfemicidio (violencia de género con resultado de muerte).
+- 0 = Muerte violenta de causa dudosa / En investigación (cuerpos hallados sin causa clara aún).
 
-CAMPO esHechoDelictivo:
-- true SOLO si: homicidio doloso, femicidio, muerte en ocasión de robo, homicidio culposo (accidente fatal), tentativa de homicidio con heridos graves
-- false si: robo sin lesiones, amenazas, drogas sin muerte, lesiones leves, estadísticas, opinión, política
+LÓGICA DE FLEXIBILIDAD (CRÍTICO PARA CONFIANZA):
+1. Fecha del hecho: Buscá expresiones temporales ("ayer", "esta madrugada"). Si el texto no permite calcular el día exacto, usá la fecha actual de la nota/sistema. NO penalices la confianza por esto.
+2. Ubicación: Si no figura la calle exacta, geolocalizá por la Localidad y Provincia descritas.
+3. Confianza de Extracción: Seteá un valor de 85 a 100 si está confirmado el hecho violento y la provincia/localidad. Solo bajá de 85 si la noticia es tan ambigua que no se sabe si ocurrió en Argentina o si el hecho es real.
 
-CAMPO requiereRevision (true si alguna de estas condiciones):
-- El número de víctimas no está claro
-- La fecha del hecho es ambigua o ausente
-- La provincia/localidad no está mencionada explícitamente
-- El hecho podría ser accidente y no homicidio
+SESGO EDITORIAL: Los títulos suelen exagerar — "asesinato" puede ser "homicidio culposo" según el cuerpo del texto. Priorizá la descripción de los hechos sobre el titular.
 
-CÓDIGOS SNIC VÁLIDOS (usar SOLO estos):
-- 0 = Muerte violenta en investigación (dudoso si doloso o culposo)
-- 1 = Homicidio doloso
-- 2 = Tentativa de homicidio (heridos de gravedad)
-- 3 = Homicidio culposo (tránsito, negligencia)
-- 4 = Femicidio / violencia de género con muerte
+FORMATO DE SALIDA:
+Respondé EXCLUSIVAMENTE con un objeto JSON válido, sin backticks, sin texto introductorio ni de cierre. Respetá estrictamente esta estructura:
 
-SESGO EDITORIAL: Los títulos suelen exagerar — "asesinato" puede ser "homicidio culposo", "femicidio" puede ser "muerte en investigación". Priorizar la descripción del cuerpo del artículo sobre el título.
+{
+  "esHechoDelictivo": true,
+  "snic_codigo": 1,
+  "provincia": "Nombre de la provincia",
+  "localidad": "Nombre de la localidad o ciudad",
+  "barrio_o_direccion": "Calle, cruce o barrio si figura, sino null",
+  "fecha_hecho": "YYYY-MM-DD",
+  "cantidad_victimas": 1,
+  "resumen_hecho": "Breve descripción objetiva de los hechos en un párrafo",
+  "requiereRevision": false,
+  "confianzaExtraccion": 90
+}`
 
-La fecha debe ser del HECHO, no de la publicación.
-Ubicación: extraer provincia, ciudad/localidad, barrio y dirección si están disponibles.
-confianzaExtraccion: 90+ si todos los datos son claros, 70-89 si faltan algunos, <70 si es ambiguo.
+// ════════════════════════════════════════════
+// TIPOS INTERNOS Y MAPEO
+// ════════════════════════════════════════════
 
-Respondé SOLO con JSON válido, sin texto adicional, sin backticks, sin markdown.`
+// Estructura que devuelve el LLM (nuevo formato)
+interface LLMRespuesta {
+  esHechoDelictivo: boolean
+  snic_codigo: number | null
+  provincia: string | null
+  localidad: string | null
+  barrio_o_direccion: string | null
+  fecha_hecho: string | null
+  cantidad_victimas: number | null
+  resumen_hecho: string | null
+  requiereRevision: boolean
+  confianzaExtraccion: number
+}
+
+const SNIC_DESCRIPCION: Record<number, string> = {
+  0: 'Muerte violenta en investigación',
+  1: 'Homicidio doloso',
+  2: 'Tentativa de homicidio',
+  3: 'Homicidio culposo',
+  4: 'Femicidio',
+}
+
+function mapearRespuesta(resp: LLMRespuesta): HechoExtraido {
+  return {
+    esHechoDelictivo: resp.esHechoDelictivo,
+    tipoHecho: resp.snic_codigo != null ? (SNIC_DESCRIPCION[resp.snic_codigo] ?? null) : null,
+    codigoSnicEstimado: resp.snic_codigo ?? null,
+    ubicacion: {
+      provincia: resp.provincia ?? null,
+      ciudad: resp.localidad ?? null,
+      barrio: resp.barrio_o_direccion ?? null,
+      direccion: null,
+    },
+    fecha: resp.fecha_hecho ?? null,
+    cantidadVictimas: resp.cantidad_victimas ?? null,
+    medioUtilizado: null,
+    descripcionBreve: resp.resumen_hecho ?? null,
+    confianzaExtraccion: typeof resp.confianzaExtraccion === 'number' ? resp.confianzaExtraccion : 50,
+    requiereRevision: resp.requiereRevision ?? false,
+  }
+}
 
 // ════════════════════════════════════════════
 // RESPUESTA POR DEFECTO (cuando falla)
@@ -132,7 +184,7 @@ export async function extraerDatosNoticia(
         { role: 'system', content: PROMPT_SISTEMA },
         {
           role: 'user',
-          content: `Extraé los datos del siguiente texto de noticia policial argentina:\n\n---\n${textoNoticia.slice(0, 3000)}\n---\n\nURL fuente: ${urlFuente}`,
+          content: `Fecha actual de procesamiento: ${new Date().toISOString().slice(0, 10)}\nURL fuente: ${urlFuente}\n\nExtraé los datos del siguiente texto de noticia policial argentina siguiendo el formato JSON requerido:\n---\n${textoNoticia.slice(0, 3000)}\n---`,
         },
       ],
       temperature: 0.1,
@@ -152,25 +204,15 @@ export async function extraerDatosNoticia(
       .replace(/\n?```$/i, '')
       .trim()
 
-    const datos = JSON.parse(jsonLimpio) as HechoExtraido
+    const raw = JSON.parse(jsonLimpio) as LLMRespuesta
 
-    // Validar campos mínimos
-    if (typeof datos.esHechoDelictivo !== 'boolean') {
+    // Validar campo mínimo
+    if (typeof raw.esHechoDelictivo !== 'boolean') {
       console.error('⚠️ Respuesta IA sin campo esHechoDelictivo')
       return RESPUESTA_FALLBACK
     }
 
-    // Asegurar que la estructura de ubicacion existe
-    if (!datos.ubicacion) {
-      datos.ubicacion = { provincia: null, ciudad: null, barrio: null, direccion: null }
-    }
-
-    // Asegurar confianza numérica
-    if (typeof datos.confianzaExtraccion !== 'number') {
-      datos.confianzaExtraccion = 50
-    }
-
-    return datos
+    return mapearRespuesta(raw)
 
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
