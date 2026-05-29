@@ -13,33 +13,45 @@ export async function GET(req: NextRequest) {
   const limite = 20
   const offset = (pagina - 1) * limite
 
-  // Hechos con requiere_revision=true sin entrada en revisiones_pipeline
+  // Todos los hechos PRELIMINAR sin revisión registrada
   const pendientes = await prisma.$queryRaw<Array<{
     id: string
     titulo: string | null
+    resumen: string | null
+    medio: string | null
     provincia: string | null
     ciudad: string | null
     fecha_hecho: Date
     tipo_delito: string
     confianza: string
+    requiere_revision: boolean
     url_fuente: string | null
     created_at: Date
   }>>`
     SELECT
       hd.id,
       cm.titulo,
+      cm.resumen,
+      cm.medio,
       u.provincia,
       u.departamento AS ciudad,
       hd.fecha_hecho,
-      td.nombre AS tipo_delito,
+      COALESCE(td.nombre, 'Sin clasificar') AS tipo_delito,
       hd.confianza,
-      hd.url_fuente,
+      hd.requiere_revision,
+      COALESCE(cm.url, hd.url_fuente) AS url_fuente,
       hd.created_at
     FROM hechos_delictivos hd
-    LEFT JOIN coberturas_mediaticas cm ON cm.hecho_delictivo_id = hd.id
+    LEFT JOIN LATERAL (
+      SELECT titulo, resumen, medio, url
+      FROM coberturas_mediaticas
+      WHERE hecho_delictivo_id = hd.id
+      ORDER BY created_at DESC
+      LIMIT 1
+    ) cm ON true
     LEFT JOIN ubicaciones u ON hd.ubicacion_id = u.id
     LEFT JOIN tipos_delito td ON hd.tipo_delito_id = td.id
-    WHERE hd.requiere_revision = true
+    WHERE hd.confianza = 'PRELIMINAR'
       AND NOT EXISTS (
         SELECT 1 FROM revisiones_pipeline rp WHERE rp.hecho_id = hd.id
       )
@@ -50,7 +62,7 @@ export async function GET(req: NextRequest) {
   const total = await prisma.$queryRaw<[{ count: bigint }]>`
     SELECT COUNT(*)::bigint AS count
     FROM hechos_delictivos hd
-    WHERE hd.requiere_revision = true
+    WHERE hd.confianza = 'PRELIMINAR'
       AND NOT EXISTS (
         SELECT 1 FROM revisiones_pipeline rp WHERE rp.hecho_id = hd.id
       )
@@ -62,6 +74,7 @@ export async function GET(req: NextRequest) {
       id: String(p.id),
       fecha_hecho: p.fecha_hecho?.toISOString() ?? null,
       created_at: p.created_at?.toISOString() ?? null,
+      requiere_revision: Boolean(p.requiere_revision),
     })),
     total: Number(total[0]?.count ?? 0),
     pagina,

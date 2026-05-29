@@ -6,11 +6,14 @@ import { signOut } from 'next-auth/react'
 interface HechoPendiente {
   id: string
   titulo: string | null
+  resumen: string | null
+  medio: string | null
   provincia: string | null
   ciudad: string | null
   fecha_hecho: string | null
   tipo_delito: string
   confianza: string
+  requiere_revision: boolean
   url_fuente: string | null
 }
 
@@ -58,13 +61,37 @@ function CardRevision({
       }`}
     >
       <div className="mb-3">
-        <p className="font-medium text-gray-900 text-sm leading-snug line-clamp-2">
+        {/* Fila superior: medio + badge revisión */}
+        <div className="flex items-center gap-2 mb-1.5">
+          {hecho.medio && (
+            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
+              {hecho.medio}
+            </span>
+          )}
+          {hecho.requiere_revision && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+              ⚠️ Revisar
+            </span>
+          )}
+          <span className="ml-auto text-[10px] text-gray-400">{fechaFormateada}</span>
+        </div>
+
+        {/* Título */}
+        <p className="font-semibold text-gray-900 text-sm leading-snug">
           {hecho.titulo ?? 'Sin título'}
         </p>
-        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5 text-xs text-gray-500">
-          <span>{hecho.provincia ?? '—'}{hecho.ciudad ? ` · ${hecho.ciudad}` : ''}</span>
-          <span>{fechaFormateada}</span>
-        </div>
+
+        {/* Localización */}
+        <p className="text-xs text-gray-500 mt-0.5">
+          {hecho.provincia ?? '—'}{hecho.ciudad ? ` · ${hecho.ciudad}` : ''}
+        </p>
+
+        {/* Resumen IA */}
+        {hecho.resumen && (
+          <p className="text-xs text-gray-600 mt-2 leading-relaxed line-clamp-3 bg-gray-50 rounded-lg px-3 py-2 border border-gray-100">
+            {hecho.resumen}
+          </p>
+        )}
       </div>
 
       <div className="flex items-center gap-2 mb-4">
@@ -77,7 +104,7 @@ function CardRevision({
             href={hecho.url_fuente}
             target="_blank"
             rel="noopener noreferrer"
-            className="ml-auto text-xs underline text-gray-400 hover:text-gray-600 truncate max-w-[120px]"
+            className="ml-auto text-xs underline text-gray-400 hover:text-gray-600 truncate max-w-[140px]"
           >
             Ver noticia ↗
           </a>
