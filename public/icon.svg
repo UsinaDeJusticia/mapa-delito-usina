@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 108">
+  <!-- Brazo derecho azul + curva inferior (U) -->
+  <path d="
+    M 62 6
+    Q 62 0 68 0
+    L 84 0
+    Q 90 0 90 6
+    L 90 68
+    Q 90 100 56 100
+    Q 22 100 22 68
+    L 22 68
+    Q 22 62 28 62
+    L 28 68
+    Q 28 92 56 92
+    Q 84 92 84 68
+    L 84 6
+    Z
+  " fill="#1E427C"/>
+  <!-- Brazo izquierdo gris -->
+  <path d="
+    M 6 6
+    Q 6 0 12 0
+    L 30 0
+    Q 36 0 36 6
+    L 36 74
+    L 44 80
+    L 6 80
+    Z
+  " fill="#A7A8AC"/>
+</svg>
