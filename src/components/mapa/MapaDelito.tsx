@@ -122,6 +122,7 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [provinciaHover, setProvinciaHover] = useState<string | null>(null)
+  const [controlesExpandidos, setControlesExpandidos] = useState(false)
   const mapRef = useRef<google.maps.Map | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
 
@@ -298,36 +299,122 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
       {/* ─── Barra superior ─────────────────────────────── */}
       <div className="absolute top-3 left-3 right-3 sm:top-4 sm:left-4 sm:right-4 z-10 flex flex-col gap-2">
 
-        {/* Fila 1: título + fuente + buscador */}
-        <div className="flex flex-row flex-wrap items-center gap-2 sm:gap-3">
-          <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg px-3 py-2 sm:px-4 sm:py-3 flex items-center gap-2 sm:gap-4">
+        {/* ── Fila siempre visible ────────────────────────── */}
+        <div className="flex flex-row items-center gap-2">
+          {/* Título + año (mobile) + stats compactas (mobile colapsado) */}
+          <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg px-3 py-2 sm:px-4 sm:py-3 flex items-center gap-2 sm:gap-4 flex-1 sm:flex-none min-w-0">
             <h1 className="text-sm sm:text-lg font-bold text-[#1E427C] whitespace-nowrap">
               Mapa del Delito
             </h1>
             <span className="text-xs sm:text-sm text-gray-500 hidden sm:inline">
               Usina de Justicia
             </span>
+            {/* Año compacto — solo mobile cuando colapsado */}
+            {!controlesExpandidos && aniosDisponibles.length > 0 && (
+              <span className="text-xs font-semibold text-[#1E427C] sm:hidden">{anioSeleccionado}</span>
+            )}
+            {/* Stats ultra-compactas — solo mobile cuando colapsado */}
+            {!controlesExpandidos && !loading && totalNacional > 0 && (
+              <span className="text-[10px] text-gray-500 sm:hidden truncate">
+                {(totalNacional / 1000).toFixed(0)}k hechos
+              </span>
+            )}
           </div>
 
-          {/* Selector de fuente SNIC/SAT */}
+          {/* SNIC/SAT — siempre visible */}
           <SelectorFuente
             value={fuenteSeleccionada}
             onChange={handleFuenteChange}
           />
 
-          {/* Buscador de provincia */}
-          <BuscadorProvincia
-            provincias={datos.map(d => ({
-              provincia: d.provincia,
-              provinciaId: d.provinciaId,
-              latitud: d.latitud,
-              longitud: d.longitud,
-            }))}
-            onSeleccionar={handleBuscarProvincia}
-          />
+          {/* Botón expandir/colapsar — solo mobile */}
+          <button
+            className="sm:hidden bg-white/95 backdrop-blur-sm rounded-xl shadow-lg p-2.5 flex items-center justify-center text-[#1E427C] shrink-0"
+            onClick={() => setControlesExpandidos(v => !v)}
+            aria-label={controlesExpandidos ? 'Cerrar filtros' : 'Abrir filtros'}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              {controlesExpandidos
+                ? <path d="M18 15l-6-6-6 6" />
+                : <path d="M6 9l6 6 6-6" />
+              }
+            </svg>
+          </button>
+
+          {/* Buscador — solo desktop */}
+          <div className="hidden sm:block">
+            <BuscadorProvincia
+              provincias={datos.map(d => ({
+                provincia: d.provincia,
+                provinciaId: d.provinciaId,
+                latitud: d.latitud,
+                longitud: d.longitud,
+              }))}
+              onSeleccionar={handleBuscarProvincia}
+            />
+          </div>
         </div>
 
-        {/* Fila 2: selector delito + slider años + stats (solo desktop) */}
+        {/* ── Panel expandible mobile ─────────────────────── */}
+        {controlesExpandidos && (
+          <div className="flex sm:hidden flex-col gap-2">
+            {/* Buscador */}
+            <BuscadorProvincia
+              provincias={datos.map(d => ({
+                provincia: d.provincia,
+                provinciaId: d.provinciaId,
+                latitud: d.latitud,
+                longitud: d.longitud,
+              }))}
+              onSeleccionar={(p) => {
+                handleBuscarProvincia(p)
+                setControlesExpandidos(false)
+              }}
+            />
+
+            {/* Slider año */}
+            {aniosDisponibles.length > 0 && (
+              <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg px-4 py-2 flex items-center gap-2 w-full">
+                <span className="text-[10px] text-gray-500 shrink-0">{aniosDisponibles[0]}</span>
+                <input
+                  type="range"
+                  min={aniosDisponibles[0]}
+                  max={aniosDisponibles[aniosDisponibles.length - 1]}
+                  step={1}
+                  value={anioSeleccionado}
+                  onChange={(e) => setAnioSeleccionado(parseInt(e.target.value))}
+                  className="flex-1 accent-usina-900"
+                  aria-label="Seleccionar año"
+                />
+                <span className="text-[10px] text-gray-500 shrink-0">{aniosDisponibles[aniosDisponibles.length - 1]}</span>
+                <span className="text-sm font-bold text-[#1E427C] min-w-[40px] text-center shrink-0">
+                  {anioSeleccionado}
+                </span>
+              </div>
+            )}
+
+            {/* Stats */}
+            {!loading && totalNacional > 0 && (
+              <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg px-3 py-1.5 flex items-center gap-3 text-xs self-start">
+                <span className="text-gray-500">Hechos:</span>
+                <span className="font-bold text-[#1E427C]">{totalNacional.toLocaleString('es-AR')}</span>
+                <div className="w-px h-3 bg-gray-200" />
+                <span className="text-gray-500">Víctimas:</span>
+                <span className="font-bold text-[#1E427C]">{totalVictimas.toLocaleString('es-AR')}</span>
+              </div>
+            )}
+
+            {/* Selector delito (SNIC) */}
+            {fuenteSeleccionada === 'snic' && (
+              <SelectorDelito
+                value={tipoDelitoId}
+                onChange={setTipoDelitoId}
+              />
+            )}
+          </div>
+        )}
+
+        {/* ── Fila 2 desktop: selector + slider + stats ───── */}
         <div className="hidden sm:flex flex-row flex-wrap items-center gap-2 sm:gap-3">
           {fuenteSeleccionada === 'snic' && (
             <SelectorDelito
@@ -367,38 +454,6 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
                   {totalVictimas.toLocaleString('es-AR')}
                 </span>
               </div>
-            </div>
-          )}
-        </div>
-
-        {/* Fila 2 mobile: slider año (full width) + stats compactas */}
-        <div className="flex sm:hidden flex-col gap-2">
-          {aniosDisponibles.length > 0 && (
-            <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg px-4 py-2 flex items-center gap-2 w-full">
-              <span className="text-[10px] text-gray-500 shrink-0">{aniosDisponibles[0]}</span>
-              <input
-                type="range"
-                min={aniosDisponibles[0]}
-                max={aniosDisponibles[aniosDisponibles.length - 1]}
-                step={1}
-                value={anioSeleccionado}
-                onChange={(e) => setAnioSeleccionado(parseInt(e.target.value))}
-                className="flex-1 accent-usina-900"
-                aria-label="Seleccionar año"
-              />
-              <span className="text-[10px] text-gray-500 shrink-0">{aniosDisponibles[aniosDisponibles.length - 1]}</span>
-              <span className="text-sm font-bold text-[#1E427C] min-w-[40px] text-center shrink-0">
-                {anioSeleccionado}
-              </span>
-            </div>
-          )}
-          {!loading && totalNacional > 0 && (
-            <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg px-3 py-1.5 flex items-center gap-3 text-xs self-start">
-              <span className="text-gray-500">Hechos:</span>
-              <span className="font-bold text-[#1E427C]">{totalNacional.toLocaleString('es-AR')}</span>
-              <div className="w-px h-3 bg-gray-200" />
-              <span className="text-gray-500">Víctimas:</span>
-              <span className="font-bold text-[#1E427C]">{totalVictimas.toLocaleString('es-AR')}</span>
             </div>
           )}
         </div>

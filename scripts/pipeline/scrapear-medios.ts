@@ -48,10 +48,13 @@ const PALABRAS_CLAVE_HOMICIDIO = [
   'baleado', 'balearon',
   'apuñalado', 'apuñalaron',
   'muertos', 'muerto',
+  'muerte', // "muerte violenta", "causa de muerte", "muerte de"
   'víctima fatal', 'victima fatal',
   'herido de gravedad', 'heridos de gravedad',
   'estado crítico', 'estado critico',
   'tiroteo mortal',
+  'ejecutaron', 'ejecutado',
+  'dispararon', 'disparo mortal',
   // 'crimen' eliminado — matchea "crimen organizado" en noticias de drogas
 ]
 
@@ -61,8 +64,10 @@ const PALABRAS_DESCARTE_INMEDIATO = [
   'detuvieron', 'detuvo', 'fue detenido', 'fue arrestado',
   'incautaron', 'secuestraron droga', 'tráfico de',
   'narcotráfico', 'estupefacientes', 'cocaína',
-  'marihuana', 'droga', 'condenaron', 'fue condenado',
-  'sentencia', 'años de prisión', 'fue imputado',
+  'marihuana', 'condenaron', 'fue condenado',
+  'años de prisión', 'fue imputado',
+  // 'droga' eliminado — demasiado amplio, descarta "mujer drogada fue asesinada"
+  // 'sentencia' eliminado — puede ser condena por homicidio (cobertura válida)
 ]
 
 // ════════════════════════════════════════════
@@ -298,15 +303,15 @@ async function identificarNoticiasConIA(
       messages: [
         {
           role: 'system',
-          content: `Sos un analista que identifica noticias policiales en snapshots de sitios web argentinos.
+          content: `Sos un analista especializado en identificar noticias sobre MUERTES VIOLENTAS en sitios argentinos.
 
 Te voy a pasar el snapshot de accesibilidad de un sitio de noticias. Cada elemento tiene un ref (ej: e123).
-Tu trabajo es identificar SOLO los links que son noticias sobre hechos delictivos concretos:
-homicidios, robos, asaltos, femicidios, tiroteos, secuestros, detenciones, crímenes, etc.
+Tu trabajo es identificar SOLO los links de noticias donde hay UNA O MÁS PERSONAS MUERTAS:
+homicidios, femicidios, asesinatos, tiroteos con víctimas fatales, muertes violentas, cuerpos hallados.
 
-NO incluir: política, deportes, economía, espectáculos, opinión, clima, publicidades.
+NO incluir: robos sin muerte, detenciones, arrestos, drogas sin muerte, política, deportes, economía, espectáculos, heridos sin muerte.
 
-Respondé SOLO con JSON array. Si no hay noticias policiales, respondé [].
+Respondé SOLO con JSON array. Si no hay noticias con muertos, respondé [].
 Formato: [{"ref": "e123", "titulo": "Texto del link"}]
 Máximo 10 resultados.`
         },
@@ -653,7 +658,8 @@ async function main() {
       }
 
       // 2. Filtro positivo: título + inicio del texto debe tener indicador de muerte
-      const textoLower = (tituloLower + ' ' + n.texto.slice(0, 300).toLowerCase())
+      // 800 chars: el snapshot de accesibilidad empieza con navegación, el artículo aparece después
+      const textoLower = (tituloLower + ' ' + n.texto.slice(0, 800).toLowerCase())
       return PALABRAS_CLAVE_HOMICIDIO.some(p => textoLower.includes(p))
     })
 
