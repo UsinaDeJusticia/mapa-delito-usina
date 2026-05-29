@@ -68,6 +68,43 @@ export async function GET(req: NextRequest) {
       )
   `
 
+  // Revisados en las últimas 48h (más reciente por hecho)
+  const revisados = await prisma.$queryRaw<Array<{
+    hecho_id: string
+    titulo: string | null
+    medio: string | null
+    provincia: string | null
+    confianza_hecho: string
+    url_fuente: string | null
+    clasificacion_humana: string
+    revisado_por: string
+    revisado_at: Date
+  }>>`
+    SELECT DISTINCT ON (rp.hecho_id)
+      hd.id::text AS hecho_id,
+      cm.titulo,
+      cm.medio,
+      u.provincia,
+      hd.confianza AS confianza_hecho,
+      COALESCE(cm.url, hd.url_fuente) AS url_fuente,
+      rp.clasificacion_humana,
+      rp.revisado_por,
+      rp.revisado_at
+    FROM revisiones_pipeline rp
+    JOIN hechos_delictivos hd ON hd.id = rp.hecho_id
+    LEFT JOIN LATERAL (
+      SELECT titulo, medio, url
+      FROM coberturas_mediaticas
+      WHERE hecho_delictivo_id = hd.id
+      ORDER BY created_at DESC
+      LIMIT 1
+    ) cm ON true
+    LEFT JOIN ubicaciones u ON hd.ubicacion_id = u.id
+    WHERE rp.revisado_at >= NOW() - INTERVAL '48 hours'
+    ORDER BY rp.hecho_id, rp.revisado_at DESC
+    LIMIT 50
+  `
+
   return NextResponse.json({
     pendientes: pendientes.map(p => ({
       ...p,
@@ -79,6 +116,11 @@ export async function GET(req: NextRequest) {
     total: Number(total[0]?.count ?? 0),
     pagina,
     limite,
+    revisados: revisados.map(r => ({
+      ...r,
+      hecho_id: String(r.hecho_id),
+      revisado_at: r.revisado_at?.toISOString() ?? null,
+    })),
   })
 }
 
@@ -92,6 +134,7 @@ export async function POST(req: NextRequest) {
     hecho_id: string
     clasificacion_humana: string
     notas?: string
+    es_correccion?: boolean
   }
 
   const { hecho_id, clasificacion_humana, notas } = body
@@ -136,9 +179,13 @@ export async function POST(req: NextRequest) {
       WHERE id = ${hechoIdNum}
     `
   } else {
-    // Falso positivo: solo apagar el flag, queda PRELIMINAR fuera de la cola
+    // Falso positivo: si estaba VERIFICADO lo vuelve a PRELIMINAR para que reaparezca en cola
     await prisma.$executeRaw`
-      UPDATE hechos_delictivos SET requiere_revision = false WHERE id = ${hechoIdNum}
+      UPDATE hechos_delictivos
+      SET
+        confianza = CASE WHEN confianza = 'VERIFICADO' THEN 'PRELIMINAR' ELSE confianza END,
+        requiere_revision = false
+      WHERE id = ${hechoIdNum}
     `
   }
 
