@@ -33,44 +33,6 @@ const MEDIO_ESPECIFICO = process.argv.find(a => a.startsWith('--medio='))?.split
 const CONFIANZA_MINIMA = 85
 
 // ════════════════════════════════════════════
-// FILTRO DE HOMICIDIOS
-// ════════════════════════════════════════════
-
-const PALABRAS_CLAVE_HOMICIDIO = [
-  'matar', 'mató', 'mataron',
-  'asesi', // asesinó, asesinaron, asesinato
-  'homicid', // homicidio, homicida
-  'femicid', // femicidio
-  'murió', 'murio', 'murieron',
-  'falleci', // falleció, fallecieron, fallecida
-  'cadáver', 'cadaver',
-  'cuerpo sin vida',
-  'baleado', 'balearon',
-  'apuñalado', 'apuñalaron',
-  'muertos', 'muerto',
-  'muerte', // "muerte violenta", "causa de muerte", "muerte de"
-  'víctima fatal', 'victima fatal',
-  'herido de gravedad', 'heridos de gravedad',
-  'estado crítico', 'estado critico',
-  'tiroteo mortal',
-  'ejecutaron', 'ejecutado',
-  'dispararon', 'disparo mortal',
-  // 'crimen' eliminado — matchea "crimen organizado" en noticias de drogas
-]
-
-// Descarte inmediato: si el TÍTULO contiene alguna de estas palabras
-// y NO contiene indicadores de muerte, se descarta sin gastar tokens.
-const PALABRAS_DESCARTE_INMEDIATO = [
-  'detuvieron', 'detuvo', 'fue detenido', 'fue arrestado',
-  'incautaron', 'secuestraron droga', 'tráfico de',
-  'narcotráfico', 'estupefacientes', 'cocaína',
-  'marihuana', 'condenaron', 'fue condenado',
-  'años de prisión', 'fue imputado',
-  // 'droga' eliminado — demasiado amplio, descarta "mujer drogada fue asesinada"
-  // 'sentencia' eliminado — puede ser condena por homicidio (cobertura válida)
-]
-
-// ════════════════════════════════════════════
 // TIPOS
 // ════════════════════════════════════════════
 
@@ -303,17 +265,31 @@ async function identificarNoticiasConIA(
       messages: [
         {
           role: 'system',
-          content: `Sos un analista especializado en identificar noticias sobre MUERTES VIOLENTAS en sitios argentinos.
+          content: `Sos un analista experto en noticias policiales argentinas. Tu tarea es identificar titulares de noticias donde hay una o más personas muertas por causas violentas.
 
-Te voy a pasar el snapshot de accesibilidad de un sitio de noticias. Cada elemento tiene un ref (ej: e123).
-Tu trabajo es identificar SOLO los links de noticias donde hay UNA O MÁS PERSONAS MUERTAS:
-homicidios, femicidios, asesinatos, tiroteos con víctimas fatales, muertes violentas, cuerpos hallados.
+El periodismo argentino usa lenguaje variado para referirse a muertes:
+- Directo: "mataron", "asesinaron", "homicidio", "femicidio", "hallaron el cuerpo"
+- Indirecto: "perdió la vida", "falleció tras el ataque", "no sobrevivió a las heridas", "fue encontrado sin vida", "trágico desenlace", "ajuste de cuentas", "baleado y muerto", "víctima fatal"
+- Regional: "lo ultimaron", "lo ejecutaron", "cayó acribillado", "gatillo fácil con resultado muerte"
 
-NO incluir: robos sin muerte, detenciones, arrestos, drogas sin muerte, política, deportes, economía, espectáculos, heridos sin muerte.
+INCLUIR si hay muerte confirmada o altamente probable:
+- homicidios, femicidios, transfemicidios, infanticidios
+- tiroteos/balaceras con muertos, apuñalamientos fatales
+- cuerpos hallados, personas desaparecidas y encontradas sin vida
+- muertes por violencia institucional (gatillo fácil)
 
-Respondé SOLO con JSON array. Si no hay noticias con muertos, respondé [].
-Formato: [{"ref": "e123", "titulo": "Texto del link"}]
-Máximo 10 resultados.`
+NO INCLUIR (aunque sean noticias policiales):
+- robos, asaltos, secuestros sin muerte confirmada
+- detenciones, arrestos, allanamientos, requisas
+- tráfico de drogas sin víctimas fatales
+- accidentes de tránsito (a menos que haya muertos y el título lo indique)
+- heridos en estado crítico sin confirmar muerte
+- política, economía, deportes, espectáculos
+
+Respondé ÚNICAMENTE con un JSON array sin texto adicional.
+Si no encontrás noticias con muertos, respondé exactamente: []
+Formato: [{"ref": "e123", "titulo": "Texto del link tal como aparece"}]
+Máximo 10 resultados, ordenados de más a menos relevante.`
         },
         {
           role: 'user',
@@ -646,31 +622,7 @@ async function main() {
     const noticiasRaw = await scrapearMedio(medio, yaPrewarmed)
     totalScrapeadas += noticiasRaw.length
 
-    // Filtro homicidio: descartar antes de gastar tokens en OpenRouter
-    const noticias = noticiasRaw.filter(n => {
-      const tituloLower = n.titulo.toLowerCase()
-
-      // 1. Descarte inmediato por título: droga/detención sin muerte → skip
-      const tieneDescarte = PALABRAS_DESCARTE_INMEDIATO.some(p => tituloLower.includes(p))
-      if (tieneDescarte) {
-        const tieneMuerte = PALABRAS_CLAVE_HOMICIDIO.some(p => tituloLower.includes(p))
-        if (!tieneMuerte) return false
-      }
-
-      // 2. Filtro positivo: título + inicio del texto debe tener indicador de muerte
-      // 800 chars: el snapshot de accesibilidad empieza con navegación, el artículo aparece después
-      const textoLower = (tituloLower + ' ' + n.texto.slice(0, 800).toLowerCase())
-      return PALABRAS_CLAVE_HOMICIDIO.some(p => textoLower.includes(p))
-    })
-
-    for (const n of noticiasRaw) {
-      if (!noticias.includes(n)) {
-        log('⏭️', `Sin indicadores de muerte: "${n.titulo.slice(0, 60)}" — ${n.url}`)
-        totalDescartadas++
-      }
-    }
-
-    for (const noticia of noticias) {
+    for (const noticia of noticiasRaw) {
 
       // ── Extracción IA ──
       log('🤖', `Extrayendo datos de: ${noticia.titulo.slice(0, 60)}...`)
