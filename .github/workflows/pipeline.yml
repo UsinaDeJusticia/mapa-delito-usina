@@ -31,6 +31,12 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+      - name: Verificar variables de entorno
+        run: |
+          echo "OPENROUTER_API_KEY set: ${{ secrets.OPENROUTER_API_KEY != '' }}"
+          echo "DATABASE_URL set: ${{ secrets.DATABASE_URL != '' }}"
+          echo "OPENROUTER_MODEL: ${{ secrets.OPENROUTER_MODEL }}"
+
       - name: Correr pipeline
         run: npm run pipeline:run
         env:
