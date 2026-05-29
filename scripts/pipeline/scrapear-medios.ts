@@ -19,6 +19,7 @@ import { execSync } from 'child_process'
 import { PrismaClient } from '@prisma/client'
 import { extraerDatosNoticia } from '../../src/lib/mapa/openrouter'
 import { deduplicar, clasificarCobertura } from '../../src/lib/mapa/deduplicador'
+import { getConfigActiva } from '../../src/config/modelos-pipeline'
 
 const prisma = new PrismaClient()
 
@@ -272,16 +273,24 @@ async function identificarNoticiasConIA(
   medio: string
 ): Promise<Array<{ ref: string; titulo: string }>> {
 
+  const config = getConfigActiva()
+  const apiKey = config.proveedor === 'ollama'
+    ? 'ollama'
+    : process.env.OPENROUTER_API_KEY || ''
+  const baseURL = config.proveedor === 'ollama'
+    ? `${config.baseUrl}/v1`
+    : config.baseUrl
+
   const openrouter = new (await import('openai')).default({
-    baseURL: 'https://openrouter.ai/api/v1',
-    apiKey: process.env.OPENROUTER_API_KEY || '',
-    defaultHeaders: {
+    baseURL,
+    apiKey,
+    defaultHeaders: config.proveedor === 'openrouter' ? {
       'HTTP-Referer': 'https://usinadejusticia.org.ar',
       'X-Title': 'Mapa del Delito - Identificador',
-    },
+    } : {},
   })
 
-  const modelo = process.env.OPENROUTER_MODEL || 'deepseek/deepseek-chat-v3-0324'
+  const modelo = config.modelo
 
   try {
     const respuesta = await openrouter.chat.completions.create({
@@ -320,7 +329,9 @@ Máximo 10 resultados.`
     return Array.isArray(resultado) ? resultado : []
 
   } catch (error) {
-    log('⚠️', `Error en identificación IA: ${String(error).slice(0, 100)}`)
+    const err = error as { message?: string; status?: number; response?: { data?: unknown } }
+    console.error('Error identificación detalle:', err.message, err.status, err.response?.data)
+    log('⚠️', `Error en identificación IA: ${err.message ?? String(error)}`)
     return []
   }
 }
