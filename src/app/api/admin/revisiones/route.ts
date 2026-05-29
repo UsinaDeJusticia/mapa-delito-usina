@@ -103,7 +103,18 @@ export async function POST(req: NextRequest) {
   const revisadoPor = session.user.email ?? session.user.name ?? 'desconocido'
   const hechoIdNum = parseInt(hecho_id)
 
-  // Insertar en revisiones_pipeline
+  // Clasificación → código SNIC (null = falso positivo)
+  const CLASIFICACION_SNIC: Record<string, number | null> = {
+    'homicidio_doloso':                   1,
+    'homicidio_en_ocasion_de_robo':       1,
+    'femicidio':                          4,
+    'homicidio_vinculado_al_narcotrafico': 1,
+    'no_es_homicidio':                    null,
+  }
+  const snicCodigo = CLASIFICACION_SNIC[clasificacion_humana] ?? null
+  const esHomicidio = snicCodigo !== null
+
+  // Registrar en cola de revisiones
   await prisma.$executeRaw`
     INSERT INTO revisiones_pipeline
       (hecho_id, clasificacion_humana, revisado_por, revisado_at, notas)
@@ -111,10 +122,25 @@ export async function POST(req: NextRequest) {
       (${hechoIdNum}, ${clasificacion_humana}, ${revisadoPor}, NOW(), ${notas ?? null})
   `
 
-  // Marcar como revisado en hechos_delictivos (raw porque requiere_revision no está en Prisma client aún)
-  await prisma.$executeRaw`
-    UPDATE hechos_delictivos SET requiere_revision = false WHERE id = ${hechoIdNum}
-  `
+  if (esHomicidio) {
+    // Confirmado: pasar a VERIFICADO y corregir tipo_delito si el revisor lo cambió
+    await prisma.$executeRaw`
+      UPDATE hechos_delictivos
+      SET
+        confianza = 'VERIFICADO',
+        requiere_revision = false,
+        tipo_delito_id = COALESCE(
+          (SELECT id FROM tipos_delito WHERE codigo_snic = ${String(snicCodigo)} LIMIT 1),
+          tipo_delito_id
+        )
+      WHERE id = ${hechoIdNum}
+    `
+  } else {
+    // Falso positivo: solo apagar el flag, queda PRELIMINAR fuera de la cola
+    await prisma.$executeRaw`
+      UPDATE hechos_delictivos SET requiere_revision = false WHERE id = ${hechoIdNum}
+    `
+  }
 
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, verificado: esHomicidio })
 }
