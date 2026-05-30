@@ -668,6 +668,7 @@ async function main() {
         medio: noticia.medio,
         medioTipo: noticia.medioTipo,
         url: noticia.url,
+        nombreVictima: datos.nombreVictima,
       })
 
       if (dedup.urlDuplicada) {
@@ -751,6 +752,7 @@ async function main() {
         }
 
         const hecho = await prisma.hechoDelictivo.create({
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           data: {
             tipoDelitoId: tipoDelito.id,
             fechaHecho: fechaHecho,
@@ -766,7 +768,8 @@ async function main() {
             esAgregado: false,
             esCasoUsina: false,
             requiereRevision: datos.requiereRevision ?? false,
-          }
+            nombreVictima: datos.nombreVictima ?? null,
+          } as Parameters<typeof prisma.hechoDelictivo.create>[0]['data']
         })
 
         await prisma.coberturaMediatica.create({

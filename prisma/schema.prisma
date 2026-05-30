@@ -157,6 +157,7 @@ model HechoDelictivo {
   contexto                 String?
   vinculoVictimaVictimario String?
   femicidio                String?
+  nombreVictima            String?  @map("nombre_victima")
 
   // Datos victimario/inculpado
   victimarioSexo           String?
