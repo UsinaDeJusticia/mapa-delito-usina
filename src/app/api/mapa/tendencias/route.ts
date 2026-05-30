@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { NextRequest, NextResponse } from 'next/server'
 import { getTendencias } from '@/lib/mapa/queries'
 import { CACHE_SNIC } from '@/lib/mapa/cache-headers'

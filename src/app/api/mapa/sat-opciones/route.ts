@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/mapa/queries'
 import { CACHE_SNIC } from '@/lib/mapa/cache-headers'
