@@ -422,15 +422,33 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
                 onChange={setTipoDelitoId}
               />
             )}
+
+            {/* Filtros SAT — dentro del panel expandible para evitar overlap */}
+            {fuenteSeleccionada === 'sat' && (
+              <FiltrosSAT
+                filtros={filtrosSAT}
+                onChange={setFiltrosSAT}
+                visible={true}
+              />
+            )}
           </div>
         )}
 
-        {/* ── Fila 2 desktop: selector + slider + stats ───── */}
+        {/* ── Fila 2 desktop: selector + filtros + slider + stats ── */}
         <div className="hidden sm:flex flex-row flex-wrap items-center gap-2 sm:gap-3">
           {fuenteSeleccionada === 'snic' && (
             <SelectorDelito
               value={tipoDelitoId}
               onChange={setTipoDelitoId}
+            />
+          )}
+
+          {/* Filtros SAT en línea para desktop */}
+          {fuenteSeleccionada === 'sat' && (
+            <FiltrosSAT
+              filtros={filtrosSAT}
+              onChange={setFiltrosSAT}
+              visible={true}
             />
           )}
 
@@ -469,13 +487,6 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
           )}
         </div>
       </div>
-
-      {/* ─── Filtros SAT (barra secundaria) ─────────────── */}
-      <FiltrosSAT
-        filtros={filtrosSAT}
-        onChange={setFiltrosSAT}
-        visible={fuenteSeleccionada === 'sat'}
-      />
 
       {/* ─── Tooltip hover ──────────────────────────────── */}
       {provinciaHover && (
@@ -573,6 +584,19 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
         />
       )}
 
+      {/* ─── Botón Revisar (acceso admin) ───────────────── */}
+      <a
+        href="/admin/revisiones"
+        className="absolute bottom-[72px] right-4 z-10 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg px-3 py-2 flex items-center gap-1.5 text-xs font-medium text-[#1E427C] hover:bg-white transition-colors"
+        title="Panel de revisión"
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+        </svg>
+        Revisar
+      </a>
+
       {/* ─── Botón recentrar ────────────────────────────── */}
       <BotonRecentrar
         disponible={geoDisponible}
@@ -633,9 +657,6 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
         <div className="flex gap-2 mt-1.5">
           <a href="/metodologia" className="text-[8px] sm:text-[9px] text-gray-400 hover:text-gray-600 underline">
             Metodología
-          </a>
-          <a href="/admin/revisiones" className="text-[8px] sm:text-[9px] text-gray-400 hover:text-gray-600 underline">
-            Revisión
           </a>
         </div>
       </div>

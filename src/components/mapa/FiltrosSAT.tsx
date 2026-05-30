@@ -163,7 +163,7 @@ export function FiltrosSAT({ filtros, onChange, visible }: FiltrosSATProps) {
 
   if (loading || !opciones) {
     return (
-      <div className="absolute top-[88px] sm:top-[72px] left-4 right-4 z-10">
+      <div className="w-full">
         <div className="bg-white/90 backdrop-blur-sm rounded-xl shadow-lg px-3 py-2 flex items-center gap-2">
           <div className="w-3 h-3 border-2 border-[#1E427C] border-t-transparent rounded-full animate-spin" />
           <span className="text-xs text-gray-400">Cargando filtros...</span>
@@ -173,7 +173,7 @@ export function FiltrosSAT({ filtros, onChange, visible }: FiltrosSATProps) {
   }
 
   return (
-    <div className="absolute top-[88px] sm:top-[72px] left-4 z-10 transition-all duration-300">
+    <div className="w-full transition-all duration-300">
       <div className="bg-white/90 backdrop-blur-sm rounded-xl shadow-lg px-3 py-2 flex flex-wrap items-center gap-2">
         <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wider mr-1">
           Filtros
