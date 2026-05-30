@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { signOut, useSession } from 'next-auth/react'
+// useSession requires SessionProvider — provided by src/app/admin/layout.tsx
 
 interface HechoPendiente {
   id: string
@@ -104,16 +105,17 @@ function CardRevision({
   onRevisado,
   esCorreccion = false,
   onCancelar,
+  usuarioActual,
 }: {
   hecho: HechoPendiente | HechoRevisado
   onRevisado: (id: string, clasificacion: string, revisadoPor: string) => void
   esCorreccion?: boolean
   onCancelar?: () => void
+  usuarioActual: string
 }) {
   const [enviando, setEnviando] = useState<string | null>(null)
   const [saliendo, setSaliendo] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  const { data: session } = useSession()
 
   const id = 'id' in hecho ? hecho.id : hecho.hecho_id
 
@@ -142,9 +144,8 @@ function CardRevision({
         return
       }
 
-      const revisadoPor = session?.user?.email ?? session?.user?.name ?? 'vos'
       setSaliendo(true)
-      setTimeout(() => onRevisado(id, clasificacion, revisadoPor), 300)
+      setTimeout(() => onRevisado(id, clasificacion, usuarioActual), 300)
     } catch {
       setErrorMsg('Sin conexión — no se guardó')
       setEnviando(null)
@@ -263,6 +264,9 @@ function CardRevision({
 }
 
 export default function RevisionesPage() {
+  const { data: session } = useSession()
+  const usuarioActual = session?.user?.email ?? session?.user?.name ?? 'desconocido'
+
   const [hechos, setHechos] = useState<HechoPendiente[]>([])
   const [revisados, setRevisados] = useState<HechoRevisado[]>([])
   const [total, setTotal] = useState(0)
@@ -409,6 +413,7 @@ export default function RevisionesPage() {
                 esCorreccion
                 onRevisado={handleCorreccionRevisado}
                 onCancelar={() => setCorrigiendoId(null)}
+                usuarioActual={usuarioActual}
               />
             </div>
           </div>
@@ -436,6 +441,7 @@ export default function RevisionesPage() {
                 key={hecho.id}
                 hecho={hecho}
                 onRevisado={handleRevisado}
+                usuarioActual={usuarioActual}
               />
             ))}
           </div>
