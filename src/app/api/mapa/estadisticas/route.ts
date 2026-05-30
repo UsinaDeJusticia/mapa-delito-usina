@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { NextRequest, NextResponse } from 'next/server'
 import { getEstadisticasPorProvincia, getEstadisticasSATFiltrado, FuenteDatos } from '@/lib/mapa/queries'
 import { CACHE_SNIC, CACHE_MEDIOS } from '@/lib/mapa/cache-headers'
