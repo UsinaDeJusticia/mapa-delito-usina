@@ -57,6 +57,7 @@ export interface HechoExtraido {
   cantidadVictimas: number | null
   medioUtilizado: string | null
   descripcionBreve: string | null
+  nombreVictima: string | null
   confianzaExtraccion: number
   requiereRevision?: boolean
 }
@@ -98,6 +99,7 @@ Respondé EXCLUSIVAMENTE con un objeto JSON válido, sin backticks, sin texto in
   "fecha_hecho": "YYYY-MM-DD",
   "cantidad_victimas": 1,
   "resumen_hecho": "Breve descripción objetiva de los hechos en un párrafo",
+  "nombre_victima": "Nombre completo de la/s víctima/s si figura en la noticia, sino null",
   "requiereRevision": false,
   "confianzaExtraccion": 90
 }`
@@ -116,6 +118,7 @@ interface LLMRespuesta {
   fecha_hecho: string | null
   cantidad_victimas: number | null
   resumen_hecho: string | null
+  nombre_victima: string | null
   requiereRevision: boolean
   confianzaExtraccion: number
 }
@@ -143,6 +146,7 @@ function mapearRespuesta(resp: LLMRespuesta): HechoExtraido {
     cantidadVictimas: resp.cantidad_victimas ?? null,
     medioUtilizado: null,
     descripcionBreve: resp.resumen_hecho ?? null,
+    nombreVictima: resp.nombre_victima ?? null,
     confianzaExtraccion: typeof resp.confianzaExtraccion === 'number' ? resp.confianzaExtraccion : 50,
     requiereRevision: resp.requiereRevision ?? false,
   }
@@ -161,6 +165,7 @@ const RESPUESTA_FALLBACK: HechoExtraido = {
   cantidadVictimas: null,
   medioUtilizado: null,
   descripcionBreve: null,
+  nombreVictima: null,
   confianzaExtraccion: 0,
   requiereRevision: false,
 }

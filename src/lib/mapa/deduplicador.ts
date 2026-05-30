@@ -34,6 +34,7 @@ export interface DatosNoticia {
   medio: string
   medioTipo: 'provincial' | 'nacional'
   url: string
+  nombreVictima?: string | null
 }
 
 export interface ResultadoDeduplicacion {
@@ -49,6 +50,36 @@ export interface ResultadoDeduplicacion {
 // ════════════════════════════════════════════
 
 async function buscarHechosSimilares(datos: DatosNoticia) {
+  const include = {
+    ubicacion: { select: { provincia: true, departamento: true } },
+    tipoDelito: { select: { nombre: true } },
+    coberturas: {
+      select: { titulo: true, medio: true, url: true },
+      orderBy: { fechaPublicacion: 'desc' as const },
+      take: 5,
+    },
+  }
+
+  // Si hay nombre de víctima conocido, buscar por nombre en toda la historia
+  if (datos.nombreVictima) {
+    const idsConNombre = await prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT id::text FROM hechos_delictivos
+      WHERE es_agregado = false
+        AND nombre_victima ILIKE ${'%' + datos.nombreVictima + '%'}
+      ORDER BY fecha_hecho DESC
+      LIMIT 10
+    `
+    if (idsConNombre.length > 0) {
+      return prisma.hechoDelictivo.findMany({
+        where: { id: { in: idsConNombre.map(r => r.id) } },
+        include,
+        orderBy: { fechaHecho: 'desc' },
+        take: 10,
+      })
+    }
+  }
+
+  // Búsqueda por tipo + provincia + ventana 30 días
   const fechaNoticia = datos.fecha ? new Date(datos.fecha) : new Date()
   const hace30Dias = new Date(fechaNoticia)
   hace30Dias.setDate(hace30Dias.getDate() - 30)
@@ -64,7 +95,6 @@ async function buscarHechosSimilares(datos: DatosNoticia) {
     },
   }
 
-  // Filtrar por provincia si está disponible
   if (datos.ubicacion.provincia) {
     where.ubicacion = {
       provincia: {
@@ -76,15 +106,7 @@ async function buscarHechosSimilares(datos: DatosNoticia) {
 
   return prisma.hechoDelictivo.findMany({
     where,
-    include: {
-      ubicacion: { select: { provincia: true, departamento: true } },
-      tipoDelito: { select: { nombre: true } },
-      coberturas: {
-        select: { titulo: true, medio: true, url: true },
-        orderBy: { fechaPublicacion: 'desc' },
-        take: 5,
-      },
-    },
+    include,
     orderBy: { fechaHecho: 'desc' },
     take: 10,
   })

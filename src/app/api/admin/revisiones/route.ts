@@ -26,8 +26,8 @@ export async function GET(req: NextRequest) {
     tipo_delito: string
     confianza: string
     requiere_revision: boolean
-    url_fuente: string | null
     created_at: Date
+    coberturas_json: unknown
   }>>`
     SELECT
       hd.id,
@@ -40,8 +40,16 @@ export async function GET(req: NextRequest) {
       COALESCE(td.nombre, 'Sin clasificar') AS tipo_delito,
       hd.confianza,
       hd.requiere_revision,
-      COALESCE(cm.url, hd.url_fuente) AS url_fuente,
-      hd.created_at
+      hd.created_at,
+      (
+        SELECT json_agg(
+          json_build_object('url', c.url, 'medio', c.medio)
+          ORDER BY c.created_at DESC
+        )
+        FROM coberturas_mediaticas c
+        WHERE c.hecho_delictivo_id = hd.id
+          AND c.url IS NOT NULL
+      ) AS coberturas_json
     FROM hechos_delictivos hd
     LEFT JOIN LATERAL (
       SELECT titulo, resumen, medio, url
@@ -76,10 +84,10 @@ export async function GET(req: NextRequest) {
     medio: string | null
     provincia: string | null
     confianza_hecho: string
-    url_fuente: string | null
     clasificacion_humana: string
     revisado_por: string
     revisado_at: Date
+    coberturas_json: unknown
   }>>`
     SELECT DISTINCT ON (rp.hecho_id)
       hd.id::text AS hecho_id,
@@ -87,10 +95,18 @@ export async function GET(req: NextRequest) {
       cm.medio,
       u.provincia,
       hd.confianza AS confianza_hecho,
-      COALESCE(cm.url, hd.url_fuente) AS url_fuente,
       rp.clasificacion_humana,
       rp.revisado_por,
-      rp.revisado_at
+      rp.revisado_at,
+      (
+        SELECT json_agg(
+          json_build_object('url', c.url, 'medio', c.medio)
+          ORDER BY c.created_at DESC
+        )
+        FROM coberturas_mediaticas c
+        WHERE c.hecho_delictivo_id = hd.id
+          AND c.url IS NOT NULL
+      ) AS coberturas_json
     FROM revisiones_pipeline rp
     JOIN hechos_delictivos hd ON hd.id = rp.hecho_id
     LEFT JOIN LATERAL (
@@ -113,6 +129,8 @@ export async function GET(req: NextRequest) {
       fecha_hecho: p.fecha_hecho?.toISOString() ?? null,
       created_at: p.created_at?.toISOString() ?? null,
       requiere_revision: Boolean(p.requiere_revision),
+      coberturas: (p.coberturas_json as Array<{ url: string; medio: string | null }> | null) ?? [],
+      coberturas_json: undefined,
     })),
     total: Number(total[0]?.count ?? 0),
     pagina,
@@ -121,6 +139,8 @@ export async function GET(req: NextRequest) {
       ...r,
       hecho_id: String(r.hecho_id),
       revisado_at: r.revisado_at?.toISOString() ?? null,
+      coberturas: (r.coberturas_json as Array<{ url: string; medio: string | null }> | null) ?? [],
+      coberturas_json: undefined,
     })),
   }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (err) {

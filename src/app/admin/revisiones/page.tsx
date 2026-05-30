@@ -4,6 +4,11 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { signOut, useSession } from 'next-auth/react'
 // useSession requires SessionProvider — provided by src/app/admin/layout.tsx
 
+interface Cobertura {
+  url: string
+  medio: string | null
+}
+
 interface HechoPendiente {
   id: string
   titulo: string | null
@@ -15,7 +20,7 @@ interface HechoPendiente {
   tipo_delito: string
   confianza: string
   requiere_revision: boolean
-  url_fuente: string | null
+  coberturas: Cobertura[]
 }
 
 interface HechoRevisado {
@@ -24,10 +29,10 @@ interface HechoRevisado {
   medio: string | null
   provincia: string | null
   confianza_hecho: string
-  url_fuente: string | null
   clasificacion_humana: string
   revisado_por: string
   revisado_at: string | null
+  coberturas: Cobertura[]
 }
 
 const CLASIFICACIONES = [
@@ -161,7 +166,7 @@ function CardRevision({
   const tipoDelito = 'tipo_delito' in hecho ? hecho.tipo_delito : null
   const confianza = 'confianza' in hecho ? hecho.confianza : null
   const requiereRevision = 'requiere_revision' in hecho ? hecho.requiere_revision : false
-  const urlFuente = hecho.url_fuente
+  const coberturas = hecho.coberturas ?? []
 
   const fechaFormateada = fechaHecho
     ? new Date(fechaHecho).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -223,15 +228,20 @@ function CardRevision({
           </span>
         )}
         {confianza && <span className="text-xs text-gray-400">confianza {confianza}</span>}
-        {urlFuente && (
-          <a
-            href={urlFuente}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="ml-auto text-xs underline text-gray-400 hover:text-gray-600 truncate max-w-[140px]"
-          >
-            Ver noticia ↗
-          </a>
+        {coberturas.length > 0 && (
+          <div className="flex flex-wrap gap-2 ml-auto">
+            {coberturas.map((c, i) => (
+              <a
+                key={i}
+                href={c.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs underline text-gray-400 hover:text-gray-600 truncate max-w-[140px]"
+              >
+                {c.medio ?? `Fuente ${i + 1}`} ↗
+              </a>
+            ))}
+          </div>
         )}
       </div>
 
@@ -319,7 +329,7 @@ export default function RevisionesPage() {
               medio: msg.medio,
               provincia: msg.provincia,
               confianza_hecho: msg.confianza_hecho,
-              url_fuente: null,
+              coberturas: [],
               clasificacion_humana: msg.clasificacion_humana,
               revisado_por: msg.revisado_por,
               revisado_at: msg.revisado_at,
@@ -366,7 +376,7 @@ export default function RevisionesPage() {
         medio: hechoOriginal?.medio ?? null,
         provincia: hechoOriginal?.provincia ?? null,
         confianza_hecho: clasificacion !== 'no_es_homicidio' ? 'VERIFICADO' : 'PRELIMINAR',
-        url_fuente: hechoOriginal?.url_fuente ?? null,
+        coberturas: hechoOriginal?.coberturas ?? [],
         clasificacion_humana: clasificacion,
         revisado_por: revisadoPor,
         revisado_at: new Date().toISOString(),
