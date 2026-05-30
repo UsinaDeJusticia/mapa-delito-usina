@@ -10,22 +10,46 @@ Guía de referencia para trabajar en este repo. Leerla antes de tocar cualquier 
 mapa-delito-usina/
 ├── src/
 │   ├── app/
-│   │   ├── layout.tsx                   # Root layout (fuentes Geist, globals.css)
+│   │   ├── layout.tsx                   # Root layout (fuentes Geist, globals.css, OG metadata, favicon)
 │   │   ├── page.tsx                     # Raíz "/" (redirige o landing)
 │   │   ├── globals.css                  # CSS global + variables Tailwind
 │   │   ├── mapa-del-delito/
 │   │   │   ├── layout.tsx               # Layout de la sección mapa
 │   │   │   └── page.tsx                 # Página /mapa-del-delito (carga MapaDelito via dynamic)
+│   │   ├── metodologia/
+│   │   │   └── page.tsx                 # Página pública de metodología
 │   │   ├── dashboard/
-│   │   │   └── page.tsx                 # Dashboard (uso interno)
+│   │   │   └── page.tsx                 # Dashboard público (uso interno)
+│   │   ├── admin/
+│   │   │   ├── layout.tsx               # Layout admin con SessionProvider (next-auth)
+│   │   │   ├── loading.tsx              # Splash screen con logo Usina (muestra mientras carga)
+│   │   │   ├── login/
+│   │   │   │   └── page.tsx             # Login con Google OAuth
+│   │   │   ├── dashboard/
+│   │   │   │   └── page.tsx             # Métricas del pipeline (semanas, precisión por medio)
+│   │   │   └── revisiones/
+│   │   │       └── page.tsx             # Revisión humana de casos del pipeline
 │   │   └── api/
-│   │       └── mapa/
-│   │           ├── estadisticas/        # GET → datos por provincia (SNIC o SAT)
-│   │           ├── tendencias/          # GET → serie temporal de un delito por provincia
-│   │           ├── tipos-delito/        # GET → catálogo de tipos SNIC
-│   │           ├── provincias/          # GET → lista de provincias con centroides
-│   │           ├── delitos-provincia/   # GET → top delitos de una provincia (mv)
-│   │           └── sat-opciones/        # GET → valores únicos de filtros SAT
+│   │       ├── mapa/
+│   │       │   ├── estadisticas/        # GET → datos por provincia (SNIC o SAT)
+│   │       │   ├── tendencias/          # GET → serie temporal de un delito por provincia
+│   │       │   ├── tipos-delito/        # GET → catálogo de tipos SNIC
+│   │       │   ├── provincias/          # GET → lista de provincias con centroides
+│   │       │   ├── delitos-provincia/   # GET → top delitos de una provincia (mv)
+│   │       │   ├── sat-opciones/        # GET → valores únicos de filtros SAT
+│   │       │   └── hechos-medios/       # GET → casos del pipeline (últimos 90 días, max 500)
+│   │       ├── admin/
+│   │       │   ├── revisiones/
+│   │       │   │   ├── route.ts         # GET pendientes + revisados 48h / POST clasificar
+│   │       │   │   └── stream/
+│   │       │   │       └── route.ts     # GET SSE — push en tiempo real de nuevas revisiones
+│   │       │   └── metricas/
+│   │       │       └── route.ts         # GET → métricas del pipeline (semanas, medios, totales)
+│   │       └── pipeline/
+│   │           └── run/
+│   │               └── route.ts         # POST → dispara pipeline (cron o manual, bearer token)
+│   ├── auth.ts                          # Configuración NextAuth v5 (Google OAuth)
+│   ├── middleware.ts                    # Protege /admin/* — redirige a /admin/login si no autenticado
 │   ├── components/
 │   │   └── mapa/
 │   │       ├── MapaDelito.tsx           # Componente principal (orquesta todo)
@@ -35,25 +59,27 @@ mapa-delito-usina/
 │   │       ├── SelectorDelito.tsx       # Dropdown de tipo de delito (SNIC)
 │   │       ├── SelectorFuente.tsx       # Toggle SNIC / SAT
 │   │       ├── BuscadorProvincia.tsx    # Buscador de provincia con fly-to
-│   │       ├── FiltroDepartamento.tsx   # Filtro de departamento (oculto, Fase 2)
-│   │       ├── FiltrosSAT.tsx           # Chips de filtros SAT (sexo, arma, vínculo, lugar)
+│   │       ├── FiltroDepartamento.tsx   # Filtro de departamento (comentado, Fase 2)
+│   │       ├── FiltrosSAT.tsx           # Chips de filtros SAT — NO se autopocisiona, MapaDelito lo ubica
 │   │       ├── capas/
 │   │       │   ├── index.ts             # Re-exports de capas
 │   │       │   ├── MascaraPaises.tsx    # Polígono mundial con agujero Argentina
 │   │       │   ├── CapaProvincias.tsx   # Coroplético provincial (google.maps.Data)
 │   │       │   ├── CapaDepartamentos.tsx# Bordes departamentales + labels (lazy)
-│   │       │   └── MarcadoresCirculares.tsx # Burbujas SVG por provincia
+│   │       │   ├── MarcadoresCirculares.tsx # Burbujas SVG por provincia
+│   │       │   └── CapaHechosMedios.tsx # Pins individuales del pipeline (rojo=VERIFICADO, naranja=PRELIMINAR)
 │   │       └── hooks/
 │   │           ├── useGeoJSON.ts        # Fetch + cache en memoria de GeoJSON
 │   │           └── useGeolocalizacion.ts# GPS del browser, no bloquea carga
 │   ├── config/
-│   │   └── mapStyles.ts                 # Estilos Google Maps + helpers de color
+│   │   ├── mapStyles.ts                 # Estilos Google Maps + helpers de color
+│   │   └── modelos-pipeline.ts          # Perfiles de modelo LLM (economico/preciso/local)
 │   ├── lib/
 │   │   └── mapa/
-│   │       ├── queries.ts               # Prisma client + todas las queries a BD
+│   │       ├── queries.ts               # Prisma singleton + todas las queries a BD
 │   │       ├── georef.ts                # Cliente para API Georef Argentina (IGN)
-│   │       ├── openrouter.ts            # Cliente OpenRouter para pipeline de medios
-│   │       └── deduplicador.ts          # Deduplicación de noticias
+│   │       ├── openrouter.ts            # Extracción estructurada de noticias (LLM)
+│   │       └── deduplicador.ts          # Deduplicación de noticias con IA
 │   └── types/
 │       └── mapa.ts                      # Tipos compartidos del frontend
 ├── prisma/
@@ -61,9 +87,11 @@ mapa-delito-usina/
 │   ├── seed.ts                          # Seed de tipos de delito
 │   └── seed-subcategorias.ts            # Seed de subcategorías
 ├── public/
+│   ├── icon.svg                         # Logo Usina (brazo gris + U azul) — usado como favicon
+│   ├── favicon.ico                      # Favicon legacy
 │   └── data/
 │       ├── provincias-poligonos.geojson # Polígonos provinciales (usado por capas)
-│       ├── departamentos-poligonos.geojson # Polígonos departamentales (lazy)
+│       ├── departamentos-poligonos.geojson # Polígonos departamentales (lazy, ~1.2MB)
 │       └── provincias-argentina.geojson # Alternativo (no usado en producción)
 ├── scripts/
 │   ├── actualizar-centroides.ts         # Actualiza centroides desde Georef
@@ -74,13 +102,14 @@ mapa-delito-usina/
 │   │   ├── sat-homicidios.py            # Ingesta SAT (homicidios dolosos)
 │   │   └── run_ingesta.sh               # Script orquestador de ingesta
 │   ├── pipeline/
-│   │   └── scrapear-medios.ts           # Pipeline de scraping de noticias
+│   │   └── scrapear-medios.ts           # Pipeline de scraping (~45 medios activos)
 │   └── sql/
-│       ├── create-materialized-views.sql# Crea mv_snic_provincia, mv_snic_provincia_delito
-│       ├── create-remaining-views.sql   # mv_anios_disponibles y otras vistas
-│       └── mv_sat_provincia.sql         # Vista materializada para SAT
+│       ├── create-materialized-views.sql
+│       ├── create-remaining-views.sql
+│       ├── mv_sat_provincia.sql
+│       └── create-revisiones-pipeline.sql # Tabla revisiones_pipeline (fuera de Prisma)
 └── docs/
-    └── informe-tecnico-ingesta.md       # Documentación del proceso de ingesta
+    └── informe-tecnico-ingesta.md
 ```
 
 ---
@@ -109,229 +138,154 @@ Seed de Prisma: `npx prisma db seed` (ejecuta `prisma/seed.ts` vía `tsx`).
 Definir en `.env` (nunca commitear valores reales):
 
 ```
-DATABASE_URL          # Conexión a Neon PostgreSQL (con pooler, sslmode=require)
-OPENROUTER_API_KEY    # API key de OpenRouter (pipeline de medios)
-OPENROUTER_MODEL      # Modelo a usar (ej: deepseek/deepseek-chat-v3-0324)
-PIPELINE_DRY_RUN      # "true" / "false" — controla si el pipeline escribe a BD
-PIPELINE_MAX_NOTICIAS # Número máximo de noticias por corrida
+DATABASE_URL                 # Conexión a Neon PostgreSQL (con pooler, sslmode=require)
+OPENROUTER_API_KEY           # API key de OpenRouter (pipeline de medios)
+PIPELINE_PERFIL_MODELO       # "economico" (default) | "preciso" | "local"
+PIPELINE_DRY_RUN             # "true" / "false" — controla si el pipeline escribe a BD
+PIPELINE_MAX_NOTICIAS        # Número máximo de noticias por corrida
 NEXT_PUBLIC_GOOGLE_MAPS_KEY  # API key de Google Maps (expuesta al browser)
+AUTH_SECRET                  # Secret para NextAuth v5 (mín. 32 chars aleatorios)
+GOOGLE_CLIENT_ID             # OAuth 2.0 Client ID (Google Cloud Console)
+GOOGLE_CLIENT_SECRET         # OAuth 2.0 Client Secret
+# Opcionales para perfil "local":
+OLLAMA_BASE_URL              # URL de Ollama (ej: http://localhost:11434)
+OLLAMA_MODEL                 # Nombre del modelo local (ej: llama3)
 ```
-
-> `NEXT_PUBLIC_GOOGLE_MAPS_KEY` **no está en `.env` todavía** — el componente lo lee con `process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY`. Hay que agregarlo.
 
 ---
 
-## 4. Schema de tablas principales (Neon / Prisma)
+## 4. Autenticación (NextAuth v5)
+
+- Proveedor: **Google OAuth**
+- Middleware en `src/middleware.ts` protege `/admin/*` — redirige a `/admin/login` si no autenticado
+- `src/auth.ts` exporta `{ handlers, auth, signIn, signOut }`
+- `src/app/admin/layout.tsx` envuelve en `SessionProvider` — **obligatorio** para que `useSession` y `signOut` funcionen en Client Components bajo `/admin`
+- El callback `authorized` acepta cualquier cuenta Google autenticada. Si se requiere restringir por email, hacerlo en ese callback comparando `auth.user.email` contra una lista en env vars
+
+---
+
+## 5. Pipeline de medios
+
+### Flujo general
+1. `scrapear-medios.ts` abre un browser headless y visita las secciones de policiales de ~45 medios
+2. Por cada sitio, pide al LLM que identifique URLs de homicidios (Prompt 1)
+3. Para cada URL identificada, extrae datos estructurados (Prompt 2 en `openrouter.ts`)
+4. `deduplicador.ts` decide si es un hecho nuevo o cobertura de uno existente
+5. Si es nuevo → inserta `HechoDelictivo` con `confianza = 'PRELIMINAR'`
+6. Si es cobertura existente → solo agrega `CoberturaMediatica`
+
+### Perfiles de modelo (`src/config/modelos-pipeline.ts`)
+| Perfil | Proveedor | Modelo |
+|---|---|---|
+| `economico` (default) | OpenRouter | DeepSeek V3 |
+| `preciso` | OpenRouter | Claude Haiku |
+| `local` | Ollama | configurable |
+
+### Few-shot automático
+`openrouter.ts` consulta los últimos 3 casos verificados por humanos en `revisiones_pipeline` y los inyecta como ejemplos en cada llamada al LLM. Se cachea 5 minutos para no repetir la query en cada noticia.
+
+### Medios activos
+~45 medios con `activo: true`. Cobertura nacional + provincias clave. Clarín, La Nación y La Capital Rosario están en `activo: false` por paywall.
+
+---
+
+## 6. Panel de administración (`/admin`)
+
+### `/admin/login`
+Login con Google. Redirige a `/admin/dashboard` tras autenticar.
+
+### `/admin/dashboard`
+Métricas del pipeline: totales, actividad semanal (8 semanas), precisión por medio (30 días). Link a revisiones con contador de pendientes.
+
+### `/admin/revisiones`
+Revisión humana de casos del pipeline. Flujo:
+- **Pendientes**: hechos con `confianza = 'PRELIMINAR'` y sin entrada en `revisiones_pipeline`
+- **Acciones**: Homicidio doloso / En ocasión de robo / Femicidio / Narcotráfico / No es homicidio
+- **Al confirmar**: `confianza` pasa a `'VERIFICADO'`, se actualiza `tipo_delito_id`
+- **Al rechazar**: queda `PRELIMINAR` sin revisión pendiente (no reaparece en la cola)
+- **Revisados recientes**: muestra los últimos 48h con quién clasificó y cuándo
+- **Corregir**: cualquier revisor puede sobrescribir. Si VERIFICADO → no_es_homicidio, vuelve a PRELIMINAR
+- **Tiempo real**: SSE en `/api/admin/revisiones/stream` pushea eventos cada 4s; polling de respaldo cada 30s
+
+### `revisiones_pipeline` (tabla, fuera de Prisma)
+Historial completo de revisiones humanas. Permite múltiples filas por `hecho_id` (correcciones sucesivas). Ver `scripts/sql/create-revisiones-pipeline.sql`.
+
+---
+
+## 7. Schema de tablas principales (Neon / Prisma)
 
 La BD es PostgreSQL en Neon con extensión `postgis`.
 
-### `fuentes`
-Registros de las fuentes de datos (SNIC, SAT, medios, Usina).
-- Campos clave: `nombre`, `tipo` (enum: OFICIAL/PERIODISTICA/CIUDADANA/USINA/ACADEMICA), `frecuencia`, `activa`.
-
-### `tipos_delito`
-Catálogo de tipos de delito según clasificación SNIC.
-- Campos clave: `codigo_snic` (unique), `nombre`, `categoria` (enum), `activo`.
-
-### `sub_tipos_delito`
-Subcategorías (femicidio, robo seguido de muerte, etc.) vinculadas a `tipos_delito`.
-
-### `ubicaciones`
-Ubicaciones normalizadas con IDs INDEC.
-- Campos clave: `provincia`, `provincia_id`, `departamento`, `departamento_id`, `latitud`, `longitud`, `es_centroide`.
-- Índices en `provincia_id`, `departamento_id`, `(latitud, longitud)`.
-
 ### `hechos_delictivos` ← tabla principal
-Hecho delictivo individual o agregado (SNIC).
-- Relaciones: `tipo_delito_id → tipos_delito`, `ubicacion_id → ubicaciones`, `fuente_id → fuentes`, `caso_usina_id → casos_usina`.
-- Campos SAT: `victimaSexo`, `victimaEdad`, `medioComision`, `vinculoVictimaVictimario`, `lugarHecho`, `femicidio`.
-- `es_agregado = true` → dato anual SNIC; `false` → microdato individual (SAT, pipeline).
-- Índices compuestos: `(anio)`, `(anio, tipo_delito_id)`, `(ubicacion_id)`.
-
-### `estadisticas_agregadas`
-Cache de estadísticas anuales por provincia/departamento/delito.
-- Unique: `(anio, provincia_id, departamento_id, tipo_delito_id)`.
-
-### `casos_usina`
-Casos acompañados por Usina de Justicia. Requiere `consentimiento = true` para publicar.
+- `es_agregado = true` → dato anual SNIC; `false` → microdato individual (SAT, pipeline)
+- `confianza`: enum `OFICIAL` | `VERIFICADO` | `PRELIMINAR`
+- `requiere_revision`: flag para casos ambiguos del pipeline
 
 ### `coberturas_mediaticas`
-Notas periodísticas vinculadas a un `hecho_delictivo_id`.
-- `url` es unique (deduplicación). Enum `tipo_cobertura`: HECHO_INICIAL, DETENCION, SENTENCIA, etc.
+Notas periodísticas vinculadas a un `hecho_delictivo_id`. `url` es unique (deduplicación).
 
 ### Vistas materializadas (SQL, no en Prisma)
 | Vista | Descripción |
 |---|---|
-| `mv_snic_provincia` | Totales SNIC por provincia y año (~600 filas) |
+| `mv_snic_provincia` | Totales SNIC por provincia y año |
 | `mv_snic_provincia_delito` | Totales SNIC por provincia, año y tipo de delito |
 | `mv_sat_provincia` | Totales SAT (homicidios dolosos) por provincia y año |
 | `mv_anios_disponibles` | Años disponibles por fuente (`snic` / `sat`) |
 
-Estas vistas deben refrescarse con `REFRESH MATERIALIZED VIEW` después de cada ingesta.
+Refrescar con `REFRESH MATERIALIZED VIEW` después de cada ingesta.
 
 ---
 
-## 5. Componentes de mapa — qué hace cada uno
+## 8. Componentes de mapa
 
 ### `MapaDelito.tsx` — orquestador principal
-Estado global del mapa: año, tipo de delito, fuente (SNIC/SAT), filtros SAT, provincia seleccionada. Contiene `fetchDatos` que llama a `/api/mapa/estadisticas` y cancela fetches anteriores con `AbortController`. Renderiza `APIProvider` + `Map` de `@vis.gl/react-google-maps` y monta todas las capas y controles.
+Estado global: año, tipo de delito, fuente (SNIC/SAT), filtros SAT, provincia seleccionada, `controlesExpandidos` (panel mobile). `fetchDatos` cancela fetches anteriores con `AbortController`. Timeouts de animación guardados en `flyTimersRef` para cleanup correcto.
 
-### `MapaDelitoWrapper.tsx`
-Re-export de `MapaDelito` con `next/dynamic` y `ssr: false`. Necesario porque Google Maps requiere `window`. Usarlo siempre en páginas que hacen SSR.
+**Layout mobile**: fila superior siempre visible (título + SNIC/SAT + botón expandir). Panel expandible debajo con buscador, slider, stats y filtros SAT/selector delito según la fuente activa.
 
-### `PanelEstadisticas.tsx`
-Panel lateral derecho (420px en desktop, fullscreen en mobile). Muestra hechos y víctimas de la provincia seleccionada. Hace dos fetches adicionales: tendencia histórica (`/api/mapa/tendencias`) y top delitos (`/api/mapa/delitos-provincia`). Usa Recharts: `BarChart` para delitos, `LineChart` para evolución.
+**FiltrosSAT**: se renderiza DENTRO del panel de controles (no se auto-posiciona). En mobile va en el panel expandible; en desktop en la segunda fila. Esto evita el overlap con el panel expandido.
 
-### `SelectorFuente.tsx`
-Toggle SNIC / SAT. Al cambiar a SAT limpia el tipo de delito seleccionado.
+**Botón "Revisar"**: flotante en `bottom-[72px] right-4`, encima del botón de recentrar.
 
-### `SelectorDelito.tsx`
-Dropdown de tipos de delito (solo visible en modo SNIC). Carga desde `/api/mapa/tipos-delito`. Agrupa por `categoria`.
-
-### `SliderAnios.tsx`
-Control de año. Se muestra solo cuando `aniosDisponibles.length > 0`.
-
-### `BuscadorProvincia.tsx`
-Input de búsqueda por nombre de provincia. Al seleccionar hace "fly-to" con efecto zoom-out → pan → zoom-in. Muestra toast de instrucción.
-
-### `FiltroDepartamento.tsx`
-Filtro por departamento. **Actualmente comentado** en `MapaDelito.tsx` — Fase 2.
+### `capas/CapaHechosMedios.tsx`
+Pins individuales del pipeline. Rojo (`#C0392B`) = VERIFICADO, naranja (`#E67E22`) = PRELIMINAR. InfoWindow con detalles al click. Toggle en la leyenda.
 
 ### `FiltrosSAT.tsx`
-Barra de chips de filtros SAT (Sexo, Arma, Vínculo, Lugar). Carga opciones desde `/api/mapa/sat-opciones` una sola vez al activar fuente SAT. Solo visible cuando `fuente === 'sat'`.
-
-### `capas/MascaraPaises.tsx`
-Polígono mundial con "agujero" en cada provincia argentina. Oculta labels y bordes de países vecinos. Opacidad 0.93. Lee el mismo GeoJSON de provincias.
-
-### `capas/CapaProvincias.tsx`
-Coroplético provincial usando `google.maps.Data`. Colorea provincias según cantidad de hechos (intensidad relativa). Aplica opacidad decreciente al hacer zoom para no tapar labels de Google. Dispara `onProvinciaClick` y `onProvinciaHover`.
-
-### `capas/CapaDepartamentos.tsx`
-Bordes y labels de departamentos. **Lazy loading**: no carga el GeoJSON hasta que zoom ≥ 6 o hay provincia seleccionada. Soporta `destacados` (lista de IDs a resaltar en rojo). Límite de 80 labels simultáneos para performance mobile. `QUILMES_DEPTO_ID = '06658'` está hardcodeado como destacado en `MapaDelito.tsx`.
-
-### `capas/MarcadoresCirculares.tsx`
-Burbujas SVG circulares por provincia. Radio y color proporcional al total de hechos. En modo SAT con filtros activos, usa paleta naranja en vez de azul. `InfoWindow` al hover con top 3 delitos. Click abre `PanelEstadisticas`.
-
-### `hooks/useGeoJSON.ts`
-Fetch de GeoJSON con cache en memoria (Map estático a nivel módulo). Soporta `habilitado: boolean` para carga condicional/lazy. Exporta `precargarGeoJSON()` para prefetch silencioso en background.
-
-### `hooks/useGeolocalizacion.ts`
-GPS del browser. Timeout de 8s; si no llega, el mapa sigue con la vista nacional. Solo mueve el mapa si el usuario está dentro del bounding box de Argentina.
+Chips de filtros (Sexo, Arma, Vínculo, Lugar). **No tiene posicionamiento propio** — su padre decide dónde lo ubica. Carga opciones una sola vez desde `/api/mapa/sat-opciones`.
 
 ---
 
-## 6. Convenciones de imports
+## 9. Convenciones
 
-```typescript
-// Alias de paths (tsconfig.json: "paths": { "@/*": ["./src/*"] })
-import { algo } from '@/components/mapa/...'
-import { algo } from '@/lib/mapa/queries'
-import { algo } from '@/config/mapStyles'
-import { algo } from '@/types/mapa'
-
-// Named exports para la mayoría de componentes
-export function CapaProvincias(...) {}   // Named
-export default function MapaDelito(...) {} // Default solo en componentes de página/ruta
-
-// Re-exports en capas/index.ts
-export { MascaraPaises } from './MascaraPaises'
-
-// Siempre 'use client' en componentes que usan hooks o Google Maps
-'use client'
-```
-
-### Convenciones adicionales
-- **Fuentes**: los APIs de Neon se consultan desde rutas de API (`src/app/api/`), nunca directo desde el cliente.
-- **Prisma client**: singleton exportado desde `@/lib/mapa/queries` como `prisma`. No instanciar en otro lado.
-- **Raw SQL**: usar `prisma.$queryRaw` con template literals (seguro) para queries a vistas materializadas. Solo usar `prisma.$queryRawUnsafe` cuando los parámetros son dinámicos (como en `getEstadisticasSATFiltrado`).
-- **Colores**: paleta azul Usina `#1E427C`. Clases Tailwind disponibles: `text-usina-{50..900}`, `bg-usina-{50..900}`, `heat-{1..7}`. No usar colores arbitrarios si hay clase Tailwind equivalente.
-- **Español**: todos los nombres de componentes, variables de UI y comentarios van en español. Tipos TypeScript y keys de objetos van en inglés o camelCase español.
-- **GeoJSON en `public/data/`**: servidos estáticamente vía `/data/nombre.geojson`. No moverlos.
-- **IDs de provincias**: código INDEC de 2 dígitos con cero a la izquierda (`'06'` = Buenos Aires). Siempre `padStart(2, '0')` al normalizar desde BD.
+- **Prisma client**: singleton exportado desde `@/lib/mapa/queries` como `prisma`. **No instanciar en otro lado** — agota el connection pool de Neon.
+- **Raw SQL**: `prisma.$queryRaw` con template literals para vistas materializadas. `prisma.$queryRawUnsafe` solo con parámetros dinámicos validados.
+- **Cache-Control en rutas públicas**: `public, s-maxage=3600, stale-while-revalidate=86400` para SNIC; `s-maxage=300, stale-while-revalidate=600` para datos del pipeline.
+- **Cache-Control en rutas admin**: siempre `no-store`.
+- **Paleta**: `#1E427C` (primario), `#A7A8AC` (secundario). **NUNCA violeta/púrpura.**
+- **Español**: nombres de componentes, variables de UI y comentarios. Tipos TypeScript en inglés/camelCase.
+- **GeoJSON**: servidos desde `public/data/`. No moverlos. Departamentos (~1.2MB) solo se cargan en zoom ≥ 6.
+- **IDs de provincias**: código INDEC 2 dígitos con cero (`'06'` = Buenos Aires). Siempre `padStart(2, '0')`.
+- **SSE**: reconecta automáticamente cuando el servidor cierra la conexión (límite Vercel 270s). Usar con polling de respaldo para cubrir múltiples instancias.
 
 ---
 
-## 7. Contexto de negocio y restricciones
+## 10. Contexto de negocio
 
-**Organización:** Usina de Justicia — ONG argentina de derechos de
-víctimas de homicidio y femicidio. Herramienta pública de alto impacto.
+**Organización:** Usina de Justicia — ONG argentina de derechos de víctimas de homicidio y femicidio.
 
-**Paleta oficial (NO violar):**
-- Primario: `#1E427C` (usina-500)
-- Secundario: `#A7A8AC`
-- Fondo: blanco
-- ⚠️ NUNCA usar violeta/púrpura — paleta anterior descartada
+**Audiencia pública:** víctimas, familiares, periodistas, funcionarios. Mobile 4G argentino es el caso de uso crítico.
 
-**Audiencia:** víctimas, familiares, periodistas, funcionarios.
-Mobile 4G argentino es el caso de uso crítico.
+**Audiencia admin:** equipo interno de Usina (3-5 personas) que revisa y valida los casos del pipeline.
 
 ---
 
-## 8. Prioridades activas (en orden)
+## 11. Estado actual del producto
 
-1. **Performance y caché** — ver sección 9
-2. **Refactor visual** — terminar distinción entre capa SNIC
-   (agregados) y capa PRELIMINAR (hechos individuales de medios)
-3. **Activar 36 medios** en pipeline (hoy solo Infobae y Rosario3)
-4. **Deploy a Vercel**
-5. **Página de metodología** (antes del deploy público)
-
----
-
-## 9. Optimizaciones de performance requeridas
-
-El usuario objetivo está en mobile 4G argentino.
-Cada KB y cada ms importan.
-
-### 9.1 Cache-Control en API routes
-- Datos SNIC (cambian una vez al año):
-  `Cache-Control: public, s-maxage=3600, stale-while-revalidate=86400`
-- Datos PRELIMINAR de medios (cambian frecuente):
-  `Cache-Control: public, s-maxage=300, stale-while-revalidate=600`
-- Aplicar en: estadisticas, tendencias, tipos-delito,
-  provincias, delitos-provincia, sat-opciones
-
-### 9.2 GeoJSON — lazy loading estricto
-- `provincias-poligonos.geojson` (~600KB): cargar al inicio
-  pero con `precargarGeoJSON()` en background, no bloqueante
-- `departamentos-poligonos.geojson` (~1.2MB): SOLO cuando
-  zoom >= 6 (ya implementado en CapaDepartamentos — verificar
-  que no se precargue antes)
-- Objetivo: 0 bytes de departamentos en carga inicial
-
-### 9.3 Labels de departamentos
-- Límite de 80 labels ya implementado — mantener
-- Verificar que los Markers se destruyan correctamente al
-  salir del zoom threshold (memory leak común)
-
-### 9.4 Dynamic imports
-- Verificar que TODO lo que usa Google Maps esté detrás de
-  `next/dynamic` con `ssr: false`
-- No importar `@vis.gl/react-google-maps` en ningún
-  Server Component
-
-### 9.5 Medición obligatoria
-Antes y después de cada optimización, medir con:
-- Chrome DevTools → Network → throttling "Slow 4G"
-- Registrar: KB transferidos en carga inicial,
-  Time to Interactive, tiempo hasta primer tile del mapa
-
----
-
-## 10. Skill de diseño frontend
-
-Antes de crear o modificar cualquier componente visual,
-aplicar estos principios:
-
-- **Propósito**: herramienta cívica de alto impacto, no decorativa
-- **Tono**: editorial/institucional — datos claros sobre estética
-- **Diferenciador**: el mapa debe comunicar urgencia y precisión,
-  no ser bonito por ser bonito
-- **Tipografía**: las fuentes Geist ya definidas en layout.tsx
-  son correctas — no cambiar
-- **Animaciones**: solo donde aporten claridad (transición de
-  capas al cambiar año/fuente). Nada decorativo que agregue JS
-- **Mobile first**: cada componente nuevo debe probarse en
-  viewport 390px antes de desktop
-- **NO**: gradientes purple, sombras exageradas, glassmorphism,
-  patrones que no existen en la paleta Usina
+- ✅ Mapa público desplegado en Vercel con datos SNIC y SAT
+- ✅ Pipeline activo con ~45 medios, corriendo periódicamente
+- ✅ Panel admin con revisión humana, métricas y tiempo real (SSE)
+- ✅ Página de metodología en `/metodologia`
+- ✅ Favicon e identidad visual de Usina
+- ✅ Loading screen con logo en sección admin
+- ⏳ Refactor visual: distinción más clara entre capa SNIC y capa de medios en el mapa
+- ⏳ DuckDB + Parquet + H3 (optimización futura, no MVP)
