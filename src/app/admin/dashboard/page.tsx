@@ -63,8 +63,9 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetch('/api/admin/metricas')
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json() })
       .then(d => setMetricas(d))
+      .catch(() => setMetricas(null))
       .finally(() => setCargando(false))
   }, [])
 

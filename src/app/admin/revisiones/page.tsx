@@ -344,6 +344,14 @@ export default function RevisionesPage() {
     }
   }, [cargar])
 
+  // Cerrar modal con Escape
+  useEffect(() => {
+    if (!corrigiendoId) return
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setCorrigiendoId(null) }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [corrigiendoId])
+
   function handleRevisado(id: string, clasificacion: string, revisadoPor: string) {
     setHechos(prev => prev.filter(h => h.id !== id))
     setTotal(prev => Math.max(0, prev - 1))
@@ -406,8 +414,11 @@ export default function RevisionesPage() {
 
         {/* Modal de corrección */}
         {corrigiendoId && corrigiendoHecho && (
-          <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4">
-            <div className="w-full max-w-lg">
+          <div
+            className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4"
+            onClick={() => setCorrigiendoId(null)}
+          >
+            <div className="w-full max-w-lg" onClick={e => e.stopPropagation()}>
               <CardRevision
                 hecho={corrigiendoHecho}
                 esCorreccion

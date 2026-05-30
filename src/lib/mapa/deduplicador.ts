@@ -12,19 +12,10 @@
  * 4. Confirmación por IA cuando hay ambigüedad
  */
 
-import { PrismaClient, Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import OpenAI from 'openai'
-
-const prisma = new PrismaClient()
-
-const openrouter = new OpenAI({
-  baseURL: 'https://openrouter.ai/api/v1',
-  apiKey: process.env.OPENROUTER_API_KEY || '',
-  defaultHeaders: {
-    'HTTP-Referer': 'https://usinadejusticia.org.ar',
-    'X-Title': 'Mapa del Delito - Deduplicador',
-  },
-})
+import { prisma } from '@/lib/mapa/queries'
+import { getConfigActiva } from '@/config/modelos-pipeline'
 
 // ════════════════════════════════════════════
 // TIPOS
@@ -148,10 +139,19 @@ o
 {"esNuevo": false, "candidatoId": "ID-del-candidato", "confianza": 85, "razon": "explicación breve"}`
 
   try {
-    const modelo = process.env.OPENROUTER_MODEL || 'deepseek/deepseek-chat-v3-0324'
+    const config = getConfigActiva()
+    const apiKey = config.proveedor === 'ollama' ? 'ollama' : (process.env.OPENROUTER_API_KEY || '')
+    const cliente = new OpenAI({
+      baseURL: config.proveedor === 'ollama' ? `${config.baseUrl}/v1` : config.baseUrl,
+      apiKey,
+      defaultHeaders: config.proveedor === 'openrouter' ? {
+        'HTTP-Referer': 'https://usinadejusticia.org.ar',
+        'X-Title': 'Mapa del Delito - Deduplicador',
+      } : {},
+    })
 
-    const respuesta = await openrouter.chat.completions.create({
-      model: modelo,
+    const respuesta = await cliente.chat.completions.create({
+      model: config.modelo,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.1,
       max_tokens: 300,

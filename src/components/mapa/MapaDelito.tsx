@@ -129,6 +129,7 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
   const [mostrarMedias, setMostrarMedias] = useState(true)
   const mapRef = useRef<google.maps.Map | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const flyTimersRef = useRef<ReturnType<typeof setTimeout>[]>([])
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || ''
 
@@ -253,32 +254,30 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
     const map = mapRef.current
     if (!map) return
 
+    // Cancelar animaciones anteriores pendientes
+    flyTimersRef.current.forEach(clearTimeout)
+    flyTimersRef.current = []
+
     const destino = { lat: provincia.latitud, lng: provincia.longitud }
     const zoomActual = map.getZoom() ?? 4
 
-    // Si ya estamos en zoom alto, hacer efecto fly: zoom out → pan → zoom in
-    // Si estamos en vista nacional, pan directo
     if (zoomActual >= 6) {
-      // Paso 1: zoom out para dar contexto del movimiento
       map.setZoom(5)
-      // Paso 2: después de la animación de zoom, pan al destino
-      setTimeout(() => {
+      flyTimersRef.current.push(setTimeout(() => {
         map.panTo(destino)
-        // Paso 3: zoom in al destino
-        setTimeout(() => {
+        flyTimersRef.current.push(setTimeout(() => {
           map.setZoom(7)
-        }, 400)
-      }, 300)
+        }, 400))
+      }, 300))
     } else {
-      // Vista nacional: pan + zoom directo (el pan se anima naturalmente)
       map.panTo(destino)
-      setTimeout(() => {
+      flyTimersRef.current.push(setTimeout(() => {
         map.setZoom(7)
-      }, 200)
+      }, 200))
     }
 
     setToastProvincia(provincia.provincia)
-    setTimeout(() => setToastProvincia(null), 3000)
+    flyTimersRef.current.push(setTimeout(() => setToastProvincia(null), 3000))
   }, [])
 
   // Cerrar panel → zoom cómodo para ver la provincia en contexto

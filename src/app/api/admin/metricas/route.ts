@@ -8,7 +8,13 @@ export async function GET() {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
 
-  const [resumenSemanas, precisionPorMedio, ultimasCorridas, pendientes] = await Promise.all([
+  let resumenSemanas: Array<{ semana: string; scrapeados: bigint; verificados: bigint; preliminares: bigint; falsos_positivos: bigint }>
+  let precisionPorMedio: Array<{ medio: string; total: bigint; verificados: bigint; falsos_positivos: bigint }>
+  let ultimasCorridas: [{ total_pipeline: bigint; verificados: bigint; preliminares: bigint; revisados: bigint }]
+  let pendientes: [{ pendientes: bigint }]
+
+  try {
+    ;[resumenSemanas, precisionPorMedio, ultimasCorridas, pendientes] = await Promise.all([
 
     // Resumen semanal: scrapeados, extraídos, verificados, descartados
     prisma.$queryRaw<Array<{
@@ -91,7 +97,14 @@ export async function GET() {
           SELECT 1 FROM revisiones_pipeline rp WHERE rp.hecho_id = hd.id
         )
     `,
-  ])
+    ])
+  } catch (err) {
+    console.error('Error en /api/admin/metricas:', err)
+    return NextResponse.json(
+      { error: 'Error al obtener métricas' },
+      { status: 500, headers: { 'Cache-Control': 'no-store' } }
+    )
+  }
 
   const totales = ultimasCorridas[0]
 
@@ -119,5 +132,5 @@ export async function GET() {
         ? Math.round((Number(m.verificados) / Number(m.total)) * 100)
         : null,
     })),
-  })
+  }, { headers: { 'Cache-Control': 'no-store' } })
 }

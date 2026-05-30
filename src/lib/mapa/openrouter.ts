@@ -8,9 +8,36 @@
 
 import OpenAI from 'openai'
 import { getConfigActiva } from '@/config/modelos-pipeline'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@/lib/mapa/queries'
 
-const prisma = new PrismaClient()
+// Caché de ejemplos few-shot: se invalida cada 5 minutos
+let fewShotCache: { ejemplos: Array<{ resumen: string; clasificacion: string }>; ts: number } | null = null
+const FEW_SHOT_TTL_MS = 5 * 60 * 1000
+
+async function getFewShotEjemplos() {
+  const ahora = Date.now()
+  if (fewShotCache && ahora - fewShotCache.ts < FEW_SHOT_TTL_MS) {
+    return fewShotCache.ejemplos
+  }
+  const ejemplos = await prisma.$queryRaw<Array<{
+    resumen: string
+    clasificacion: string
+  }>>`
+    SELECT
+      cm.resumen,
+      rp.clasificacion_humana AS clasificacion
+    FROM revisiones_pipeline rp
+    JOIN hechos_delictivos hd ON rp.hecho_id = hd.id
+    JOIN coberturas_mediaticas cm ON cm.hecho_delictivo_id = hd.id
+    WHERE rp.clasificacion_humana != 'no_es_homicidio'
+      AND cm.resumen IS NOT NULL
+      AND LENGTH(cm.resumen) > 30
+    ORDER BY rp.revisado_at DESC
+    LIMIT 3
+  `.catch(() => [])
+  fewShotCache = { ejemplos, ts: ahora }
+  return ejemplos
+}
 
 // ════════════════════════════════════════════
 // TIPO DE DATO EXTRAÍDO
@@ -180,23 +207,7 @@ export async function extraerDatosNoticia(
     } : {},
   })
 
-  // Recuperar hasta 3 casos verificados como ejemplos few-shot
-  const ejemplos = await prisma.$queryRaw<Array<{
-    resumen: string
-    clasificacion: string
-  }>>`
-    SELECT
-      cm.resumen,
-      rp.clasificacion_humana AS clasificacion
-    FROM revisiones_pipeline rp
-    JOIN hechos_delictivos hd ON rp.hecho_id = hd.id
-    JOIN coberturas_mediaticas cm ON cm.hecho_delictivo_id = hd.id
-    WHERE rp.clasificacion_humana != 'no_es_homicidio'
-      AND cm.resumen IS NOT NULL
-      AND LENGTH(cm.resumen) > 30
-    ORDER BY rp.revisado_at DESC
-    LIMIT 3
-  `.catch(() => [])
+  const ejemplos = await getFewShotEjemplos()
 
   const fewShotMessages: Array<{ role: 'user' | 'assistant'; content: string }> = []
   for (const ej of ejemplos) {

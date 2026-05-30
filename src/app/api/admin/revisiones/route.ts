@@ -9,10 +9,11 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url)
-  const pagina = parseInt(searchParams.get('pagina') ?? '1')
+  const pagina = Math.max(1, parseInt(searchParams.get('pagina') ?? '1') || 1)
   const limite = 20
   const offset = (pagina - 1) * limite
 
+  try {
   // Todos los hechos PRELIMINAR sin revisión registrada
   const pendientes = await prisma.$queryRaw<Array<{
     id: string
@@ -121,7 +122,11 @@ export async function GET(req: NextRequest) {
       hecho_id: String(r.hecho_id),
       revisado_at: r.revisado_at?.toISOString() ?? null,
     })),
-  })
+  }, { headers: { 'Cache-Control': 'no-store' } })
+  } catch (err) {
+    console.error('Error en GET /api/admin/revisiones:', err)
+    return NextResponse.json({ error: 'Error al obtener revisiones' }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -146,7 +151,6 @@ export async function POST(req: NextRequest) {
   const revisadoPor = session.user.email ?? session.user.name ?? 'desconocido'
   const hechoIdNum = parseInt(hecho_id)
 
-  // Clasificación → código SNIC (null = falso positivo)
   const CLASIFICACION_SNIC: Record<string, number | null> = {
     'homicidio_doloso':                   1,
     'homicidio_en_ocasion_de_robo':       1,
@@ -157,36 +161,38 @@ export async function POST(req: NextRequest) {
   const snicCodigo = CLASIFICACION_SNIC[clasificacion_humana] ?? null
   const esHomicidio = snicCodigo !== null
 
-  // Registrar en cola de revisiones
-  await prisma.$executeRaw`
-    INSERT INTO revisiones_pipeline
-      (hecho_id, clasificacion_humana, revisado_por, revisado_at, notas)
-    VALUES
-      (${hechoIdNum}, ${clasificacion_humana}, ${revisadoPor}, NOW(), ${notas ?? null})
-  `
+  try {
+    await prisma.$executeRaw`
+      INSERT INTO revisiones_pipeline
+        (hecho_id, clasificacion_humana, revisado_por, revisado_at, notas)
+      VALUES
+        (${hechoIdNum}, ${clasificacion_humana}, ${revisadoPor}, NOW(), ${notas ?? null})
+    `
 
-  if (esHomicidio) {
-    // Confirmado: pasar a VERIFICADO y corregir tipo_delito si el revisor lo cambió
-    await prisma.$executeRaw`
-      UPDATE hechos_delictivos
-      SET
-        confianza = 'VERIFICADO',
-        requiere_revision = false,
-        tipo_delito_id = COALESCE(
-          (SELECT id FROM tipos_delito WHERE codigo_snic = ${String(snicCodigo)} LIMIT 1),
-          tipo_delito_id
-        )
-      WHERE id = ${hechoIdNum}
-    `
-  } else {
-    // Falso positivo: si estaba VERIFICADO lo vuelve a PRELIMINAR para que reaparezca en cola
-    await prisma.$executeRaw`
-      UPDATE hechos_delictivos
-      SET
-        confianza = CASE WHEN confianza = 'VERIFICADO' THEN 'PRELIMINAR' ELSE confianza END,
-        requiere_revision = false
-      WHERE id = ${hechoIdNum}
-    `
+    if (esHomicidio) {
+      await prisma.$executeRaw`
+        UPDATE hechos_delictivos
+        SET
+          confianza = 'VERIFICADO',
+          requiere_revision = false,
+          tipo_delito_id = COALESCE(
+            (SELECT id FROM tipos_delito WHERE codigo_snic = ${String(snicCodigo)} LIMIT 1),
+            tipo_delito_id
+          )
+        WHERE id = ${hechoIdNum}
+      `
+    } else {
+      await prisma.$executeRaw`
+        UPDATE hechos_delictivos
+        SET
+          confianza = CASE WHEN confianza = 'VERIFICADO' THEN 'PRELIMINAR' ELSE confianza END,
+          requiere_revision = false
+        WHERE id = ${hechoIdNum}
+      `
+    }
+  } catch (err) {
+    console.error('Error en POST /api/admin/revisiones:', err)
+    return NextResponse.json({ error: 'Error al guardar la revisión' }, { status: 500 })
   }
 
   return NextResponse.json({ ok: true, verificado: esHomicidio })
