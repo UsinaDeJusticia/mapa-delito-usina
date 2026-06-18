@@ -13,7 +13,7 @@
     "pipeline:medio": "tsx scripts/pipeline/scrapear-medios.ts --medio=",
     "pipeline:infobae": "tsx scripts/pipeline/scrapear-medios.ts --medio=infobae",
     "pipeline:rosario3": "tsx scripts/pipeline/scrapear-medios.ts --medio=rosario3",
-    "postinstall": "node scripts/copy-duckdb-wasm.js",
+    "postinstall": "node -e \"var fs=require('fs'),p=require('path'),d=p.join('node_modules','@duckdb','duckdb-wasm','dist'),o=p.join('public','duckdb');if(!fs.existsSync(d)){console.log('DuckDB dist not found, CDN fallback');process.exit(0)}fs.mkdirSync(o,{recursive:true});['duckdb-mvp.wasm','duckdb-browser-mvp.worker.js','duckdb-eh.wasm','duckdb-browser-eh.worker.js'].forEach(function(f){var s=p.join(d,f);if(fs.existsSync(s)){fs.copyFileSync(s,p.join(o,f));console.log(f+' ok')}});\"",
     "export:parquet": "duckdb < scripts/export/export_parquet.sql"
   },
   "dependencies": {
