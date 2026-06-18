@@ -12,13 +12,17 @@
     "pipeline:run": "cross-env PIPELINE_DRY_RUN=false tsx scripts/pipeline/scrapear-medios.ts",
     "pipeline:medio": "tsx scripts/pipeline/scrapear-medios.ts --medio=",
     "pipeline:infobae": "tsx scripts/pipeline/scrapear-medios.ts --medio=infobae",
-    "pipeline:rosario3": "tsx scripts/pipeline/scrapear-medios.ts --medio=rosario3"
+    "pipeline:rosario3": "tsx scripts/pipeline/scrapear-medios.ts --medio=rosario3",
+    "postinstall": "node -e \"var fs=require('fs'),p=require('path'),d=p.join('node_modules','@duckdb','duckdb-wasm','dist'),o=p.join('public','duckdb');if(!fs.existsSync(d)){console.log('DuckDB dist not found, CDN fallback');process.exit(0)}fs.mkdirSync(o,{recursive:true});['duckdb-mvp.wasm','duckdb-browser-mvp.worker.js','duckdb-eh.wasm','duckdb-browser-eh.worker.js'].forEach(function(f){var s=p.join(d,f);if(fs.existsSync(s)){fs.copyFileSync(s,p.join(o,f));console.log(f+' ok')}});\"",
+    "export:parquet": "duckdb < scripts/export/export_parquet.sql"
   },
   "dependencies": {
+    "@duckdb/duckdb-wasm": "^1.32.0",
     "@prisma/client": "^6.19.2",
     "@vis.gl/react-google-maps": "^1.7.1",
     "agent-browser": "^0.21.4",
     "dotenv": "^17.3.1",
+    "h3-js": "^4.4.0",
     "lucide-react": "^0.577.0",
     "next": "14.2.35",
     "next-auth": "^5.0.0-beta.31",

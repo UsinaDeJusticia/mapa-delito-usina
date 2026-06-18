@@ -132,5 +132,5 @@ export async function GET() {
         ? Math.round((Number(m.verificados) / Number(m.total)) * 100)
         : null,
     })),
-  }, { headers: { 'Cache-Control': 'no-store' } })
+  }, { headers: { 'Cache-Control': 'private, s-maxage=900, stale-while-revalidate=1800' } })
 }
