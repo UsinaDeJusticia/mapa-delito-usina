@@ -169,7 +169,6 @@ export async function POST(req: NextRequest) {
   }
 
   const revisadoPor = session.user.email ?? session.user.name ?? 'desconocido'
-  const hechoIdNum = parseInt(hecho_id)
 
   const CLASIFICACION_SNIC: Record<string, number | null> = {
     'homicidio_doloso':                   1,
@@ -186,7 +185,7 @@ export async function POST(req: NextRequest) {
       INSERT INTO revisiones_pipeline
         (hecho_id, clasificacion_humana, revisado_por, revisado_at, notas)
       VALUES
-        (${hechoIdNum}, ${clasificacion_humana}, ${revisadoPor}, NOW(), ${notas ?? null})
+        (${hecho_id}, ${clasificacion_humana}, ${revisadoPor}, NOW(), ${notas ?? null})
     `
 
     if (esHomicidio) {
@@ -199,7 +198,7 @@ export async function POST(req: NextRequest) {
             (SELECT id FROM tipos_delito WHERE codigo_snic = ${String(snicCodigo)} LIMIT 1),
             tipo_delito_id
           )
-        WHERE id = ${hechoIdNum}
+        WHERE id = ${hecho_id}
       `
     } else {
       await prisma.$executeRaw`
@@ -207,7 +206,7 @@ export async function POST(req: NextRequest) {
         SET
           confianza = CASE WHEN confianza = 'VERIFICADO' THEN 'PRELIMINAR' ELSE confianza END,
           requiere_revision = false
-        WHERE id = ${hechoIdNum}
+        WHERE id = ${hecho_id}
       `
     }
   } catch (err) {
