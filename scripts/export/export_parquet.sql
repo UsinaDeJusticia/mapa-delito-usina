@@ -65,6 +65,8 @@ COPY (
     hd.anio,
     u.provincia_id,
     u.provincia,
+    u.latitud::DOUBLE AS latitud,
+    u.longitud::DOUBLE AS longitud,
     hd.cantidad_victimas,
     hd."victimaSexo" AS victima_sexo,
     hd."medioComision" AS medio_comision,

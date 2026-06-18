@@ -17,6 +17,7 @@ import {
   CapaDepartamentos,
   MarcadoresCirculares,
   CapaHechosMedios,
+  CapaH3,
 } from './capas'
 import type { HechoMedio } from './capas'
 
@@ -125,6 +126,7 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
   const [controlesExpandidos, setControlesExpandidos] = useState(false)
   const [hechosMedias, setHechosMedias] = useState<HechoMedio[]>([])
   const [mostrarMedias, setMostrarMedias] = useState(true)
+  const [mostrarH3, setMostrarH3] = useState(false)
   const mapRef = useRef<google.maps.Map | null>(null)
   const flyTimersRef = useRef<ReturnType<typeof setTimeout>[]>([])
 
@@ -507,6 +509,13 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
               hechos={hechosMedias}
               visible={mostrarMedias}
             />
+
+            {/* Capa 5: Densidad H3 (hexágonos, solo SAT) */}
+            <CapaH3
+              anio={anioSeleccionado}
+              visible={mostrarH3}
+              fuente={fuenteSeleccionada}
+            />
           </Map>
         </APIProvider>
       </div>
@@ -579,6 +588,24 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
                 </span>
               </span>
               <span className="ml-auto text-gray-300">{mostrarMedias ? '●' : '○'}</span>
+            </button>
+          </div>
+        )}
+
+        {fuenteSeleccionada === 'sat' && (
+          <div className="mt-2 sm:mt-3 pt-1.5 sm:pt-2 border-t border-gray-100">
+            <button
+              onClick={() => setMostrarH3(v => !v)}
+              className="flex items-center gap-2 text-[9px] sm:text-[10px] text-gray-500 hover:text-gray-700 transition-colors w-full text-left"
+              title={mostrarH3 ? 'Ocultar mapa de densidad' : 'Mostrar mapa de densidad'}
+            >
+              <div className="relative shrink-0 w-3 h-3">
+                <svg width="12" height="12" viewBox="0 0 12 12">
+                  <polygon points="6,0 11,3 11,9 6,12 1,9 1,3" fill={mostrarH3 ? '#1E427C' : 'none'} stroke="#1E427C" strokeWidth="1" opacity={mostrarH3 ? '0.6' : '0.4'} />
+                </svg>
+              </div>
+              <span>Densidad H3</span>
+              <span className="ml-auto text-gray-300">{mostrarH3 ? '●' : '○'}</span>
             </button>
           </div>
         )}
