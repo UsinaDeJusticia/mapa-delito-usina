@@ -1,6 +1,11 @@
 import NextAuth from 'next-auth'
 import Google from 'next-auth/providers/google'
 
+const allowedEmails = (process.env.ALLOWED_EMAILS ?? '')
+  .split(',')
+  .map(e => e.trim().toLowerCase())
+  .filter(Boolean)
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
   trustHost: true,
@@ -11,6 +16,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
+    signIn({ user }) {
+      if (allowedEmails.length === 0) return true
+      return allowedEmails.includes(user.email?.toLowerCase() ?? '')
+    },
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user
       const isAdminRoute = nextUrl.pathname.startsWith('/admin')
