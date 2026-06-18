@@ -1,8 +1,26 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Requerido por next-auth v5 en deployments no-localhost
   experimental: {
     serverComponentsExternalPackages: [],
+  },
+  compress: true,
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+        ],
+      },
+      {
+        source: '/data/:path*.geojson',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=86400, immutable' },
+        ],
+      },
+    ]
   },
 }
 
