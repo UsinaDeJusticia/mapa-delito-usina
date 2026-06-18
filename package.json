@@ -17,7 +17,7 @@
     "export:parquet": "duckdb < scripts/export/export_parquet.sql"
   },
   "dependencies": {
-    "@duckdb/duckdb-wasm": "^1.33.1-dev45.0",
+    "@duckdb/duckdb-wasm": "^1.32.0",
     "@prisma/client": "^6.19.2",
     "@vis.gl/react-google-maps": "^1.7.1",
     "agent-browser": "^0.21.4",

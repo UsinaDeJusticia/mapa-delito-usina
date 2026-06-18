@@ -2,7 +2,7 @@
  * Postinstall: copy DuckDB-WASM assets to public/duckdb/
  * so the browser can load them via HTTP.
  *
- * Run: node scripts/copy-duckdb-wasm.js
+ * Non-blocking: if files are missing, warns but does not fail the install.
  */
 const fs = require('fs')
 const path = require('path')
@@ -17,19 +17,28 @@ const FILES = [
   'duckdb-browser-eh.worker.js',
 ]
 
-if (!fs.existsSync(DEST)) {
-  fs.mkdirSync(DEST, { recursive: true })
-}
-
-for (const f of FILES) {
-  const src = path.join(DIST, f)
-  const dst = path.join(DEST, f)
-  if (fs.existsSync(src)) {
-    fs.copyFileSync(src, dst)
-    console.log(`  ✓ ${f}`)
-  } else {
-    console.warn(`  ⚠ ${f} not found`)
+try {
+  if (!fs.existsSync(DIST)) {
+    console.log('DuckDB-WASM dist not found — skipping copy (will use CDN fallback)')
+    process.exit(0)
   }
-}
 
-console.log('DuckDB-WASM assets copied to public/duckdb/')
+  if (!fs.existsSync(DEST)) {
+    fs.mkdirSync(DEST, { recursive: true })
+  }
+
+  let copied = 0
+  for (const f of FILES) {
+    const src = path.join(DIST, f)
+    const dst = path.join(DEST, f)
+    if (fs.existsSync(src)) {
+      fs.copyFileSync(src, dst)
+      copied++
+    }
+  }
+
+  console.log(`DuckDB-WASM: ${copied}/${FILES.length} assets copied to public/duckdb/`)
+} catch (err) {
+  console.warn('DuckDB-WASM copy failed (non-fatal, will use CDN fallback):', err.message)
+  process.exit(0)
+}
