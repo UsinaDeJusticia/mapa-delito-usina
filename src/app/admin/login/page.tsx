@@ -1,8 +1,13 @@
 'use client'
 
 import { signIn } from 'next-auth/react'
+import { useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 
-export default function LoginPage() {
+function LoginForm() {
+  const searchParams = useSearchParams()
+  const error = searchParams.get('error')
+
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
@@ -19,6 +24,17 @@ export default function LoginPage() {
           <h1 className="text-xl font-bold text-gray-900">Mapa del Delito</h1>
           <p className="text-sm text-gray-500 mt-1">Panel de revisión — Usina de Justicia</p>
         </div>
+
+        {error && (
+          <div className="mb-6 p-3 rounded-lg bg-red-50 border border-red-200">
+            <p className="text-sm text-red-700 text-center font-medium">
+              Acceso restringido al equipo de Usina de Justicia
+            </p>
+            <p className="text-xs text-red-500 text-center mt-1">
+              Si creés que deberías tener acceso, contactá al administrador.
+            </p>
+          </div>
+        )}
 
         <button
           onClick={() => signIn('google', { callbackUrl: '/admin/revisiones' })}
@@ -38,5 +54,13 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   )
 }
