@@ -181,11 +181,22 @@ export async function POST(req: NextRequest) {
   const esHomicidio = snicCodigo !== null
 
   try {
+    // url_fuente es NOT NULL en revisiones_pipeline. La poblamos con la URL de
+    // la cobertura más reciente del hecho (o la url_fuente del hecho), con
+    // fallback a 'revision-manual' para no violar el constraint nunca.
     await prisma.$executeRaw`
       INSERT INTO revisiones_pipeline
-        (hecho_id, clasificacion_humana, revisado_por, revisado_at, notas)
-      VALUES
-        (${hecho_id}, ${clasificacion_humana}, ${revisadoPor}, NOW(), ${notas ?? null})
+        (hecho_id, url_fuente, clasificacion_humana, revisado_por, revisado_at, notas)
+      SELECT
+        ${hecho_id},
+        COALESCE(
+          (SELECT url FROM coberturas_mediaticas
+             WHERE hecho_delictivo_id = ${hecho_id}
+             ORDER BY created_at DESC LIMIT 1),
+          (SELECT url_fuente FROM hechos_delictivos WHERE id = ${hecho_id}),
+          'revision-manual'
+        ),
+        ${clasificacion_humana}, ${revisadoPor}, NOW(), ${notas ?? null}
     `
 
     if (esHomicidio) {
