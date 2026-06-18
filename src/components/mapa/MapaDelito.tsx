@@ -22,6 +22,7 @@ import type { HechoMedio } from './capas'
 
 import { useGeolocalizacion } from './hooks/useGeolocalizacion'
 import { precargarGeoJSON } from './hooks/useGeoJSON'
+import { useMapaData } from '@/hooks/useMapaData'
 
 // ─── Tipos ───────────────────────────────────────────────
 interface ProvinciaData {
@@ -32,13 +33,6 @@ interface ProvinciaData {
   totalHechos: number
   totalVictimas: number
   delitos: Array<{ nombre: string; hechos: number; victimas: number }>
-}
-
-interface EstadisticasResponse {
-  anio: number
-  provincias: ProvinciaData[]
-  aniosDisponibles: number[]
-  totalRegistros: number
 }
 
 interface MapaDelitoProps {
@@ -114,21 +108,24 @@ function BotonRecentrar({
 // ─── Componente principal ────────────────────────────────
 export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoProp }: MapaDelitoProps) {
   const [anioSeleccionado, setAnioSeleccionado] = useState(anioProp ?? 2024)
-  const [aniosDisponibles, setAniosDisponibles] = useState<number[]>([])
-  const [datos, setDatos] = useState<ProvinciaData[]>([])
   const [provinciaSeleccionada, setProvinciaSeleccionada] = useState<ProvinciaData | null>(null)
   // const [departamentoSeleccionado, setDepartamentoSeleccionado] = useState<string | null>(null) // Fase 2
   const [tipoDelitoId, setTipoDelitoId] = useState<string | undefined>(tipoDelitoProp)
   const [fuenteSeleccionada, setFuenteSeleccionada] = useState<'snic' | 'sat'>('snic')
   const [filtrosSAT, setFiltrosSAT] = useState<FiltrosActivos>({})
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+
+  const { provincias: datos, aniosDisponibles, loading } = useMapaData(
+    anioSeleccionado,
+    fuenteSeleccionada,
+    fuenteSeleccionada === 'snic' ? tipoDelitoId : undefined,
+    fuenteSeleccionada === 'sat' ? filtrosSAT : undefined
+  )
+  const error: string | null = null
   const [provinciaHover, setProvinciaHover] = useState<string | null>(null)
   const [controlesExpandidos, setControlesExpandidos] = useState(false)
   const [hechosMedias, setHechosMedias] = useState<HechoMedio[]>([])
   const [mostrarMedias, setMostrarMedias] = useState(true)
   const mapRef = useRef<google.maps.Map | null>(null)
-  const abortControllerRef = useRef<AbortController | null>(null)
   const flyTimersRef = useRef<ReturnType<typeof setTimeout>[]>([])
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || ''
@@ -152,67 +149,7 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
       .catch(() => {})
   }, [])
 
-  // ─── Fetch datos ─────────────────────────────────────
-  const fetchDatos = useCallback(async () => {
-    // Cancelar fetch anterior si existe
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort()
-    }
-    const controller = new AbortController()
-    abortControllerRef.current = controller
-
-    setLoading(true)
-    setError(null)
-    try {
-      const params = new URLSearchParams({
-        anio: anioSeleccionado.toString(),
-        fuente: fuenteSeleccionada,
-      })
-      if (fuenteSeleccionada === 'snic' && tipoDelitoId) {
-        params.set('tipo_delito_id', tipoDelitoId)
-      }
-      // Filtros SAT
-      if (fuenteSeleccionada === 'sat') {
-        if (filtrosSAT.sexo) params.set('sexo', filtrosSAT.sexo)
-        if (filtrosSAT.arma) params.set('arma', filtrosSAT.arma)
-        if (filtrosSAT.vinculo) params.set('vinculo', filtrosSAT.vinculo)
-        if (filtrosSAT.lugar) params.set('lugar', filtrosSAT.lugar)
-      }
-
-      const res = await fetch(`/api/mapa/estadisticas?${params}`, {
-        signal: controller.signal,
-      })
-
-      if (!res.ok) throw new Error('Error al cargar datos')
-
-      const data: EstadisticasResponse = await res.json()
-
-      // Solo actualizar si este fetch no fue cancelado
-      if (!controller.signal.aborted) {
-        setDatos(data.provincias)
-        setAniosDisponibles(data.aniosDisponibles)
-      }
-    } catch (err) {
-      // Ignorar errores de abort
-      if (err instanceof DOMException && err.name === 'AbortError') return
-      if (!controller.signal.aborted) {
-        setError(err instanceof Error ? err.message : 'Error desconocido')
-      }
-    } finally {
-      if (!controller.signal.aborted) {
-        setLoading(false)
-      }
-    }
-  }, [anioSeleccionado, tipoDelitoId, fuenteSeleccionada, filtrosSAT])
-
-  useEffect(() => {
-    fetchDatos()
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort()
-      }
-    }
-  }, [fetchDatos])
+  // Datos cargados por useMapaData (DuckDB-WASM con fallback a API)
 
   // ─── Handlers ────────────────────────────────────────
   const handleFuenteChange = useCallback((fuente: 'snic' | 'sat') => {

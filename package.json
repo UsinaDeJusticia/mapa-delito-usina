@@ -12,9 +12,12 @@
     "pipeline:run": "cross-env PIPELINE_DRY_RUN=false tsx scripts/pipeline/scrapear-medios.ts",
     "pipeline:medio": "tsx scripts/pipeline/scrapear-medios.ts --medio=",
     "pipeline:infobae": "tsx scripts/pipeline/scrapear-medios.ts --medio=infobae",
-    "pipeline:rosario3": "tsx scripts/pipeline/scrapear-medios.ts --medio=rosario3"
+    "pipeline:rosario3": "tsx scripts/pipeline/scrapear-medios.ts --medio=rosario3",
+    "postinstall": "node scripts/copy-duckdb-wasm.js",
+    "export:parquet": "duckdb < scripts/export/export_parquet.sql"
   },
   "dependencies": {
+    "@duckdb/duckdb-wasm": "^1.33.1-dev45.0",
     "@prisma/client": "^6.19.2",
     "@vis.gl/react-google-maps": "^1.7.1",
     "agent-browser": "^0.21.4",
