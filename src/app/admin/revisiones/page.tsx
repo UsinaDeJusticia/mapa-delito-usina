@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { signOut, useSession } from 'next-auth/react'
+import { useSession } from 'next-auth/react'
+import AdminNav from '@/components/admin/AdminNav'
 // useSession requires SessionProvider — provided by src/app/admin/layout.tsx
 
 interface Cobertura {
@@ -429,25 +430,14 @@ export default function RevisionesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div>
-            <h1 className="font-bold text-gray-900 text-sm sm:text-base" style={{ color: '#1E427C' }}>
-              Revisión de casos
-            </h1>
-            <p className="text-xs text-gray-500 mt-0.5">
-              {cargando ? 'Cargando...' : `${total} pendiente${total !== 1 ? 's' : ''}`}
-            </p>
-          </div>
-          <button
-            onClick={() => signOut({ callbackUrl: '/admin/login' })}
-            className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors"
-          >
-            Cerrar sesión
-          </button>
-        </div>
-      </header>
+      <AdminNav />
+
+      {/* Subtítulo contextual */}
+      <div className="max-w-2xl mx-auto px-4 pt-4">
+        <p className="text-xs text-gray-500">
+          {cargando ? 'Cargando...' : `${total} pendiente${total !== 1 ? 's' : ''}`}
+        </p>
+      </div>
 
       {/* Contenido */}
       <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">

@@ -1,8 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { signOut } from 'next-auth/react'
-import Link from 'next/link'
+import AdminNav from '@/components/admin/AdminNav'
 
 interface Metricas {
   totales: {
@@ -75,23 +74,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h1 className="font-bold text-[#1E427C] text-sm sm:text-base">Pipeline — Métricas</h1>
-            <Link href="/admin/revisiones"
-              className="text-xs text-gray-500 border border-gray-200 rounded-lg px-2.5 py-1 hover:border-[#1E427C] hover:text-[#1E427C] transition-colors">
-              Revisiones {metricas?.totales.pendientes ? `(${metricas.totales.pendientes})` : ''}
-            </Link>
-          </div>
-          <button
-            onClick={() => signOut({ callbackUrl: '/admin/login' })}
-            className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-200 transition-colors"
-          >
-            Cerrar sesión
-          </button>
-        </div>
-      </header>
+      <AdminNav />
 
       <main className="max-w-4xl mx-auto px-4 py-6 space-y-6">
         {cargando ? (
