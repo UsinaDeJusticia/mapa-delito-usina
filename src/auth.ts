@@ -17,7 +17,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     signIn({ user }) {
-      if (allowedEmails.length === 0) return true
+      if (allowedEmails.length === 0) {
+        return process.env.NODE_ENV !== 'production'
+      }
       return allowedEmails.includes(user.email?.toLowerCase() ?? '')
     },
     authorized({ auth, request: { nextUrl } }) {
