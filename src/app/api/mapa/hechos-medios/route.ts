@@ -39,6 +39,11 @@ export async function GET() {
         AND u.latitud IS NOT NULL
         AND u.longitud IS NOT NULL
         AND hd.fecha_hecho >= NOW() - INTERVAL '90 days'
+        AND NOT EXISTS (
+          SELECT 1 FROM revisiones_pipeline rp
+          WHERE rp.hecho_id = hd.id
+            AND rp.clasificacion_humana = 'no_es_homicidio'
+        )
       ORDER BY hd.id, cm.created_at DESC
     ) sub
     ORDER BY sub.fecha_hecho DESC

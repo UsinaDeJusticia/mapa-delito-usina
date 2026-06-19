@@ -281,7 +281,11 @@ export default function RevisionesPage() {
   const [revisados, setRevisados] = useState<HechoRevisado[]>([])
   const [total, setTotal] = useState(0)
   const [cargando, setCargando] = useState(true)
+  const [cargandoMas, setCargandoMas] = useState(false)
   const [corrigiendoId, setCorrigiendoId] = useState<string | null>(null)
+  const paginaRef = useRef(1)
+  const usuarioRef = useRef(usuarioActual)
+  usuarioRef.current = usuarioActual
   const ultimoTimestamp = useRef<string>(new Date(Date.now() - 60_000).toISOString())
 
   const cargar = useCallback(async () => {
@@ -292,8 +296,31 @@ export default function RevisionesPage() {
       setHechos(data.pendientes ?? [])
       setTotal(data.total ?? 0)
       setRevisados(data.revisados ?? [])
+      paginaRef.current = 1
     } finally {
       setCargando(false)
+    }
+  }, [])
+
+  const cargarMas = useCallback(async () => {
+    setCargandoMas(true)
+    try {
+      const siguiente = paginaRef.current + 1
+      const res = await fetch(`/api/admin/revisiones?pagina=${siguiente}`)
+      if (!res.ok) return
+      const data = await res.json()
+      const nuevos = (data.pendientes ?? []) as HechoPendiente[]
+      if (nuevos.length > 0) {
+        setHechos(prev => {
+          const idsExistentes = new Set(prev.map(h => h.id))
+          const sinDuplicados = nuevos.filter(h => !idsExistentes.has(h.id))
+          return [...prev, ...sinDuplicados]
+        })
+        paginaRef.current = siguiente
+      }
+      setTotal(data.total ?? 0)
+    } finally {
+      setCargandoMas(false)
     }
   }, [])
 
@@ -316,7 +343,10 @@ export default function RevisionesPage() {
 
           ultimoTimestamp.current = msg.revisado_at
 
-          // Quitar de pendientes si está ahí
+          // Ignorar eventos del propio usuario (ya manejados por handleRevisado)
+          if (msg.revisado_por === usuarioRef.current) return
+
+          // Quitar de pendientes si está ahí (revisión de otro usuario)
           setHechos(prev => prev.filter(h => h.id !== msg.hecho_id))
           setTotal(prev => Math.max(0, prev - 1))
 
@@ -465,6 +495,16 @@ export default function RevisionesPage() {
                 usuarioActual={usuarioActual}
               />
             ))}
+
+            {hechos.length < total && (
+              <button
+                onClick={cargarMas}
+                disabled={cargandoMas}
+                className="w-full py-3 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:border-gray-300 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {cargandoMas ? 'Cargando...' : `Cargar más casos (${total - hechos.length} restantes)`}
+              </button>
+            )}
           </div>
         )}
 
