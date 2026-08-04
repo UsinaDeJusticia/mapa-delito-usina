@@ -19,7 +19,7 @@ import { execSync } from 'child_process'
 import { PrismaClient } from '@prisma/client'
 import { extraerDatosNoticia } from '../../src/lib/mapa/openrouter'
 import { deduplicar, clasificarCobertura } from '../../src/lib/mapa/deduplicador'
-import { getConfigActiva } from '../../src/config/modelos-pipeline'
+import { crearClienteLLM } from '../../src/lib/mapa/cliente-llm'
 
 const prisma = new PrismaClient()
 
@@ -240,27 +240,11 @@ async function identificarNoticiasConIA(
   medio: string
 ): Promise<Array<{ ref: string; titulo: string }>> {
 
-  const config = getConfigActiva()
-  const apiKey = config.proveedor === 'ollama'
-    ? 'ollama'
-    : process.env.OPENROUTER_API_KEY || ''
-  const baseURL = config.proveedor === 'ollama'
-    ? `${config.baseUrl}/v1`
-    : config.baseUrl
-
-  const openrouter = new (await import('openai')).default({
-    baseURL,
-    apiKey,
-    defaultHeaders: config.proveedor === 'openrouter' ? {
-      'HTTP-Referer': 'https://usinadejusticia.org.ar',
-      'X-Title': 'Mapa del Delito - Identificador',
-    } : {},
-  })
-
+  const { cliente, config } = crearClienteLLM('Mapa del Delito - Identificador')
   const modelo = config.modelo
 
   try {
-    const respuesta = await openrouter.chat.completions.create({
+    const respuesta = await cliente.chat.completions.create({
       model: modelo,
       messages: [
         {

@@ -43,14 +43,20 @@ jobs:
 
       - name: Verificar variables de entorno
         run: |
-          echo "OPENROUTER_API_KEY set: ${{ secrets.OPENROUTER_API_KEY != '' }}"
           echo "DATABASE_URL set: ${{ secrets.DATABASE_URL != '' }}"
-          echo "OPENROUTER_MODEL: ${{ secrets.OPENROUTER_MODEL }}"
+          echo "OPENCODE_API_KEY set: ${{ secrets.OPENCODE_API_KEY != '' }}"
+          echo "OPENROUTER_API_KEY set (respaldo): ${{ secrets.OPENROUTER_API_KEY != '' }}"
 
       - name: Correr pipeline
         run: npm run pipeline:run
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Proveedor activo: OpenCode Zen
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          # Overrides opcionales de modelo, por si Zen renombra alguno
+          OPENCODE_MODELO_ECONOMICO: ${{ secrets.OPENCODE_MODELO_ECONOMICO }}
+          OPENCODE_MODELO_PRECISO: ${{ secrets.OPENCODE_MODELO_PRECISO }}
+          # Respaldo: con PIPELINE_PERFIL_MODELO=openrouter se vuelve al anterior
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_MODEL: ${{ secrets.OPENROUTER_MODEL }}
           PIPELINE_DRY_RUN: 'false'
