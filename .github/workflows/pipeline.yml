@@ -31,6 +31,16 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+      # Solo informa: si el esquema de la base no coincide con schema.prisma,
+      # el pipeline falla con P2022 en la primera noticia. Verlo acá evita
+      # perder una corrida entera diagnosticando a ciegas. No aplica nada
+      # (eso lo hace migraciones.yml) ni bloquea la ingesta.
+      - name: Verificar estado de migraciones
+        run: npx prisma migrate status
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        continue-on-error: true
+
       - name: Verificar variables de entorno
         run: |
           echo "OPENROUTER_API_KEY set: ${{ secrets.OPENROUTER_API_KEY != '' }}"
