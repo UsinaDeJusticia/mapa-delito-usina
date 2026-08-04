@@ -28,6 +28,7 @@ export async function GET(req: NextRequest) {
     requiere_revision: boolean
     created_at: Date
     coberturas_json: unknown
+    coberturas_total: number
   }>>`
     SELECT
       hd.id,
@@ -41,15 +42,36 @@ export async function GET(req: NextRequest) {
       hd.confianza,
       hd.requiere_revision,
       hd.created_at,
+      -- Las 12 coberturas más recientes. Si el hecho no tiene ninguna
+      -- (huérfano: el pipeline crea hecho y cobertura sin transacción),
+      -- cae a hd.url_fuente para que el revisor nunca quede sin fuente.
+      COALESCE(
+        (
+          SELECT json_agg(
+            json_build_object('url', t.url, 'medio', t.medio)
+            ORDER BY t.created_at DESC
+          )
+          FROM (
+            SELECT c.url, c.medio, c.created_at
+            FROM coberturas_mediaticas c
+            WHERE c.hecho_delictivo_id = hd.id
+              AND c.url IS NOT NULL
+            ORDER BY c.created_at DESC
+            LIMIT 12
+          ) t
+        ),
+        CASE
+          WHEN hd.url_fuente IS NOT NULL
+          THEN json_build_array(json_build_object('url', hd.url_fuente, 'medio', 'Fuente original'))
+          ELSE '[]'::json
+        END
+      ) AS coberturas_json,
       (
-        SELECT json_agg(
-          json_build_object('url', c.url, 'medio', c.medio)
-          ORDER BY c.created_at DESC
-        )
+        SELECT COUNT(*)::int
         FROM coberturas_mediaticas c
         WHERE c.hecho_delictivo_id = hd.id
           AND c.url IS NOT NULL
-      ) AS coberturas_json
+      ) AS coberturas_total
     FROM hechos_delictivos hd
     LEFT JOIN LATERAL (
       SELECT titulo, resumen, medio, url
@@ -88,6 +110,7 @@ export async function GET(req: NextRequest) {
     revisado_por: string
     revisado_at: Date
     coberturas_json: unknown
+    coberturas_total: number
   }>>`
     SELECT DISTINCT ON (rp.hecho_id)
       hd.id::text AS hecho_id,
@@ -98,15 +121,33 @@ export async function GET(req: NextRequest) {
       rp.clasificacion_humana,
       rp.revisado_por,
       rp.revisado_at,
+      COALESCE(
+        (
+          SELECT json_agg(
+            json_build_object('url', t.url, 'medio', t.medio)
+            ORDER BY t.created_at DESC
+          )
+          FROM (
+            SELECT c.url, c.medio, c.created_at
+            FROM coberturas_mediaticas c
+            WHERE c.hecho_delictivo_id = hd.id
+              AND c.url IS NOT NULL
+            ORDER BY c.created_at DESC
+            LIMIT 12
+          ) t
+        ),
+        CASE
+          WHEN hd.url_fuente IS NOT NULL
+          THEN json_build_array(json_build_object('url', hd.url_fuente, 'medio', 'Fuente original'))
+          ELSE '[]'::json
+        END
+      ) AS coberturas_json,
       (
-        SELECT json_agg(
-          json_build_object('url', c.url, 'medio', c.medio)
-          ORDER BY c.created_at DESC
-        )
+        SELECT COUNT(*)::int
         FROM coberturas_mediaticas c
         WHERE c.hecho_delictivo_id = hd.id
           AND c.url IS NOT NULL
-      ) AS coberturas_json
+      ) AS coberturas_total
     FROM revisiones_pipeline rp
     JOIN hechos_delictivos hd ON hd.id = rp.hecho_id
     LEFT JOIN LATERAL (
@@ -130,6 +171,7 @@ export async function GET(req: NextRequest) {
       created_at: p.created_at?.toISOString() ?? null,
       requiere_revision: Boolean(p.requiere_revision),
       coberturas: (p.coberturas_json as Array<{ url: string; medio: string | null }> | null) ?? [],
+      coberturas_total: Number(p.coberturas_total ?? 0),
       coberturas_json: undefined,
     })),
     total: Number(total[0]?.count ?? 0),
@@ -140,6 +182,7 @@ export async function GET(req: NextRequest) {
       hecho_id: String(r.hecho_id),
       revisado_at: r.revisado_at?.toISOString() ?? null,
       coberturas: (r.coberturas_json as Array<{ url: string; medio: string | null }> | null) ?? [],
+      coberturas_total: Number(r.coberturas_total ?? 0),
       coberturas_json: undefined,
     })),
   }, { headers: { 'Cache-Control': 'no-store' } })
