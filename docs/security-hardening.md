@@ -18,6 +18,8 @@ secretos, strings de conexion ni credenciales parcialmente censuradas.
   ni `prisma migrate reset` contra la base compartida.
 - Validar el pipeline de medios con `pipeline:dry`. La ruta `/api/pipeline/run`
   inicia el pipeline en modo produccion y no es una prueba inocua.
+- Los endpoints protegidos deben fallar si su secret no esta configurado. La
+  salida interna de procesos queda en logs del servidor, no en respuestas HTTP.
 
 ## Mejoras planificadas
 
@@ -31,6 +33,14 @@ secretos, strings de conexion ni credenciales parcialmente censuradas.
    rotacion para las credenciales de base de datos y proveedores LLM.
 5. Fijar la version del package manager y usar un unico lockfile autoritativo en
    desarrollo y CI para no eludir accidentalmente controles de supply chain.
+6. Auditar y actualizar las dependencias reportadas por `npm audit` sin usar
+   actualizaciones forzadas que puedan introducir cambios incompatibles.
+7. Serializar la promocion de hechos con coberturas concurrentes y agregar una
+   prueba que ejecute dos inserciones simultaneas sobre el mismo hecho.
+8. Hacer que una falla sistemica del proveedor LLM marque la corrida como fallida
+   en lugar de producir un resumen exitoso con contadores en cero.
+9. Coordinar migraciones y despliegue para que el codigo nuevo no reciba trafico
+   antes de que el esquema requerido este aplicado.
 
 ## Decision sobre el incidente
 

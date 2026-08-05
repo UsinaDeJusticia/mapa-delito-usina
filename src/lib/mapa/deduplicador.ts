@@ -13,9 +13,8 @@
  */
 
 import { Prisma } from '@prisma/client'
-import OpenAI from 'openai'
 import { prisma } from '@/lib/mapa/queries'
-import { getConfigActiva } from '@/config/modelos-pipeline'
+import { crearClienteLLM } from '@/lib/mapa/cliente-llm'
 
 // ════════════════════════════════════════════
 // TIPOS
@@ -161,16 +160,7 @@ o
 {"esNuevo": false, "candidatoId": "ID-del-candidato", "confianza": 85, "razon": "explicación breve"}`
 
   try {
-    const config = getConfigActiva()
-    const apiKey = config.proveedor === 'ollama' ? 'ollama' : (process.env.OPENROUTER_API_KEY || '')
-    const cliente = new OpenAI({
-      baseURL: config.proveedor === 'ollama' ? `${config.baseUrl}/v1` : config.baseUrl,
-      apiKey,
-      defaultHeaders: config.proveedor === 'openrouter' ? {
-        'HTTP-Referer': 'https://usinadejusticia.org.ar',
-        'X-Title': 'Mapa del Delito - Deduplicador',
-      } : {},
-    })
+    const { cliente, config } = crearClienteLLM('Mapa del Delito - Deduplicador')
 
     const respuesta = await cliente.chat.completions.create({
       model: config.modelo,

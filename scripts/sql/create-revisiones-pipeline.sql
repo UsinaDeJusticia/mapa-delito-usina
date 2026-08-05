@@ -1,6 +1,10 @@
 CREATE TABLE IF NOT EXISTS revisiones_pipeline (
   id SERIAL PRIMARY KEY,
-  hecho_id INTEGER REFERENCES hechos_delictivos(id),
+  -- TEXT, no INTEGER: hechos_delictivos.id es un uuid (String @id en
+  -- schema.prisma). Este archivo declaraba INTEGER, desincronizado con la
+  -- tabla desplegada. Recrearla con INTEGER haría fallar todo INSERT del
+  -- panel de revisión con "invalid input syntax for type integer".
+  hecho_id TEXT REFERENCES hechos_delictivos(id),
   url_fuente TEXT NOT NULL,
   titulo_noticia TEXT,
   texto_original TEXT,

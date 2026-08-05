@@ -22,6 +22,9 @@ interface HechoPendiente {
   confianza: string
   requiere_revision: boolean
   coberturas: Cobertura[]
+  // Total real de coberturas del hecho. Puede superar coberturas.length,
+  // que viene topeado a 12 desde la API.
+  coberturas_total?: number
 }
 
 interface HechoRevisado {
@@ -34,6 +37,9 @@ interface HechoRevisado {
   revisado_por: string
   revisado_at: string | null
   coberturas: Cobertura[]
+  // Total real de coberturas del hecho. Puede superar coberturas.length,
+  // que viene topeado a 12 desde la API.
+  coberturas_total?: number
 }
 
 const CLASIFICACIONES = [
@@ -168,6 +174,8 @@ function CardRevision({
   const confianza = 'confianza' in hecho ? hecho.confianza : null
   const requiereRevision = 'requiere_revision' in hecho ? hecho.requiere_revision : false
   const coberturas = hecho.coberturas ?? []
+  // La API topea el array en 12; avisamos si hay más para no truncar en silencio
+  const coberturasOcultas = Math.max(0, (hecho.coberturas_total ?? 0) - coberturas.length)
 
   const fechaFormateada = fechaHecho
     ? new Date(fechaHecho).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -230,10 +238,10 @@ function CardRevision({
         )}
         {confianza && <span className="text-xs text-gray-400">confianza {confianza}</span>}
         {coberturas.length > 0 && (
-          <div className="flex flex-wrap gap-2 ml-auto">
+          <div className="flex flex-wrap items-center gap-2 ml-auto">
             {coberturas.map((c, i) => (
               <a
-                key={i}
+                key={c.url}
                 href={c.url}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -242,6 +250,11 @@ function CardRevision({
                 {c.medio ?? `Fuente ${i + 1}`} ↗
               </a>
             ))}
+            {coberturasOcultas > 0 && (
+              <span className="text-xs text-gray-400" title={`${coberturasOcultas} coberturas más no mostradas`}>
+                +{coberturasOcultas} más
+              </span>
+            )}
           </div>
         )}
       </div>

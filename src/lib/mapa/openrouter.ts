@@ -6,8 +6,8 @@
  *   local               → Ollama (OLLAMA_MODEL + OLLAMA_BASE_URL)
  */
 
-import OpenAI from 'openai'
 import { getConfigActiva } from '@/config/modelos-pipeline'
+import { crearClienteLLM, credencialFaltante } from '@/lib/mapa/cliente-llm'
 import { prisma } from '@/lib/mapa/queries'
 
 // Caché de ejemplos few-shot: se invalida cada 5 minutos
@@ -185,32 +185,17 @@ export async function extraerDatosNoticia(
   textoNoticia: string,
   urlFuente: string,
 ): Promise<HechoExtraido> {
-  const config = getConfigActiva()
-  console.log(`🤖 ${config.descripcion}`)
+  const configActiva = getConfigActiva()
+  console.log(`🤖 ${configActiva.descripcion}`)
 
   // Validar API key para proveedores remotos
-  if (config.proveedor === 'openrouter' && !process.env.OPENROUTER_API_KEY) {
-    console.error('❌ OPENROUTER_API_KEY no configurada en .env')
+  const faltante = credencialFaltante(configActiva)
+  if (faltante) {
+    console.error(`❌ ${faltante} no configurada en .env`)
     return RESPUESTA_FALLBACK
   }
 
-  const apiKey = config.proveedor === 'ollama'
-    ? 'ollama'
-    : process.env.OPENROUTER_API_KEY || ''
-
-  // Ollama usa /v1 como sufijo para compatibilidad OpenAI
-  const baseURL = config.proveedor === 'ollama'
-    ? `${config.baseUrl}/v1`
-    : config.baseUrl
-
-  const cliente = new OpenAI({
-    baseURL,
-    apiKey,
-    defaultHeaders: config.proveedor === 'openrouter' ? {
-      'HTTP-Referer': 'https://usinadejusticia.org.ar',
-      'X-Title': 'Mapa Nacional del Delito - Usina de Justicia',
-    } : {},
-  })
+  const { cliente, config } = crearClienteLLM('Mapa Nacional del Delito - Usina de Justicia')
 
   const ejemplos = await getFewShotEjemplos()
 

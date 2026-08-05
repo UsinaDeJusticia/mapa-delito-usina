@@ -19,7 +19,7 @@ import { execSync } from 'child_process'
 import { PrismaClient } from '@prisma/client'
 import { extraerDatosNoticia } from '../../src/lib/mapa/openrouter'
 import { deduplicar, clasificarCobertura } from '../../src/lib/mapa/deduplicador'
-import { getConfigActiva } from '../../src/config/modelos-pipeline'
+import { crearClienteLLM } from '../../src/lib/mapa/cliente-llm'
 
 const prisma = new PrismaClient()
 
@@ -240,27 +240,11 @@ async function identificarNoticiasConIA(
   medio: string
 ): Promise<Array<{ ref: string; titulo: string }>> {
 
-  const config = getConfigActiva()
-  const apiKey = config.proveedor === 'ollama'
-    ? 'ollama'
-    : process.env.OPENROUTER_API_KEY || ''
-  const baseURL = config.proveedor === 'ollama'
-    ? `${config.baseUrl}/v1`
-    : config.baseUrl
-
-  const openrouter = new (await import('openai')).default({
-    baseURL,
-    apiKey,
-    defaultHeaders: config.proveedor === 'openrouter' ? {
-      'HTTP-Referer': 'https://usinadejusticia.org.ar',
-      'X-Title': 'Mapa del Delito - Identificador',
-    } : {},
-  })
-
+  const { cliente, config } = crearClienteLLM('Mapa del Delito - Identificador')
   const modelo = config.modelo
 
   try {
-    const respuesta = await openrouter.chat.completions.create({
+    const respuesta = await cliente.chat.completions.create({
       model: modelo,
       messages: [
         {
@@ -751,38 +735,43 @@ async function main() {
           })
         }
 
-        const hecho = await prisma.hechoDelictivo.create({
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          data: {
-            tipoDelitoId: tipoDelito.id,
-            fechaHecho: fechaHecho,
-            anio: fechaHecho.getFullYear(),
-            mes: fechaHecho.getMonth() + 1,
-            ubicacionId: ubicacion.id,
-            cantidadVictimas: datos.cantidadVictimas || 1,
-            cantidadHechos: 1,
-            medioUtilizado: datos.medioUtilizado,
-            fuenteId: fuentePeriodistica!.id,
-            confianza: 'PRELIMINAR',
-            urlFuente: noticia.url,
-            esAgregado: false,
-            esCasoUsina: false,
-            requiereRevision: datos.requiereRevision ?? false,
-            nombreVictima: datos.nombreVictima ?? null,
-          } as Parameters<typeof prisma.hechoDelictivo.create>[0]['data']
-        })
+        // El hecho y su primera cobertura van en una transacción: si la
+        // cobertura falla (url es @unique, puede colisionar con una corrida
+        // concurrente) el hecho no queda huérfano en la cola de revisión
+        // sin ninguna fuente que el revisor pueda leer.
+        await prisma.$transaction(async (tx) => {
+          const hecho = await tx.hechoDelictivo.create({
+            data: {
+              tipoDelitoId: tipoDelito.id,
+              fechaHecho: fechaHecho,
+              anio: fechaHecho.getFullYear(),
+              mes: fechaHecho.getMonth() + 1,
+              ubicacionId: ubicacion!.id,
+              cantidadVictimas: datos.cantidadVictimas || 1,
+              cantidadHechos: 1,
+              medioUtilizado: datos.medioUtilizado,
+              fuenteId: fuentePeriodistica!.id,
+              confianza: 'PRELIMINAR',
+              urlFuente: noticia.url,
+              esAgregado: false,
+              esCasoUsina: false,
+              requiereRevision: datos.requiereRevision ?? false,
+              nombreVictima: datos.nombreVictima ?? null,
+            }
+          })
 
-        await prisma.coberturaMediatica.create({
-          data: {
-            hechoDelictivoId: hecho.id,
-            medio: noticia.medio,
-            medioTipo: noticia.medioTipo,
-            titulo: noticia.titulo,
-            url: noticia.url,
-            fechaPublicacion: new Date(),
-            resumen: datos.descripcionBreve,
-            tipoCobertura: 'HECHO_INICIAL',
-          }
+          await tx.coberturaMediatica.create({
+            data: {
+              hechoDelictivoId: hecho.id,
+              medio: noticia.medio,
+              medioTipo: noticia.medioTipo,
+              titulo: noticia.titulo,
+              url: noticia.url,
+              fechaPublicacion: new Date(),
+              resumen: datos.descripcionBreve,
+              tipoCobertura: 'HECHO_INICIAL',
+            }
+          })
         })
 
         totalInsertadas++
@@ -793,29 +782,39 @@ async function main() {
 
         const tipoCobertura = clasificarCobertura(noticia.titulo, noticia.texto)
 
-        await prisma.coberturaMediatica.create({
-          data: {
-            hechoDelictivoId: dedup.hechoDelictivoId!,
-            medio: noticia.medio,
-            medioTipo: noticia.medioTipo,
-            titulo: noticia.titulo,
-            url: noticia.url,
-            fechaPublicacion: new Date(),
-            resumen: datos.descripcionBreve,
-            tipoCobertura: tipoCobertura as 'HECHO_INICIAL' | 'ACTUALIZACION' | 'DETENCION' | 'MARCHA_RECLAMO' | 'PROCESO_JUDICIAL' | 'SENTENCIA' | 'ANIVERSARIO' | 'OPINION_EDITORIAL',
-          }
-        })
+        // La cobertura y la promoción a VERIFICADO van juntas: el conteo es
+        // un read-modify-write y dos corridas concurrentes podrían dejar el
+        // hecho sin promover pese a superar el umbral.
+        const totalCoberturas = await prisma.$transaction(async (tx) => {
+          await tx.coberturaMediatica.create({
+            data: {
+              hechoDelictivoId: dedup.hechoDelictivoId!,
+              medio: noticia.medio,
+              medioTipo: noticia.medioTipo,
+              titulo: noticia.titulo,
+              url: noticia.url,
+              fechaPublicacion: new Date(),
+              resumen: datos.descripcionBreve,
+              tipoCobertura: tipoCobertura as 'HECHO_INICIAL' | 'ACTUALIZACION' | 'DETENCION' | 'MARCHA_RECLAMO' | 'PROCESO_JUDICIAL' | 'SENTENCIA' | 'ANIVERSARIO' | 'OPINION_EDITORIAL',
+            }
+          })
 
-        // Promover a VERIFICADO si 3+ coberturas
-        const totalCoberturas = await prisma.coberturaMediatica.count({
-          where: { hechoDelictivoId: dedup.hechoDelictivoId! }
+          // Promover a VERIFICADO si 3+ coberturas
+          const total = await tx.coberturaMediatica.count({
+            where: { hechoDelictivoId: dedup.hechoDelictivoId! }
+          })
+
+          if (total >= 3) {
+            await tx.hechoDelictivo.update({
+              where: { id: dedup.hechoDelictivoId! },
+              data: { confianza: 'VERIFICADO' }
+            })
+          }
+
+          return total
         })
 
         if (totalCoberturas >= 3) {
-          await prisma.hechoDelictivo.update({
-            where: { id: dedup.hechoDelictivoId! },
-            data: { confianza: 'VERIFICADO' }
-          })
           log('✅', `Hecho promovido a VERIFICADO (${totalCoberturas} coberturas)`)
         }
 

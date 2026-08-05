@@ -31,16 +31,32 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+      # Solo informa: si el esquema de la base no coincide con schema.prisma,
+      # el pipeline falla con P2022 en la primera noticia. Verlo acá evita
+      # perder una corrida entera diagnosticando a ciegas. No aplica nada
+      # (eso lo hace migraciones.yml) ni bloquea la ingesta.
+      - name: Verificar estado de migraciones
+        run: npx prisma migrate status
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        continue-on-error: true
+
       - name: Verificar variables de entorno
         run: |
-          echo "OPENROUTER_API_KEY set: ${{ secrets.OPENROUTER_API_KEY != '' }}"
           echo "DATABASE_URL set: ${{ secrets.DATABASE_URL != '' }}"
-          echo "OPENROUTER_MODEL: ${{ secrets.OPENROUTER_MODEL }}"
+          echo "OPENCODE_API_KEY set: ${{ secrets.OPENCODE_API_KEY != '' }}"
+          echo "OPENROUTER_API_KEY set (respaldo): ${{ secrets.OPENROUTER_API_KEY != '' }}"
 
       - name: Correr pipeline
         run: npm run pipeline:run
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Proveedor activo: OpenCode Zen
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          # Overrides opcionales de modelo, por si Zen renombra alguno
+          OPENCODE_MODELO_ECONOMICO: ${{ secrets.OPENCODE_MODELO_ECONOMICO }}
+          OPENCODE_MODELO_PRECISO: ${{ secrets.OPENCODE_MODELO_PRECISO }}
+          # Respaldo: con PIPELINE_PERFIL_MODELO=openrouter se vuelve al anterior
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_MODEL: ${{ secrets.OPENROUTER_MODEL }}
           PIPELINE_DRY_RUN: 'false'

@@ -185,6 +185,8 @@ model HechoDelictivo {
   @@index([anio, tipoDelitoId])
   @@index([confianza])
   @@index([esCasoUsina])
+  // Cola de revisión: WHERE confianza = 'PRELIMINAR' ORDER BY created_at DESC
+  @@index([confianza, createdAt(sort: Desc)])
   @@map("hechos_delictivos")
 }
 
@@ -265,6 +267,8 @@ model CoberturaMediatica {
   @@index([hechoDelictivoId])
   @@index([medio])
   @@index([fechaPublicacion])
+  // Top-N por hecho: el LATERAL LIMIT 1 y el json_agg LIMIT 12 de /api/admin/revisiones
+  @@index([hechoDelictivoId, createdAt(sort: Desc)])
   @@map("coberturas_mediaticas")
 }
 

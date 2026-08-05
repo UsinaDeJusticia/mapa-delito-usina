@@ -1,0 +1,63 @@
+name: Aplicar migraciones de Prisma
+
+# Aplica las migraciones pendientes contra Neon cuando se mergea a master.
+#
+# Por qué acá y no en el build de Vercel:
+#   1. Los builds de preview no tienen DATABASE_URL — es lo que hacía fallar el
+#      prerender de las rutas API. Poner `migrate deploy` en el build rompería
+#      todos los previews.
+#   2. Si los previews SÍ tuvieran DATABASE_URL, normalmente apunta a la misma
+#      base que producción: un preview de cualquier rama migraría producción
+#      antes del merge.
+#
+# `migrate deploy` solo avanza: aplica las migraciones que faltan y nunca
+# borra ni reescribe. No corre `migrate dev` ni `migrate reset` — ninguno de
+# los dos es seguro en este proyecto porque revisiones_pipeline vive fuera de
+# schema.prisma y la detección de drift querría eliminarla.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'prisma/migrations/**'
+      - 'prisma/schema.prisma'
+  workflow_dispatch:
+
+# Evita que dos deploys simultáneos apliquen migraciones a la vez
+concurrency:
+  group: migraciones-prisma
+  cancel-in-progress: false
+
+jobs:
+  migrar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Estado de migraciones antes de aplicar
+        run: npx prisma migrate status
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        continue-on-error: true
+
+      - name: Aplicar migraciones pendientes
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Estado final
+        if: always()
+        run: npx prisma migrate status
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}

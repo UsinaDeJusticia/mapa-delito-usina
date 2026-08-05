@@ -73,12 +73,14 @@ mapa-delito-usina/
 │   │           └── useGeolocalizacion.ts# GPS del browser, no bloquea carga
 │   ├── config/
 │   │   ├── mapStyles.ts                 # Estilos Google Maps + helpers de color
-│   │   └── modelos-pipeline.ts          # Perfiles de modelo LLM (economico/preciso/local)
+│   │   └── modelos-pipeline.ts          # Perfiles de modelo LLM (economico/preciso/openrouter/local)
 │   ├── lib/
 │   │   └── mapa/
 │   │       ├── queries.ts               # Prisma singleton + todas las queries a BD
 │   │       ├── georef.ts                # Cliente para API Georef Argentina (IGN)
+│   │       ├── cliente-llm.ts           # Cliente LLM centralizado — único lugar que instancia OpenAI
 │   │       ├── openrouter.ts            # Extracción estructurada de noticias (LLM)
+│   │       ├── pipeline-runner.ts       # Lanza el pipeline como proceso hijo (usado por /api/pipeline/run)
 │   │       └── deduplicador.ts          # Deduplicación de noticias con IA
 │   └── types/
 │       └── mapa.ts                      # Tipos compartidos del frontend
@@ -139,14 +141,21 @@ Definir en `.env` (nunca commitear valores reales):
 
 ```
 DATABASE_URL                 # Conexión a Neon PostgreSQL (con pooler, sslmode=require)
-OPENROUTER_API_KEY           # API key de OpenRouter (pipeline de medios)
-PIPELINE_PERFIL_MODELO       # "economico" (default) | "preciso" | "local"
+OPENCODE_API_KEY             # API key de OpenCode Zen — proveedor LLM activo
+PIPELINE_PERFIL_MODELO       # "economico" (default) | "preciso" | "openrouter" | "local"
 PIPELINE_DRY_RUN             # "true" / "false" — controla si el pipeline escribe a BD
 PIPELINE_MAX_NOTICIAS        # Número máximo de noticias por corrida
 NEXT_PUBLIC_GOOGLE_MAPS_KEY  # API key de Google Maps (expuesta al browser)
 AUTH_SECRET                  # Secret para NextAuth v5 (mín. 32 chars aleatorios)
 GOOGLE_CLIENT_ID             # OAuth 2.0 Client ID (Google Cloud Console)
 GOOGLE_CLIENT_SECRET         # OAuth 2.0 Client Secret
+CRON_SECRET                  # Bearer token de /api/pipeline/run
+# Opcionales — override de modelo si OpenCode Zen renombra alguno:
+OPENCODE_MODELO_ECONOMICO    # default: deepseek-v4-flash
+OPENCODE_MODELO_PRECISO      # default: claude-haiku-4-5
+# Opcionales para el perfil de respaldo "openrouter":
+OPENROUTER_API_KEY           # API key de OpenRouter
+OPENROUTER_MODEL             # default: deepseek/deepseek-chat-v3-0324
 # Opcionales para perfil "local":
 OLLAMA_BASE_URL              # URL de Ollama (ej: http://localhost:11434)
 OLLAMA_MODEL                 # Nombre del modelo local (ej: llama3)
@@ -175,11 +184,20 @@ OLLAMA_MODEL                 # Nombre del modelo local (ej: llama3)
 6. Si es cobertura existente → solo agrega `CoberturaMediatica`
 
 ### Perfiles de modelo (`src/config/modelos-pipeline.ts`)
-| Perfil | Proveedor | Modelo |
-|---|---|---|
-| `economico` (default) | OpenRouter | DeepSeek V3 |
-| `preciso` | OpenRouter | Claude Haiku |
-| `local` | Ollama | configurable |
+| Perfil | Proveedor | Modelo | USD / 1M entrada |
+|---|---|---|---|
+| `economico` (default) | OpenCode Zen | `deepseek-v4-flash` | 0.14 |
+| `preciso` | OpenCode Zen | `claude-haiku-4-5` | 1.00 |
+| `openrouter` | OpenRouter | DeepSeek V3 | 0.14 |
+| `local` | Ollama | configurable | 0 |
+
+Se cambia de perfil con `PIPELINE_PERFIL_MODELO`. Un valor inválido cae a `economico`.
+
+**El cliente LLM se crea en un solo lugar**: `src/lib/mapa/cliente-llm.ts`. Los tres consumidores (`openrouter.ts`, `deduplicador.ts`, `scrapear-medios.ts`) lo usan vía `crearClienteLLM(titulo)`. **No instanciar `OpenAI` en otro lado** — la lógica de proveedor, baseURL y API key vive ahí. `credencialFaltante()` devuelve el nombre de la env var que falta para que quien llame decida si aborta o degrada.
+
+Los tres proveedores hablan la API de OpenAI. OpenCode Zen expone `/zen/v1` (compatible), Ollama publica la suya bajo `/v1`, y solo OpenRouter recibe los headers de atribución `HTTP-Referer` / `X-Title`.
+
+Los IDs de modelo de Zen son overridables por env var (`OPENCODE_MODELO_ECONOMICO`, `OPENCODE_MODELO_PRECISO`): si Zen renombra un modelo se corrige sin deploy. Catálogo público en `https://opencode.ai/zen/v1/models`.
 
 ### Few-shot automático
 `openrouter.ts` consulta los últimos 3 casos verificados por humanos en `revisiones_pipeline` y los inyecta como ejemplos en cada llamada al LLM. Se cachea 5 minutos para no repetir la query en cada noticia.
