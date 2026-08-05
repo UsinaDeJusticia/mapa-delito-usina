@@ -61,25 +61,18 @@ jobs:
         run: npm audit
         continue-on-error: true
 
-      - name: Verificar que no haya secretos trackeados
+      - name: Verificar que .env no esté trackeado
         run: |
-          set -e
           if git ls-files --error-unmatch .env 2>/dev/null; then
             echo "::error::.env está trackeado en git"
             exit 1
           fi
           echo "✔ .env no está trackeado"
 
-          # Ninguna URL PostgreSQL con credenciales en archivos trackeados.
-          # Se excluyen .env.example, docs y CI, que usan placeholders.
-          if git ls-files -z \
-            | grep -zvE '(^|/)(\.env\.example|package-lock\.json)$|^docs/|^\.github/' \
-            | xargs -0 grep -lE 'postgres(ql)?://[^:@ ]+:[^@ ]+@' 2>/dev/null \
-            | grep -v '^$'; then
-            echo "::error::hay una URL PostgreSQL con credenciales en archivos trackeados"
-            exit 1
-          fi
-          echo "✔ sin URLs PostgreSQL con credenciales en archivos trackeados"
+      # La heurística vive en un módulo con tests propios (tests/ci/) para no
+      # tener lógica de seguridad sin cubrir dentro del YAML.
+      - name: Verificar que no haya credenciales trackeadas
+        run: npx tsx scripts/ci/verificar-secretos.ts
 
       - name: Verificar whitespace del diff
         if: github.event_name == 'pull_request'
