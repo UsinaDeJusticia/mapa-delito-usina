@@ -1,3 +1,10 @@
+/**
+ * CREDENCIALES-DE-PRUEBA-INTENCIONALES
+ *
+ * Este archivo contiene URLs PostgreSQL con credenciales falsas a propósito:
+ * son los fixtures que verifican que la guarda de secretos las detecta. El
+ * marcador de arriba hace que la guarda se saltee este archivo.
+ */
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import {

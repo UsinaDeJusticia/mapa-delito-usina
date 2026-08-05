@@ -1,9 +1,18 @@
+/**
+ * CREDENCIALES-DE-PRUEBA-INTENCIONALES
+ *
+ * Este archivo contiene URLs PostgreSQL con credenciales falsas a propósito:
+ * son los fixtures que verifican que la guarda de secretos las detecta. El
+ * marcador de arriba hace que la guarda se saltee este archivo.
+ */
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   tieneCredencialReal,
   estaExcluida,
   buscarEnContenido,
+  declaraFixtures,
+  MARCADOR_FIXTURES,
 } from '../../scripts/ci/verificar-secretos'
 
 describe('tieneCredencialReal', () => {
@@ -101,6 +110,25 @@ describe('estaExcluida', () => {
     ]) {
       assert.equal(estaExcluida(r), false, `no debería excluir ${r}`)
     }
+  })
+})
+
+describe('declaraFixtures', () => {
+  test('reconoce el marcador en el encabezado', () => {
+    const contenido = `/**\n * ${MARCADOR_FIXTURES}\n */\nconst x = 1`
+    assert.equal(declaraFixtures(contenido), true)
+  })
+
+  test('no reconoce el marcador escondido más allá del encabezado', () => {
+    // Evita que alguien lo cuele al final de un archivo largo para saltear
+    // la guarda sin que se note en el diff.
+    const contenido = 'x\n'.repeat(1500) + MARCADOR_FIXTURES
+    assert.equal(declaraFixtures(contenido), false)
+  })
+
+  test('un archivo sin marcador no queda exento', () => {
+    assert.equal(declaraFixtures('const x = 1'), false)
+    assert.equal(declaraFixtures(''), false)
   })
 })
 

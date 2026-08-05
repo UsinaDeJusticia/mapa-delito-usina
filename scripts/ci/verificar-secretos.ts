@@ -59,6 +59,22 @@ export function estaExcluida(ruta: string): boolean {
 }
 
 /**
+ * Marcador que un archivo declara cuando contiene credenciales de prueba a
+ * propósito, como los fixtures que verifican esta misma detección.
+ *
+ * Se prefiere un marcador explícito por archivo antes que excluir todo `tests/`:
+ * así el resto de los tests sigue escaneado y el opt-out queda visible para
+ * quien revise el diff.
+ */
+export const MARCADOR_FIXTURES = 'CREDENCIALES-DE-PRUEBA-INTENCIONALES'
+
+export function declaraFixtures(contenido: string): boolean {
+  // Solo se busca en el encabezado: el marcador debe ser una declaración del
+  // archivo, no algo escondido en la línea 800.
+  return contenido.slice(0, 2000).includes(MARCADOR_FIXTURES)
+}
+
+/**
  * true si la línea contiene una credencial PostgreSQL que parece real.
  * Exportada para poder testear la heurística sin tocar el filesystem.
  */
@@ -114,6 +130,7 @@ function main(): void {
     } catch {
       continue
     }
+    if (declaraFixtures(contenido)) continue
     hallazgos.push(...buscarEnContenido(ruta, contenido))
   }
 
