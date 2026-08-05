@@ -76,4 +76,8 @@ jobs:
 
       - name: Verificar whitespace del diff
         if: github.event_name == 'pull_request'
-        run: git diff --check "origin/${{ github.base_ref }}...HEAD"
+        run: |
+          # El checkout no trae la rama base por defecto; hay que pedirla
+          # explícitamente antes de poder diffear contra ella.
+          git fetch origin "${{ github.base_ref }}" --depth=1
+          git diff --check "origin/${{ github.base_ref }}...HEAD"
