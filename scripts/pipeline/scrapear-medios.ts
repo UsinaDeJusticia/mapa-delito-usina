@@ -27,6 +27,10 @@ import {
   resolverEjecutable,
   EjecutableNoEncontradoError,
 } from '../../src/lib/pipeline/browser-cmd'
+import {
+  parsearJsonLLM,
+  validarLinksIdentificados,
+} from '../../src/lib/pipeline/schemas-llm'
 
 const prisma = new PrismaClient()
 
@@ -298,13 +302,21 @@ Máximo 10 resultados, ordenados de más a menos relevante.`
     })
 
     const contenido = respuesta.choices[0]?.message?.content?.trim() || '[]'
-    const jsonLimpio = contenido
-      .replace(/^```json\n?/i, '')
-      .replace(/\n?```$/i, '')
-      .trim()
 
-    const resultado = JSON.parse(jsonLimpio)
-    return Array.isArray(resultado) ? resultado : []
+    const parseado = parsearJsonLLM(contenido)
+    if (!parseado.ok) {
+      log('⚠️', `Identificación en ${medio}: respuesta no parseable — ${parseado.errores.join('; ')}`)
+      return []
+    }
+
+    // Valida cada entrada y descarta las que no cumplen, en lugar de aceptar el
+    // array crudo. Antes un ref con metacaracteres pasaba directo al comando.
+    const { links, descartados } = validarLinksIdentificados(parseado.valor)
+    if (descartados.length > 0) {
+      log('⚠️', `Identificación en ${medio}: ${descartados.length} entrada(s) descartada(s)`)
+      for (const d of descartados.slice(0, 5)) log('  ', d)
+    }
+    return links
 
   } catch (error) {
     const err = error as { message?: string; status?: number; response?: { data?: unknown } }
