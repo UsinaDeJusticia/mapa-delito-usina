@@ -6,8 +6,9 @@ const SIN_CACHE = { 'Cache-Control': 'no-store' }
 export async function GET() {
   const headersList = await headers()
   const authHeader = headersList.get('authorization')
+  const cronSecret = process.env.CRON_SECRET
 
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json(
       { error: 'Unauthorized' },
       { status: 401, headers: SIN_CACHE }
@@ -26,14 +27,19 @@ export async function GET() {
     // HTTP 200 { ok: true } con todos los contadores en cero, y cualquier
     // monitoreo que mire el status lo veía como una corrida exitosa.
     if (!resultado.ok) {
+      const { salida, ...resultadoPublico } = resultado
       console.error(
         '❌ Pipeline falló:',
         resultado.error,
         resultado.exitCode !== undefined ? `(exit ${resultado.exitCode})` : '',
-        '\n', resultado.salida ?? ''
+        '\n', salida ?? ''
       )
       return NextResponse.json(
-        { ok: false, error: resultado.error ?? 'Pipeline failed', resultado },
+        {
+          ok: false,
+          error: resultado.error ?? 'Pipeline failed',
+          resultado: resultadoPublico,
+        },
         { status: 500, headers: SIN_CACHE }
       )
     }
