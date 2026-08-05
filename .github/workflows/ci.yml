@@ -1,0 +1,86 @@
+name: CI
+
+# Verificación obligatoria de pull requests. No toca la base de datos ni
+# ejecuta el pipeline: solo instala, genera el cliente de Prisma, chequea
+# tipos, corre tests y compila.
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      # Genera el cliente de Prisma a partir de schema.prisma. No se conecta
+      # a la base: `generate` es offline y no necesita DATABASE_URL real.
+      - name: Generar cliente de Prisma
+        run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci?schema=public
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      - name: Build
+        run: npx next build
+        env:
+          # Placeholders: el build no debe requerir credenciales reales. Las
+          # rutas API son force-dynamic, así que no se ejecutan en build time.
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci?schema=public
+          NEXT_PUBLIC_GOOGLE_MAPS_KEY: ci-placeholder
+          AUTH_SECRET: ci-placeholder-secret-de-32-caracteres-minimo
+          NEXTAUTH_URL: http://localhost:3000
+
+      # Informativo: no bloquea el PR. Las vulnerabilidades pendientes de
+      # Next.js se tratan en su propia rama de migración.
+      - name: npm audit
+        run: npm audit
+        continue-on-error: true
+
+      - name: Verificar que no haya secretos trackeados
+        run: |
+          set -e
+          if git ls-files --error-unmatch .env 2>/dev/null; then
+            echo "::error::.env está trackeado en git"
+            exit 1
+          fi
+          echo "✔ .env no está trackeado"
+
+          # Ninguna URL PostgreSQL con credenciales en archivos trackeados.
+          # Se excluyen .env.example, docs y CI, que usan placeholders.
+          if git ls-files -z \
+            | grep -zvE '(^|/)(\.env\.example|package-lock\.json)$|^docs/|^\.github/' \
+            | xargs -0 grep -lE 'postgres(ql)?://[^:@ ]+:[^@ ]+@' 2>/dev/null \
+            | grep -v '^$'; then
+            echo "::error::hay una URL PostgreSQL con credenciales en archivos trackeados"
+            exit 1
+          fi
+          echo "✔ sin URLs PostgreSQL con credenciales en archivos trackeados"
+
+      - name: Verificar whitespace del diff
+        if: github.event_name == 'pull_request'
+        run: git diff --check "origin/${{ github.base_ref }}...HEAD"
