@@ -11,32 +11,32 @@ export interface ConfigModelo {
   costoPorMilTokens: number
 }
 
-// OpenCode Zen expone una API compatible con OpenAI en /zen/v1, así que el
+// OpenCode Go expone una API compatible con OpenAI en /zen/go/v1, así que el
 // cliente `openai` funciona apuntándole el baseURL.
-const OPENCODE_BASE_URL = 'https://opencode.ai/zen/v1'
+const OPENCODE_BASE_URL = 'https://opencode.ai/zen/go/v1'
 
-// Los IDs salen del catálogo público https://opencode.ai/zen/v1/models y son
-// overridables por env var a propósito: si Zen renombra o discontinúa un modelo
+// Los IDs salen del catálogo público https://opencode.ai/zen/go/v1/models y son
+// overridables por env var a propósito: si Go renombra o discontinúa un modelo
 // se corrige cambiando una variable, sin tocar código ni redeployar.
 const MODELO_ECONOMICO = process.env.OPENCODE_MODELO_ECONOMICO ?? 'deepseek-v4-flash'
-const MODELO_PRECISO = process.env.OPENCODE_MODELO_PRECISO ?? 'claude-haiku-4-5'
+const MODELO_PRECISO = process.env.OPENCODE_MODELO_PRECISO ?? 'deepseek-v4-pro'
 
 export const PERFILES_MODELO: Record<PerfilModelo, ConfigModelo> = {
   economico: {
     proveedor: 'opencode',
     modelo: MODELO_ECONOMICO,
     baseUrl: OPENCODE_BASE_URL,
-    descripcion: `OpenCode Zen · ${MODELO_ECONOMICO} — costo mínimo`,
+    descripcion: `OpenCode Go · ${MODELO_ECONOMICO} — costo mínimo`,
     costoPorMilTokens: 0.00014, // deepseek-v4-flash: USD 0.14 por 1M de entrada
   },
   preciso: {
     proveedor: 'opencode',
     modelo: MODELO_PRECISO,
     baseUrl: OPENCODE_BASE_URL,
-    descripcion: `OpenCode Zen · ${MODELO_PRECISO} — mayor precisión`,
-    costoPorMilTokens: 0.001, // claude-haiku-4-5: USD 1.00 por 1M de entrada
+    descripcion: `OpenCode Go · ${MODELO_PRECISO} — mayor precisión`,
+    costoPorMilTokens: 0.000435, // deepseek-v4-pro: USD 0.435 por 1M de entrada
   },
-  // Perfil de respaldo: si Zen se cae o un modelo deja de responder como se
+  // Perfil de respaldo: si Go se cae o un modelo deja de responder como se
   // espera, se vuelve al proveedor anterior con PIPELINE_PERFIL_MODELO=openrouter
   // sin necesidad de deploy.
   openrouter: {

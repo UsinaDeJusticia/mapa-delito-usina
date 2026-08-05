@@ -51,9 +51,9 @@ jobs:
         run: npm run pipeline:run
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          # Proveedor activo: OpenCode Zen
+          # Proveedor activo: OpenCode Go
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          # Overrides opcionales de modelo, por si Zen renombra alguno
+          # Overrides opcionales de modelo, por si Go renombra alguno
           OPENCODE_MODELO_ECONOMICO: ${{ secrets.OPENCODE_MODELO_ECONOMICO }}
           OPENCODE_MODELO_PRECISO: ${{ secrets.OPENCODE_MODELO_PRECISO }}
           # Respaldo: con PIPELINE_PERFIL_MODELO=openrouter se vuelve al anterior
