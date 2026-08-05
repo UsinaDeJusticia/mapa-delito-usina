@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server'
 import { headers } from 'next/headers'
+import { autorizarCron, mensajeRechazo, SIN_CACHE } from '@/lib/auth/cron'
 
-const SIN_CACHE = { 'Cache-Control': 'no-store' }
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   const headersList = await headers()
-  const authHeader = headersList.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
+  const auth = autorizarCron(headersList.get('authorization'))
 
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  if (!auth.autorizado) {
+    console.warn(`pipeline/run rechazado: ${mensajeRechazo(auth.motivo)}`)
     return NextResponse.json(
       { error: 'Unauthorized' },
       { status: 401, headers: SIN_CACHE }
