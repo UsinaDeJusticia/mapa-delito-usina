@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useCallback, useState } from 'react'
+import { contenidoCeldaH3 } from '@/lib/mapa/infowindow-dom'
 import { useMap } from '@vis.gl/react-google-maps'
 import { cellToBoundary } from 'h3-js'
 import { useH3Density, getH3Resolution } from '@/hooks/useH3Density'
@@ -91,10 +92,7 @@ export function CapaH3({ anio, visible, fuente }: Props) {
       polygon.addListener('click', (e: google.maps.MapMouseEvent) => {
         if (!infoRef.current || !e.latLng) return
         infoRef.current.setContent(
-          `<div style="font-family:system-ui;font-size:12px;padding:2px 4px;min-width:100px;">
-            <strong style="color:#1E427C;">${cell.count} hecho${cell.count > 1 ? 's' : ''}</strong><br/>
-            <span style="color:#666;">${cell.victimas} víctima${cell.victimas > 1 ? 's' : ''}</span>
-          </div>`
+          contenidoCeldaH3({ count: cell.count, victimas: cell.victimas })
         )
         infoRef.current.setPosition(e.latLng)
         infoRef.current.open(map)

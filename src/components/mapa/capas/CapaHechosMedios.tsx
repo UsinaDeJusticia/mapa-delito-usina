@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { contenidoHechoMedio } from '@/lib/mapa/infowindow-dom'
 import { useMap } from '@vis.gl/react-google-maps'
 
 export interface HechoMedio {
@@ -79,34 +80,20 @@ export function CapaHechosMedios({ hechos, visible }: Props) {
           ? new Date(hecho.fecha_hecho).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })
           : 'Fecha desconocida'
 
-        const badgeColor = esVerificado ? '#15803D' : '#92400E'
-        const badgeBg = esVerificado ? '#DCFCE7' : '#FEF3C7'
-        const badgeLabel = esVerificado ? '✓ Verificado' : '⏳ Preliminar'
-
-        const linkHtml = hecho.url_cobertura
-          ? `<a href="${hecho.url_cobertura}" target="_blank" rel="noopener noreferrer"
-               style="display:inline-block;margin-top:8px;font-size:11px;color:#1E427C;text-decoration:underline;">
-               Ver noticia ↗
-             </a>`
-          : ''
-
-        infoWindow.setContent(`
-          <div style="font-family:system-ui,sans-serif;max-width:260px;padding:2px;">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-              <span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:99px;
-                           background:${badgeBg};color:${badgeColor};">${badgeLabel}</span>
-              ${hecho.medio ? `<span style="font-size:10px;color:#6B7280;">${hecho.medio}</span>` : ''}
-            </div>
-            <p style="font-size:13px;font-weight:600;color:#111827;margin:0 0 4px;line-height:1.4;">
-              ${hecho.titulo ?? 'Sin título'}
-            </p>
-            <p style="font-size:11px;color:#6B7280;margin:0;">
-              ${hecho.ciudad ?? hecho.provincia ?? '—'}${hecho.provincia && hecho.ciudad ? `, ${hecho.provincia}` : ''} · ${fecha}
-            </p>
-            ${hecho.tipo_delito ? `<p style="font-size:11px;color:#1E427C;margin:4px 0 0;font-weight:500;">${hecho.tipo_delito}</p>` : ''}
-            ${linkHtml}
-          </div>
-        `)
+        // Contenido como nodos DOM: título, medio, ubicación y URL vienen de
+        // scraping, y setContent(string) los interpretaría como HTML.
+        infoWindow.setContent(
+          contenidoHechoMedio({
+            titulo: hecho.titulo,
+            medio: hecho.medio,
+            ciudad: hecho.ciudad,
+            provincia: hecho.provincia,
+            tipo_delito: hecho.tipo_delito,
+            url_cobertura: hecho.url_cobertura,
+            fecha,
+            esVerificado,
+          })
+        )
         infoWindow.open(map, marker)
       })
 

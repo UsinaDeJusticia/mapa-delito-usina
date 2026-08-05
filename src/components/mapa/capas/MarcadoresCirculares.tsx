@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { contenidoProvincia } from '@/lib/mapa/infowindow-dom'
 import { useMap } from '@vis.gl/react-google-maps'
 
 const USINA_AZUL = '#1E427C'
@@ -101,43 +102,16 @@ export function MarcadoresCirculares({ datos, onProvinciaClick, filtroActivo = f
       })
 
       marker.addListener('mouseover', () => {
-        const hechos = (provincia.totalHechos || 0).toLocaleString('es-AR')
-        const victimas = (provincia.totalVictimas || 0).toLocaleString('es-AR')
-
-        const topDelitos = (provincia.delitos || [])
-          .sort((a, b) => b.hechos - a.hechos)
-          .slice(0, 3)
-          .map(d => `
-            <div style="display:flex;justify-content:space-between;gap:12px;padding:2px 0;">
-              <span style="color:#374151;">${d.nombre}</span>
-              <span style="font-weight:600;color:${USINA_AZUL};">${d.hechos.toLocaleString('es-AR')}</span>
-            </div>
-          `)
-          .join('')
-
-        infoWindow.setContent(`
-          <div style="font-family:system-ui,sans-serif;min-width:200px;padding:4px 2px;">
-            <div style="font-weight:700;font-size:14px;color:${USINA_AZUL};margin-bottom:8px;border-bottom:2px solid ${USINA_AZUL};padding-bottom:6px;">
-              ${provincia.provincia}
-            </div>
-            <div style="display:flex;gap:20px;margin-bottom:8px;">
-              <div>
-                <div style="font-size:11px;color:#6B7280;">Hechos</div>
-                <div style="font-size:18px;font-weight:700;color:#111827;">${hechos}</div>
-              </div>
-              <div>
-                <div style="font-size:11px;color:#6B7280;">Víctimas</div>
-                <div style="font-size:18px;font-weight:700;color:#111827;">${victimas}</div>
-              </div>
-            </div>
-            ${topDelitos ? `
-              <div style="border-top:1px solid #E5E7EB;padding-top:6px;font-size:12px;">
-                ${topDelitos}
-              </div>
-            ` : ''}
-            <div style="font-size:10px;color:#9CA3AF;margin-top:6px;">Click para más detalle</div>
-          </div>
-        `)
+        // Contenido como nodos DOM: el nombre de provincia y los nombres de
+        // delito salen de la base y setContent(string) los trataría como HTML.
+        infoWindow.setContent(
+          contenidoProvincia({
+            provincia: provincia.provincia,
+            totalHechos: provincia.totalHechos,
+            totalVictimas: provincia.totalVictimas,
+            delitos: provincia.delitos,
+          })
+        )
         infoWindow.open(map, marker)
       })
 

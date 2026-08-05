@@ -8,6 +8,11 @@
 
 import { getConfigActiva } from '@/config/modelos-pipeline'
 import { crearClienteLLM, credencialFaltante } from '@/lib/mapa/cliente-llm'
+import {
+  parsearJsonLLM,
+  validarExtraccion,
+  type ExtraccionValidada,
+} from '@/lib/pipeline/schemas-llm'
 import { prisma } from '@/lib/mapa/queries'
 
 // Caché de ejemplos few-shot: se invalida cada 5 minutos
@@ -108,21 +113,6 @@ Respondé EXCLUSIVAMENTE con un objeto JSON válido, sin backticks, sin texto in
 // TIPOS INTERNOS Y MAPEO
 // ════════════════════════════════════════════
 
-// Estructura que devuelve el LLM (nuevo formato)
-interface LLMRespuesta {
-  esHechoDelictivo: boolean
-  snic_codigo: number | null
-  provincia: string | null
-  localidad: string | null
-  barrio_o_direccion: string | null
-  fecha_hecho: string | null
-  cantidad_victimas: number | null
-  resumen_hecho: string | null
-  nombre_victima: string | null
-  requiereRevision: boolean
-  confianzaExtraccion: number
-}
-
 const SNIC_DESCRIPCION: Record<number, string> = {
   0: 'Muerte violenta en investigación',
   1: 'Homicidio doloso',
@@ -131,24 +121,31 @@ const SNIC_DESCRIPCION: Record<number, string> = {
   4: 'Femicidio',
 }
 
-function mapearRespuesta(resp: LLMRespuesta): HechoExtraido {
+/**
+ * Mapea la respuesta ya validada al tipo interno del pipeline.
+ *
+ * Recibe ExtraccionValidada, no el JSON crudo: los rangos, enums, fechas y
+ * longitudes ya se verificaron en validarExtraccion(), así que acá no hace
+ * falta ningún fallback defensivo.
+ */
+function mapearRespuesta(resp: ExtraccionValidada): HechoExtraido {
   return {
     esHechoDelictivo: resp.esHechoDelictivo,
-    tipoHecho: resp.snic_codigo != null ? (SNIC_DESCRIPCION[resp.snic_codigo] ?? null) : null,
-    codigoSnicEstimado: resp.snic_codigo ?? null,
+    tipoHecho: resp.snicCodigo != null ? (SNIC_DESCRIPCION[resp.snicCodigo] ?? null) : null,
+    codigoSnicEstimado: resp.snicCodigo,
     ubicacion: {
-      provincia: resp.provincia ?? null,
-      ciudad: resp.localidad ?? null,
-      barrio: resp.barrio_o_direccion ?? null,
+      provincia: resp.provincia,
+      ciudad: resp.localidad,
+      barrio: resp.barrioODireccion,
       direccion: null,
     },
-    fecha: resp.fecha_hecho ?? null,
-    cantidadVictimas: resp.cantidad_victimas ?? null,
+    fecha: resp.fechaHecho,
+    cantidadVictimas: resp.cantidadVictimas,
     medioUtilizado: null,
-    descripcionBreve: resp.resumen_hecho ?? null,
-    nombreVictima: resp.nombre_victima ?? null,
-    confianzaExtraccion: typeof resp.confianzaExtraccion === 'number' ? resp.confianzaExtraccion : 50,
-    requiereRevision: resp.requiereRevision ?? false,
+    descripcionBreve: resp.resumenHecho,
+    nombreVictima: resp.nombreVictima,
+    confianzaExtraccion: resp.confianzaExtraccion,
+    requiereRevision: resp.requiereRevision,
   }
 }
 
@@ -233,21 +230,25 @@ export async function extraerDatosNoticia(
       return RESPUESTA_FALLBACK
     }
 
-    // Limpiar posibles backticks o markdown
-    const jsonLimpio = contenido
-      .replace(/^```json\n?/i, '')
-      .replace(/\n?```$/i, '')
-      .trim()
-
-    const raw = JSON.parse(jsonLimpio) as LLMRespuesta
-
-    // Validar campo mínimo
-    if (typeof raw.esHechoDelictivo !== 'boolean') {
-      console.error('⚠️ Respuesta IA sin campo esHechoDelictivo')
+    const parseado = parsearJsonLLM(contenido)
+    if (!parseado.ok) {
+      console.error(`⚠️ Respuesta del modelo no parseable (${urlFuente}): ${parseado.errores.join('; ')}`)
       return RESPUESTA_FALLBACK
     }
 
-    return mapearRespuesta(raw)
+    // Validación runtime completa. Antes esto era `JSON.parse(x) as LLMRespuesta`
+    // con un solo chequeo de esHechoDelictivo, así que fechas, confianza,
+    // cantidades y códigos SNIC arbitrarios se convertían en datos de la base.
+    const validado = validarExtraccion(parseado.valor)
+    if (!validado.ok) {
+      console.error(
+        `⚠️ Respuesta del modelo inválida (${urlFuente}): ${validado.errores.join('; ')}`
+      )
+      // Se descarta explícitamente en lugar de insertar datos a medias.
+      return RESPUESTA_FALLBACK
+    }
+
+    return mapearRespuesta(validado.valor)
 
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)

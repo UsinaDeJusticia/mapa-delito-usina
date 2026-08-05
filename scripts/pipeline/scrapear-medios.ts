@@ -15,11 +15,22 @@
  *   npx tsx scripts/pipeline/scrapear-medios.ts --medio=infobae
  */
 
-import { execSync } from 'child_process'
 import { PrismaClient } from '@prisma/client'
 import { extraerDatosNoticia } from '../../src/lib/mapa/openrouter'
 import { deduplicar, clasificarCobertura } from '../../src/lib/mapa/deduplicador'
 import { crearClienteLLM } from '../../src/lib/mapa/cliente-llm'
+import {
+  comandos,
+  ejecutarBrowser,
+  esRefValido,
+  extraerRefDeSnapshot,
+  resolverEjecutable,
+  EjecutableNoEncontradoError,
+} from '../../src/lib/pipeline/browser-cmd'
+import {
+  parsearJsonLLM,
+  validarLinksIdentificados,
+} from '../../src/lib/pipeline/schemas-llm'
 
 const prisma = new PrismaClient()
 
@@ -207,25 +218,23 @@ function log(emoji: string, msg: string, data?: unknown) {
 }
 
 /**
- * Ejecuta un comando de agent-browser CLI y devuelve el output.
+ * Ejecuta agent-browser con argumentos separados y sin shell.
+ *
+ * Reemplaza al viejo `agentCmd(string)`, que concatenaba el comando y lo pasaba
+ * a `execSync`: un `ref` elegido por el LLM a partir del snapshot de un sitio de
+ * terceros llegaba a un shell con el entorno completo del proceso. Ahora los
+ * comandos se construyen como arrays validados en src/lib/pipeline/browser-cmd.ts
+ * y el subproceso recibe un entorno mínimo, sin credenciales.
+ *
+ * Devuelve stdout o cadena vacía si falló, igual que antes, para no cambiar el
+ * manejo de errores de los llamadores.
  */
-function agentCmd(comando: string, timeoutMs: number = 30000): string {
-  try {
-    const resultado = execSync(`agent-browser ${comando}`, {
-      encoding: 'utf-8',
-      timeout: timeoutMs,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    })
-    return resultado.trim()
-  } catch (error) {
-    const err = error as NodeJS.ErrnoException & { killed?: boolean; stderr?: string }
-    if (err.killed) {
-      log('⚠️', `Timeout: agent-browser ${comando.slice(0, 60)}...`)
-    } else if (err.stderr) {
-      log('⚠️', `Error agent-browser: ${err.stderr.slice(0, 150)}`)
-    }
-    return ''
+function ab(args: readonly string[], timeoutMs: number = 30000): string {
+  const r = ejecutarBrowser(args, { timeoutMs })
+  if (!r.ok && r.error) {
+    log('⚠️', `agent-browser ${args[0]}: ${r.error.slice(0, 150)}`)
   }
+  return r.salida
 }
 
 /**
@@ -293,13 +302,21 @@ Máximo 10 resultados, ordenados de más a menos relevante.`
     })
 
     const contenido = respuesta.choices[0]?.message?.content?.trim() || '[]'
-    const jsonLimpio = contenido
-      .replace(/^```json\n?/i, '')
-      .replace(/\n?```$/i, '')
-      .trim()
 
-    const resultado = JSON.parse(jsonLimpio)
-    return Array.isArray(resultado) ? resultado : []
+    const parseado = parsearJsonLLM(contenido)
+    if (!parseado.ok) {
+      log('⚠️', `Identificación en ${medio}: respuesta no parseable — ${parseado.errores.join('; ')}`)
+      return []
+    }
+
+    // Valida cada entrada y descarta las que no cumplen, en lugar de aceptar el
+    // array crudo. Antes un ref con metacaracteres pasaba directo al comando.
+    const { links, descartados } = validarLinksIdentificados(parseado.valor)
+    if (descartados.length > 0) {
+      log('⚠️', `Identificación en ${medio}: ${descartados.length} entrada(s) descartada(s)`)
+      for (const d of descartados.slice(0, 5)) log('  ', d)
+    }
+    return links
 
   } catch (error) {
     const err = error as { message?: string; status?: number; response?: { data?: unknown } }
@@ -316,10 +333,10 @@ Máximo 10 resultados, ordenados de más a menos relevante.`
  */
 function prewarmDaemon(): boolean {
   log('🔥', 'Pre-warming agent-browser daemon...')
-  const result = agentCmd('open about:blank', 90000) // 90s para cold-start
+  const result = ab(comandos.abrirEnBlanco(), 90000) // 90s para cold-start
   if (result === '') {
     // Puede devolver vacío pero funcionar igual, verificar con get url
-    const url = agentCmd('get url', 5000)
+    const url = ab(comandos.getUrl(), 5000)
     if (!url) {
       log('❌', 'No se pudo iniciar agent-browser')
       return false
@@ -351,11 +368,11 @@ async function scrapearMedio(medio: MedioConfig, yaPrewarmed: boolean): Promise<
 
   try {
     // 1. Navegar a la sección policial
-    agentCmd(`open "${urlTarget}"`, 30000)
-    agentCmd('wait --load networkidle', 20000)
+    ab(comandos.abrir(urlTarget), 30000)
+    ab(comandos.esperarCarga(), 20000)
 
     // 2. Snapshot interactivo para obtener refs de links
-    const snapshot = agentCmd('snapshot -i -c', 15000)
+    const snapshot = ab(comandos.snapshotInteractivo(), 15000)
 
     if (!snapshot) {
       log('⚠️', `No se pudo obtener snapshot de ${medio.nombre}`)
@@ -386,25 +403,34 @@ async function scrapearMedio(medio: MedioConfig, yaPrewarmed: boolean): Promise<
 
     for (const link of linksAVisitar) {
       try {
-        // Re-snapshot y buscar ref fresco por título
-        const freshSnapshot = agentCmd('snapshot -i -c', 10000)
-        const escapedTitulo = link.titulo.slice(0, 40).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        const freshMatch = freshSnapshot.match(new RegExp(`"${escapedTitulo}.*?\\[ref=(e\\d+)\\]`))
-        const currentRef = freshMatch ? freshMatch[1] : link.ref
+        // Re-snapshot y buscar ref fresco por título. extraerRefDeSnapshot usa
+        // una regex fija y valida el formato; no compila el título del LLM.
+        const freshSnapshot = ab(comandos.snapshotInteractivo(), 10000)
+        const refFresco = extraerRefDeSnapshot(freshSnapshot, link.titulo)
+
+        // Si no se encontró en el snapshot fresco se cae al ref que devolvió el
+        // LLM, pero solo si cumple ^e[0-9]+$. Un ref con metacaracteres se
+        // descarta: antes llegaba concatenado a un shell.
+        const currentRef = refFresco ?? (esRefValido(link.ref) ? link.ref : null)
+
+        if (!currentRef) {
+          log('⏭️', `Ref inválido o no encontrado, se descarta: ${link.titulo.slice(0, 50)}`)
+          continue
+        }
 
         // Abrir en tab nueva (tab 0 queda intacta)
-        agentCmd(`click @${currentRef} --new-tab`)
+        ab(comandos.clickNuevaTab(currentRef))
         await new Promise(r => setTimeout(r, 2000)) // Esperar navegación
 
         // Cambiar a tab 1 (la del detalle)
-        agentCmd('tab 1')
-        agentCmd('wait --load networkidle', 10000)
+        ab(comandos.tab(1))
+        ab(comandos.esperarCarga(), 10000)
 
         // Obtener URL del artículo
-        const urlArticulo = agentCmd('get url')
+        const urlArticulo = ab(comandos.getUrl())
 
         // Obtener título
-        const titulo = agentCmd('get title') || link.titulo
+        const titulo = ab(comandos.getTitulo()) || link.titulo
 
         // Extraer texto con selectores comunes
         let texto = ''
@@ -426,22 +452,22 @@ async function scrapearMedio(medio: MedioConfig, yaPrewarmed: boolean): Promise<
         ]
 
         for (const selector of selectoresContenido) {
-          texto = agentCmd(`get text "${selector}"`, 5000)
+          texto = ab(comandos.getTexto(selector), 5000)
           if (texto && texto.length > 100) break
         }
 
         // Fallback: snapshot compacto de main
         if (!texto || texto.length < 100) {
-          const snapMain = agentCmd('snapshot -s "main" -c', 5000)
+          const snapMain = ab(comandos.snapshotSelector('main'), 5000)
           if (snapMain && snapMain.length > 100) {
             texto = snapMain.slice(0, 5000)
           }
         }
 
         // Cerrar tab de detalle, volver a tab 0
-        agentCmd('tab close')
+        ab(comandos.cerrarTab())
         await new Promise(r => setTimeout(r, 500))
-        agentCmd('tab 0')
+        ab(comandos.tab(0))
         await new Promise(r => setTimeout(r, 500))
 
         if (titulo && texto && texto.length > 80) {
@@ -462,8 +488,8 @@ async function scrapearMedio(medio: MedioConfig, yaPrewarmed: boolean): Promise<
         log('⚠️', `Error en noticia: ${String(error).slice(0, 100)}`)
         // Intentar recuperar: cerrar tabs extras y volver a tab 0
         try {
-          agentCmd('tab close')
-          agentCmd('tab 0')
+          ab(comandos.cerrarTab())
+          ab(comandos.tab(0))
         } catch (_e2) { /* ignorar */ }
       }
 
@@ -544,11 +570,24 @@ async function main() {
   log('⚙️', `Máximo noticias por medio: ${MAX_NOTICIAS}`)
   log('⚙️', `Confianza mínima: ${CONFIANZA_MINIMA}%`)
 
-  // Verificar que agent-browser está instalado
-  const versionAB = agentCmd('--version', 5000)
+  // Resolver el ejecutable local antes de cualquier otra cosa. Se usa la ruta
+  // explícita de node_modules/.bin en vez del PATH, para no depender de un
+  // binario global de versión desconocida ni de un PATH inyectado.
+  try {
+    const ruta = resolverEjecutable()
+    log('✅', `agent-browser encontrado en ${ruta}`)
+  } catch (error) {
+    if (error instanceof EjecutableNoEncontradoError) {
+      log('❌', error.message)
+      process.exit(1)
+    }
+    throw error
+  }
+
+  const versionAB = ab(comandos.version(), 5000)
   if (!versionAB) {
-    log('❌', 'agent-browser no está instalado o no responde')
-    log('💡', 'Instalar con: npm install -g agent-browser && agent-browser install')
+    log('❌', 'agent-browser está instalado pero no responde')
+    log('💡', 'Probá: npx agent-browser install')
     process.exit(1)
   }
   log('✅', `agent-browser ${versionAB}`)
@@ -827,7 +866,7 @@ async function main() {
   }
 
   // Cerrar browser al final
-  agentCmd('close')
+  ab(comandos.cerrar())
 
   // ── Resumen final ──
   log('', '═'.repeat(60))

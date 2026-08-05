@@ -1,0 +1,84 @@
+name: CI
+
+# Verificación obligatoria de pull requests. No toca la base de datos ni
+# ejecuta el pipeline: solo instala, genera el cliente de Prisma, chequea
+# tipos, corre tests y compila.
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+        with:
+          # Historial completo: sin esto el checkout trae solo el commit de
+          # HEAD, y un fetch superficial de la rama base después no comparte
+          # ningún ancestro con él ("no merge base") a la hora de diffear.
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      # Genera el cliente de Prisma a partir de schema.prisma. No se conecta
+      # a la base: `generate` es offline y no necesita DATABASE_URL real.
+      - name: Generar cliente de Prisma
+        run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci?schema=public
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      - name: Build
+        run: npx next build
+        env:
+          # Placeholders: el build no debe requerir credenciales reales. Las
+          # rutas API son force-dynamic, así que no se ejecutan en build time.
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci?schema=public
+          NEXT_PUBLIC_GOOGLE_MAPS_KEY: ci-placeholder
+          AUTH_SECRET: ci-placeholder-secret-de-32-caracteres-minimo
+          NEXTAUTH_URL: http://localhost:3000
+
+      # Informativo: no bloquea el PR. Las vulnerabilidades pendientes de
+      # Next.js se tratan en su propia rama de migración.
+      - name: npm audit
+        run: npm audit
+        continue-on-error: true
+
+      - name: Verificar que .env no esté trackeado
+        run: |
+          if git ls-files --error-unmatch .env 2>/dev/null; then
+            echo "::error::.env está trackeado en git"
+            exit 1
+          fi
+          echo "✔ .env no está trackeado"
+
+      # La heurística vive en un módulo con tests propios (tests/ci/) para no
+      # tener lógica de seguridad sin cubrir dentro del YAML.
+      - name: Verificar que no haya credenciales trackeadas
+        run: npx tsx scripts/ci/verificar-secretos.ts
+
+      - name: Verificar whitespace del diff
+        if: github.event_name == 'pull_request'
+        run: git diff --check "origin/${{ github.base_ref }}...HEAD"

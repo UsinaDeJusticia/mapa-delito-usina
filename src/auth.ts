@@ -1,10 +1,8 @@
 import NextAuth from 'next-auth'
 import Google from 'next-auth/providers/google'
+import { evaluarAllowlist, parsearAllowlist, puedeAcceder } from '@/lib/auth/allowlist'
 
-const allowedEmails = (process.env.ALLOWED_EMAILS ?? '')
-  .split(',')
-  .map(e => e.trim().toLowerCase())
-  .filter(Boolean)
+const allowedEmails = parsearAllowlist(process.env.ALLOWED_EMAILS)
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
@@ -17,16 +15,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     signIn({ user }) {
-      if (allowedEmails.length === 0) {
-        return process.env.NODE_ENV !== 'production'
+      const resultado = evaluarAllowlist(user.email, {
+        allowlist: allowedEmails,
+        esProduccion: process.env.NODE_ENV === 'production',
+      })
+
+      if (!resultado.permitido) {
+        // No se loguea el email: es un dato personal y termina en logs del server.
+        console.warn(`Login rechazado: ${resultado.motivo}`)
       }
-      return allowedEmails.includes(user.email?.toLowerCase() ?? '')
+
+      return resultado.permitido
     },
     authorized({ auth, request: { nextUrl } }) {
-      const isLoggedIn = !!auth?.user
-      const isAdminRoute = nextUrl.pathname.startsWith('/admin')
-      if (isAdminRoute) return isLoggedIn
-      return true
+      return puedeAcceder(nextUrl.pathname, !!auth?.user)
     },
     session({ session }) {
       return session

@@ -15,6 +15,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/mapa/queries'
 import { crearClienteLLM } from '@/lib/mapa/cliente-llm'
+import { parsearJsonLLM, validarDeduplicacion } from '@/lib/pipeline/schemas-llm'
 
 // ════════════════════════════════════════════
 // TIPOS
@@ -170,24 +171,46 @@ o
     })
 
     const contenido = respuesta.choices[0]?.message?.content?.trim() || ''
-    const jsonLimpio = contenido
-      .replace(/^```json\n?/i, '')
-      .replace(/\n?```$/i, '')
-      .trim()
 
-    return JSON.parse(jsonLimpio)
+    const parseado = parsearJsonLLM(contenido)
+    if (!parseado.ok) {
+      console.error(`⚠️ Deduplicación: respuesta no parseable — ${parseado.errores.join('; ')}`)
+      return FALLBACK_DEDUP
+    }
+
+    // La verificación clave: candidatoId tiene que pertenecer al conjunto que
+    // efectivamente se le mandó al modelo. Sin esto, un ID alucinado o inducido
+    // por el contenido de la noticia podía vincular esta cobertura a cualquier
+    // hecho de la base.
+    const idsEnviados = candidatos.map(c => c.id)
+    const validado = validarDeduplicacion(parseado.valor, idsEnviados)
+
+    if (!validado.ok) {
+      console.error(`⚠️ Deduplicación: respuesta inválida — ${validado.errores.join('; ')}`)
+      return FALLBACK_DEDUP
+    }
+
+    return validado.valor
 
   } catch (error) {
+    // Error del proveedor, distinto de una decisión negativa del modelo.
     console.error('Error en deduplicación IA:', error)
-    // En caso de error, asumir nuevo (más seguro duplicar que perder)
-    return {
-      esNuevo: true,
-      candidatoId: null,
-      confianza: 30,
-      razon: 'Error en IA, asumido como nuevo por precaución',
-    }
+    return FALLBACK_DEDUP
   }
 }
+
+/**
+ * Ante error del proveedor o respuesta inválida se asume hecho nuevo con
+ * confianza baja: es preferible un duplicado, que el revisor humano puede
+ * fusionar, a vincular la cobertura al hecho equivocado. La confianza baja
+ * deja el caso marcado para revisión.
+ */
+const FALLBACK_DEDUP = {
+  esNuevo: true,
+  candidatoId: null,
+  confianza: 30,
+  razon: 'Respuesta de IA inválida o error del proveedor; asumido nuevo por precaución',
+} as const
 
 // ════════════════════════════════════════════
 // FUNCIÓN PRINCIPAL
