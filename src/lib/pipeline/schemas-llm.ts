@@ -210,6 +210,8 @@ export interface ExtraccionValidada {
   cantidadVictimas: number | null
   resumenHecho: string | null
   nombreVictima: string | null
+  /** Femicidio no es un código SNIC; se marca aparte. Ver el prompt. */
+  esFemicidio: boolean
   requiereRevision: boolean
   confianzaExtraccion: number
 }
@@ -290,6 +292,9 @@ export function validarExtraccion(
       cantidadVictimas,
       resumenHecho: resumen.ok ? resumen.valor : null,
       nombreVictima: nombreVictima.ok ? nombreVictima.valor : null,
+      // Solo el boolean exacto cuenta: un "true" string o un 1 no alcanzan para
+      // marcar un caso como femicidio.
+      esFemicidio: crudo.es_femicidio === true,
       requiereRevision: crudo.requiereRevision === true,
       confianzaExtraccion: confianza.ok ? confianza.valor : 0,
     },

@@ -796,6 +796,10 @@ async function main() {
               esCasoUsina: false,
               requiereRevision: datos.requiereRevision ?? false,
               nombreVictima: datos.nombreVictima ?? null,
+              // 'Si' o null, igual formato que escribe la ingesta oficial del
+              // SAT, para que las vistas que cuentan femicidio = 'Si' incluyan
+              // también los casos del pipeline.
+              femicidio: datos.esFemicidio ? 'Si' : null,
             }
           })
 

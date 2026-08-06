@@ -213,15 +213,33 @@ export async function POST(req: NextRequest) {
 
   const revisadoPor = session.user.email ?? session.user.name ?? 'desconocido'
 
+  /**
+   * Código SNIC oficial de cada clasificación humana.
+   *
+   * Femicidio pasa de 4 a 1. El código 4 del catálogo oficial es
+   * "Homicidios culposos por otros hechos" — negligencia médica, accidentes
+   * laborales — así que un femicidio marcado por el equipo quedaba guardado como
+   * muerte accidental, y el mapa público mostraba literalmente ese texto en el
+   * globo del caso. Un femicidio es un homicidio doloso: código 1.
+   *
+   * La condición de femicidio no se pierde: se guarda aparte, en la columna
+   * hechos_delictivos.femicidio, que es la misma que usa la ingesta oficial del
+   * SAT y la que cuentan las vistas materializadas.
+   */
   const CLASIFICACION_SNIC: Record<string, number | null> = {
-    'homicidio_doloso':                   1,
-    'homicidio_en_ocasion_de_robo':       1,
-    'femicidio':                          4,
-    'homicidio_vinculado_al_narcotrafico': 1,
-    'no_es_homicidio':                    null,
+    'homicidio_doloso':                    1,
+    'homicidio_en_ocasion_de_robo':        1,
+    'femicidio':                           1,
+    'homicidio_vinculado_al_narcotrafico':  1,
+    'no_es_homicidio':                     null,
   }
+
+  /** Clasificaciones que además marcan la condición de femicidio. */
+  const CLASIFICACIONES_FEMICIDIO = new Set(['femicidio'])
+
   const snicCodigo = CLASIFICACION_SNIC[clasificacion_humana] ?? null
   const esHomicidio = snicCodigo !== null
+  const esFemicidio = CLASIFICACIONES_FEMICIDIO.has(clasificacion_humana)
 
   try {
     // url_fuente es NOT NULL en revisiones_pipeline. La poblamos con la URL de
@@ -243,11 +261,15 @@ export async function POST(req: NextRequest) {
     `
 
     if (esHomicidio) {
+      // femicidio se escribe con el mismo formato que la ingesta del SAT ('Si' o
+      // NULL) para que las vistas que cuentan femicidio = 'Si' incluyan también
+      // los casos revisados a mano.
       await prisma.$executeRaw`
         UPDATE hechos_delictivos
         SET
           confianza = 'VERIFICADO',
           requiere_revision = false,
+          femicidio = ${esFemicidio ? 'Si' : null},
           tipo_delito_id = COALESCE(
             (SELECT id FROM tipos_delito WHERE codigo_snic = ${String(snicCodigo)} LIMIT 1),
             tipo_delito_id
