@@ -79,6 +79,36 @@ jobs:
       - name: Verificar que no haya credenciales trackeadas
         run: npx tsx scripts/ci/verificar-secretos.ts
 
+      - name: Tests del auditor de catálogo
+        run: npm run test:catalogo
+
+      # Dos cosas distintas, con severidad distinta:
+      #
+      # 1. Que docs/catalogo-snic.md esté al día SÍ bloquea. El documento se
+      #    genera de seed.ts, del prompt y de la whitelist del pipeline, así que
+      #    si alguien toca uno y no lo regenera, la documentación miente. Sin
+      #    el CSV el resultado es determinístico, así que regenerar y diffear
+      #    es una verificación confiable.
+      #
+      # 2. Los hallazgos del auditor NO bloquean todavía: hoy encuentra
+      #    desalineaciones reales entre el prompt del LLM y el catálogo, y una
+      #    de ellas necesita una decisión de negocio (ver docs/catalogo-snic.md).
+      #    Cuando queden en cero, reemplazar este paso por
+      #    `npm run catalogo:verificar` para que un nuevo desalineamiento rompa
+      #    el build.
+      - name: Catálogo SNIC — documento al día
+        run: |
+          npm run catalogo:auditar
+          if ! git diff --exit-code -- docs/catalogo-snic.md; then
+            echo "::error::docs/catalogo-snic.md quedó desactualizado. Corré 'npm run catalogo:auditar' y commiteá el resultado."
+            exit 1
+          fi
+          echo "✔ docs/catalogo-snic.md está al día"
+
+      - name: Catálogo SNIC — hallazgos (informativo)
+        run: npm run catalogo:verificar
+        continue-on-error: true
+
       - name: Verificar whitespace del diff
         if: github.event_name == 'pull_request'
         run: git diff --check "origin/${{ github.base_ref }}...HEAD"

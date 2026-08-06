@@ -46,3 +46,7 @@ public/duckdb/
 
 # Parquet exports are committed so Vercel can serve them as static files.
 # Regenerate with: DATABASE_URL="..." duckdb < scripts/export/export_parquet.sql
+
+# Python (los scripts de ingesta y sus tests)
+__pycache__/
+*.py[cod]
