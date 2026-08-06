@@ -1,5 +1,11 @@
 # Informe Técnico de Ingesta - Task 2
 
+> ⚠️ **Documento histórico.** Describe `cargar-snic.ts`, que ya no se ejecuta:
+> quedó archivado en `scripts/ingesta/archivo/` y lo reemplazó
+> `scripts/ingesta/snic-departamentos.py`. Se conserva porque el análisis de los
+> formatos de CSV del SNIC sigue siendo válido, pero **no describe el flujo de
+> ingesta actual**. Para eso, ver `scripts/ingesta/run_ingesta.sh`.
+
 ## Estado del Script
 
 El script `cargar-snic.ts` procesa dos tipos de archivos CSV del SNIC:
@@ -136,7 +142,7 @@ Se sugiere **Opción B** por:
 
 ## Archivos Involucrados
 
-- `scripts/ingesta/cargar-snic.ts` - Script de ingesta
+- `scripts/ingesta/archivo/cargar-snic.ts` - Script de ingesta (archivado, no se ejecuta)
 - `prisma/schema.prisma` - Modelo de datos
 - `data/snic/snic-pais.csv` - Dataset nacional
 - `data/snic/snic-provincia.csv` - Dataset provincial
