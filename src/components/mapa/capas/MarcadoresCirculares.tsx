@@ -13,8 +13,10 @@ interface ProvinciaData {
   latitud: number
   longitud: number
   totalHechos: number
-  totalVictimas: number
-  delitos: Array<{ nombre: string; hechos: number; victimas: number }>
+  // null = la fuente no informa el dato. Ver src/lib/mapa/metricas.ts.
+  totalVictimas: number | null
+  victimasParcial?: boolean
+  delitos: Array<{ nombre: string; hechos: number; victimas: number | null }>
 }
 
 function getColor(ratio: number, filtrado: boolean = false): string {

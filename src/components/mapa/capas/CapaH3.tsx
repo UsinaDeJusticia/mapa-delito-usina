@@ -92,7 +92,11 @@ export function CapaH3({ anio, visible, fuente }: Props) {
       polygon.addListener('click', (e: google.maps.MapMouseEvent) => {
         if (!infoRef.current || !e.latLng) return
         infoRef.current.setContent(
-          contenidoCeldaH3({ count: cell.count, victimas: cell.victimas })
+          contenidoCeldaH3({
+            count: cell.count,
+            victimas: cell.victimas,
+            victimasParcial: cell.victimasParcial,
+          })
         )
         infoRef.current.setPosition(e.latLng)
         infoRef.current.open(map)

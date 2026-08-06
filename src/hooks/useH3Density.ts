@@ -3,11 +3,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { latLngToCell } from 'h3-js'
 import { useDuckDB } from './useDuckDB'
+import { numeroONull, sumarConDato } from '@/lib/mapa/metricas'
 
 export interface H3Cell {
   h3Index: string
   count: number
-  victimas: number
+  /** null = ninguno de los hechos de la celda informa cuántas víctimas hubo. */
+  victimas: number | null
+  /** true si algunos hechos informan víctimas y otros no: el total es incompleto. */
+  victimasParcial: boolean
 }
 
 interface H3DensityResult {
@@ -63,21 +67,39 @@ export function useH3Density(
           AND longitud IS NOT NULL
       `)
 
-      const rows = result.toArray() as Array<{ latitud: number; longitud: number; cantidad_victimas: number }>
+      const rows = result.toArray() as Array<{
+        latitud: number
+        longitud: number
+        cantidad_victimas: number | null
+      }>
 
-      const cellMap = new Map<string, { count: number; victimas: number }>()
+      // Antes esto era `Number(row.cantidad_victimas) || 1`: un hecho sin conteo
+      // de víctimas contaba como 1, y el globo de la celda mostraba esa cifra
+      // inventada como si fuera un dato. Ahora la ausencia se propaga.
+      const cellMap = new Map<
+        string,
+        { count: number; victimas: number | null; sinDato: number }
+      >()
+
       for (const row of rows) {
         const lat = Number(row.latitud)
         const lng = Number(row.longitud)
         if (lat === 0 && lng === 0) continue
 
+        const victimas = numeroONull(row.cantidad_victimas)
         const h3Index = latLngToCell(lat, lng, resolution)
         const existing = cellMap.get(h3Index)
+
         if (existing) {
           existing.count++
-          existing.victimas += Number(row.cantidad_victimas) || 1
+          existing.victimas = sumarConDato(existing.victimas, victimas)
+          if (victimas === null) existing.sinDato++
         } else {
-          cellMap.set(h3Index, { count: 1, victimas: Number(row.cantidad_victimas) || 1 })
+          cellMap.set(h3Index, {
+            count: 1,
+            victimas,
+            sinDato: victimas === null ? 1 : 0,
+          })
         }
       }
 
@@ -85,6 +107,8 @@ export function useH3Density(
         h3Index,
         count: data.count,
         victimas: data.victimas,
+        // Parcial solo si hay algo sumado a medias; si no hay nada, es "sin dato".
+        victimasParcial: data.victimas !== null && data.sinDato > 0,
       }))
 
       cacheRef.current.set(cacheKey, computed)
