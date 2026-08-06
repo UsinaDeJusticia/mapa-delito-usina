@@ -191,6 +191,24 @@ class TestAuditoria(unittest.TestCase):
             f"esperaba el hallazgo del código 0, hubo: {titulos}",
         )
 
+    def test_el_codigo_inexistente_trae_las_opciones_para_resolverlo(self):
+        # Es el hallazgo que necesita una decisión de negocio, así que el reporte
+        # tiene que ofrecer las alternativas y no solo señalar el problema.
+        hallazgos = auditar_mod.auditar(
+            catalogo_csv=None,
+            catalogo_seed={"1": "Homicidios dolosos"},
+            dup_seed=[],
+            prompt={"0": "Muerte violenta en investigación"},
+            descripcion={},
+            whitelist=None,
+        )
+        h = next(h for h in hallazgos if "no existe" in h.titulo)
+        self.assertIsNotNone(h.remedio, "este hallazgo debe explicar cómo resolverse")
+        # Las dos salidas, y la advertencia sobre el falsy del 0.
+        self.assertIn("Sacar el código 0", h.remedio)
+        self.assertIn("Crear la categoría", h.remedio)
+        self.assertIn("falsy", h.remedio)
+
     def test_reporta_el_prompt_y_el_catalogo_significando_cosas_distintas(self):
         hallazgos = auditar_mod.auditar(
             catalogo_csv=None,
@@ -302,6 +320,9 @@ class TestEjecucionCompleta(unittest.TestCase):
                 doc = f.read()
             self.assertIn("CSV oficial no estaba disponible", doc)
             self.assertIn("prisma/seed.ts", doc)
+            # El hallazgo del código 0 vive acá, con sus opciones desplegables.
+            self.assertIn("Cómo resolverlo", doc)
+            self.assertIn("Crear la categoría", doc)
         finally:
             os.unlink(salida.name)
 

@@ -23,6 +23,17 @@ Para completarla, conseguí el CSV en `data/snic/snic-departamentos-anual.csv` y
 - **El prompt ofrece el código 0, que no existe en el catálogo**
   El prompt lo llama 'Muerte violenta de causa dudosa / En investigación'. Cuando el LLM lo devuelve, el pipeline no encuentra el TipoDelito y descarta el hecho.
 
+  <details><summary>Cómo resolverlo</summary>
+
+  Hay dos salidas y la elección es de negocio, no técnica:
+    - **Sacar el código 0 del prompt** y de la whitelist del pipeline, y mapear esos casos a un código que sí exista. Es lo conservador: no agrega nada al catálogo oficial.
+    - **Crear la categoría** en `prisma/seed.ts`. Pero ojo: si el código 0 no está en el catálogo del SNIC, se estaría guardando un valor no oficial en un campo llamado `codigo_snic`, y se pierde la comparabilidad con la estadística del Ministerio. El mismo problema que tuvo femicidio.
+
+  Verificá primero contra el CSV oficial si el código existe o no.
+  Aparte, en `scripts/pipeline/scrapear-medios.ts` la búsqueda del tipo es `datos.codigoSnicEstimado ? ...`, y en JavaScript el 0 es falsy: si el código en cuestión es 0, ni siquiera se intenta la búsqueda. Eso hay que corregirlo igual, cualquiera sea la decisión anterior.
+
+  </details>
+
 - **El prompt y el catálogo no significan lo mismo con el código 3**
   prompt:   'Homicidio culposo'
   seed.ts:  'Muertes en siniestros viales'

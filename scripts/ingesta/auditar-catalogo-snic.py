@@ -186,29 +186,48 @@ def leer_whitelist_pipeline(ruta=PIPELINE):
 # Comparación
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _normalizar_sangria(texto):
+    """
+    Normaliza la indentación de un texto multilínea.
+
+    Los detalles se escriben con f-strings dentro de código indentado, así que
+    arrastran los espacios del archivo fuente. Las viñetas quedan con dos
+    espacios de sangría y el resto se alinea al margen; entre una viñeta y el
+    párrafo siguiente se abre una línea en blanco, o Markdown lo absorbe dentro
+    de la lista.
+    """
+    salida = []
+    venia_vineta = False
+    for linea in texto.split("\n"):
+        limpia = linea.strip()
+        if not limpia:
+            continue
+        es_vineta = limpia.startswith("- ")
+        if venia_vineta and not es_vineta:
+            salida.append("")
+        salida.append(f"  {limpia}" if es_vineta else limpia)
+        venia_vineta = es_vineta
+    return salida
+
+
 class Hallazgo:
     """Una discrepancia. `bloqueante` distingue un error de una observación."""
 
-    def __init__(self, titulo, detalle, bloqueante=True):
+    def __init__(self, titulo, detalle, bloqueante=True, remedio=None):
         self.titulo = titulo
         self.detalle = detalle
         self.bloqueante = bloqueante
+        # Qué hacer al respecto. Se llena cuando la salida no es obvia o cuando
+        # requiere una decisión que el script no puede tomar solo.
+        self.remedio = remedio
 
     def lineas(self):
-        """
-        El detalle, línea por línea, con la sangría normalizada.
+        """El detalle, línea por línea, con la sangría normalizada."""
+        return _normalizar_sangria(self.detalle)
 
-        Los detalles se escriben con f-strings multilínea, así que arrastran la
-        indentación del código fuente. Las listas con viñeta conservan su sangría
-        de dos espacios; el resto se alinea al margen.
-        """
-        salida = []
-        for linea in self.detalle.split("\n"):
-            limpia = linea.strip()
-            if not limpia:
-                continue
-            salida.append(f"  {limpia}" if limpia.startswith("- ") else limpia)
-        return salida
+    def lineas_remedio(self):
+        """El remedio, si lo hay, con la misma normalización."""
+        return _normalizar_sangria(self.remedio) if self.remedio else []
 
     def __repr__(self):
         marca = "ERROR" if self.bloqueante else "aviso"
@@ -289,6 +308,22 @@ def auditar(catalogo_csv, catalogo_seed, dup_seed, prompt, descripcion, whitelis
                 f"El prompt ofrece el código {codigo}, que no existe en el catálogo",
                 f"El prompt lo llama '{nombre}'. Cuando el LLM lo devuelve, el "
                 f"pipeline no encuentra el TipoDelito y descarta el hecho.",
+                remedio=(
+                    "Hay dos salidas y la elección es de negocio, no técnica:\n"
+                    f"  - **Sacar el código {codigo} del prompt** y de la whitelist del "
+                    "pipeline, y mapear esos casos a un código que sí exista. Es lo "
+                    "conservador: no agrega nada al catálogo oficial.\n"
+                    f"  - **Crear la categoría** en `prisma/seed.ts`. Pero ojo: si el "
+                    f"código {codigo} no está en el catálogo del SNIC, se estaría "
+                    "guardando un valor no oficial en un campo llamado `codigo_snic`, "
+                    "y se pierde la comparabilidad con la estadística del Ministerio. "
+                    "El mismo problema que tuvo femicidio.\n"
+                    "  Verificá primero contra el CSV oficial si el código existe o no.\n"
+                    f"  Aparte, en `{PIPELINE}` la búsqueda del tipo es "
+                    "`datos.codigoSnicEstimado ? ...`, y en JavaScript el 0 es falsy: "
+                    "si el código en cuestión es 0, ni siquiera se intenta la búsqueda. "
+                    "Eso hay que corregirlo igual, cualquiera sea la decisión anterior."
+                ),
             ))
         elif _normalizar(nombre) != _normalizar(catalogo_seed[codigo]):
             hallazgos.append(Hallazgo(
@@ -411,6 +446,14 @@ def escribir_documento(ruta, catalogo_csv, catalogo_seed, prompt, descripcion,
                 L.append(f"- **{h.titulo}**")
                 for linea in h.lineas():
                     L.append(f"  {linea}")
+                if h.remedio:
+                    L.append("")
+                    L.append("  <details><summary>Cómo resolverlo</summary>")
+                    L.append("")
+                    for linea in h.lineas_remedio():
+                        L.append(f"  {linea}" if linea else "")
+                    L.append("")
+                    L.append("  </details>")
                 L.append("")
         if avisos:
             L.append("### Observaciones")
@@ -419,6 +462,14 @@ def escribir_documento(ruta, catalogo_csv, catalogo_seed, prompt, descripcion,
                 L.append(f"- **{h.titulo}**")
                 for linea in h.lineas():
                     L.append(f"  {linea}")
+                if h.remedio:
+                    L.append("")
+                    L.append("  <details><summary>Cómo resolverlo</summary>")
+                    L.append("")
+                    for linea in h.lineas_remedio():
+                        L.append(f"  {linea}" if linea else "")
+                    L.append("")
+                    L.append("  </details>")
                 L.append("")
 
     # ── Catálogo oficial ──
@@ -500,6 +551,8 @@ def imprimir_resumen(catalogo_csv, catalogo_seed, hallazgos):
             print(f"  [{etiqueta}] {h.titulo}")
             for linea in h.lineas():
                 print(f"      {linea}")
+            if h.remedio:
+                print(f"      → Cómo resolverlo: ver {SALIDA}")
             print()
 
 
