@@ -5,11 +5,14 @@
  * A) Un hecho delictivo NUEVO → crea HechoDelictivo + primera CoberturaMediatica
  * B) Cobertura de un hecho EXISTENTE → solo crea CoberturaMediatica vinculada
  *
- * La decisión se basa en:
- * 1. URL duplicada (ya procesada)
- * 2. Proximidad temporal (hechos en los últimos 30 días)
- * 3. Misma provincia + mismo tipo de delito
- * 4. Confirmación por IA cuando hay ambigüedad
+ * La decisión es mayormente determinista; la IA solo interviene cuando queda
+ * ambigüedad real:
+ * 1. URL ya procesada → duplicado
+ * 2. Proximidad temporal (hechos en los últimos 30 días) o nombre de víctima
+ * 3. Sin candidatos → nuevo
+ * 4. Mismo nombre de víctima (+ misma provincia, ventana de 90 días) →
+ *    cobertura del hecho existente, sin consultar al modelo
+ * 5. Ambiguo → confirmación por IA
  */
 
 import { Prisma } from '@prisma/client'
@@ -110,6 +113,89 @@ async function buscarHechosSimilares(datos: DatosNoticia) {
     orderBy: { fechaHecho: 'desc' },
     take: 10,
   })
+}
+
+// ════════════════════════════════════════════
+// COINCIDENCIA DETERMINISTA POR NOMBRE
+// ════════════════════════════════════════════
+
+/** Quita acentos, puntuación y mayúsculas para poder comparar nombres. */
+function normalizarNombre(nombre: string): string {
+  return nombre
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+const PARTICULAS = new Set(['de', 'del', 'la', 'las', 'los', 'y', 'el', 'da', 'do', 'van', 'di'])
+
+function tokensNombre(nombre: string): string[] {
+  return normalizarNombre(nombre)
+    .split(' ')
+    .filter(t => t.length >= 2 && !PARTICULAS.has(t))
+}
+
+/**
+ * ¿Son la misma persona?
+ *
+ * Se exige que el nombre más corto tenga al menos dos tokens (nombre +
+ * apellido) y que todos estén contenidos en el otro. Así "Juan Pérez" matchea
+ * con "Juan Carlos Pérez González" —los medios publican el nombre con
+ * distinto grado de completitud— pero "Juan" no matchea con nada, porque un
+ * solo token es demasiado genérico.
+ */
+export function mismoNombreVictima(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false
+  const ta = tokensNombre(a)
+  const tb = tokensNombre(b)
+  if (ta.length < 2 || tb.length < 2) return false
+
+  const [corto, largo] = ta.length <= tb.length ? [ta, tb] : [tb, ta]
+  const setLargo = new Set(largo)
+  return corto.every(t => setLargo.has(t))
+}
+
+/** Ventana para aceptar una coincidencia de nombre sin consultar al modelo. */
+const DIAS_VENTANA_NOMBRE = 90
+
+function mismaProvincia(a: string | null | undefined, b: string | null | undefined): boolean {
+  // Si alguna es desconocida no se contradicen: no bloquea la coincidencia.
+  if (!a || !b) return true
+  const na = normalizarNombre(a)
+  const nb = normalizarNombre(b)
+  return na.includes(nb) || nb.includes(na)
+}
+
+/**
+ * Busca una coincidencia inequívoca ANTES de gastar una llamada al modelo.
+ *
+ * Dos homicidios distintos con el mismo nombre y apellido, en la misma
+ * provincia y dentro de 90 días es prácticamente imposible. Resolverlo acá
+ * ahorra tokens y —lo más importante— hace que el caso más común de duplicado
+ * no dependa de que el proveedor de LLM esté disponible.
+ */
+function coincidenciaPorNombre(
+  datos: DatosNoticia,
+  candidatos: Awaited<ReturnType<typeof buscarHechosSimilares>>,
+): { id: string; nombre: string } | null {
+  if (!datos.nombreVictima) return null
+
+  const fechaNoticia = datos.fecha ? new Date(datos.fecha) : new Date()
+  if (Number.isNaN(fechaNoticia.getTime())) return null
+
+  for (const c of candidatos) {
+    if (!mismoNombreVictima(datos.nombreVictima, c.nombreVictima)) continue
+    if (!mismaProvincia(datos.ubicacion.provincia, c.ubicacion.provincia)) continue
+
+    const dias = Math.abs(fechaNoticia.getTime() - c.fechaHecho.getTime()) / 86_400_000
+    if (dias > DIAS_VENTANA_NOMBRE) continue
+
+    return { id: c.id, nombre: c.nombreVictima ?? datos.nombreVictima }
+  }
+  return null
 }
 
 // ════════════════════════════════════════════
@@ -221,9 +307,12 @@ const FALLBACK_DEDUP = {
  *
  * Flujo:
  * 1. Verificar si la URL ya fue procesada → duplicado
- * 2. Buscar hechos similares (mismo tipo, provincia, últimos 30 días)
- * 3. Si no hay candidatos → es nuevo (sin consultar IA)
- * 4. Si hay candidatos → confirmar con IA
+ * 2. Buscar hechos similares (mismo tipo, provincia, últimos 30 días, o
+ *    nombre de víctima en toda la historia)
+ * 3. Sin candidatos → es nuevo (sin consultar IA)
+ * 4. Mismo nombre de víctima (+ misma provincia, ventana de 90 días) →
+ *    cobertura del hecho existente (sin consultar IA)
+ * 5. Ambiguo → confirmar con IA
  */
 export async function deduplicar(datos: DatosNoticia): Promise<ResultadoDeduplicacion> {
 
@@ -256,7 +345,21 @@ export async function deduplicar(datos: DatosNoticia): Promise<ResultadoDeduplic
     }
   }
 
-  // 4. Con candidatos → confirmar con IA
+  // 4. Coincidencia inequívoca por nombre de víctima → vincular sin IA.
+  //    Es el caso más común de duplicado y no tiene sentido gastar una
+  //    llamada al modelo ni depender de su disponibilidad para resolverlo.
+  const porNombre = coincidenciaPorNombre(datos, candidatos)
+  if (porNombre) {
+    return {
+      esNuevo: false,
+      hechoDelictivoId: porNombre.id,
+      confianza: 97,
+      razon: `Misma víctima ya registrada (${porNombre.nombre})`,
+      urlDuplicada: false,
+    }
+  }
+
+  // 5. Ambiguo → confirmar con IA
   const resultado = await confirmarConIA(datos, candidatos)
   return {
     esNuevo: resultado.esNuevo,

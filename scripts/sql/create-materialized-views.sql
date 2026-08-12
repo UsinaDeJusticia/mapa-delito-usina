@@ -70,6 +70,17 @@ CREATE INDEX idx_mv_snic_pd_delito
 -- ─── Vista 3: SAT por provincia + año ───────────────────
 -- Usada por: mapa en modo SAT
 -- ~200 filas (24 prov × 8 años)
+--
+-- ⚠️ PENDIENTE DE INTEGRIDAD (hallazgo #10 del plan de seguridad)
+-- El filtro `es_agregado = false` no distingue la fuente: incluye tanto los
+-- microdatos oficiales del SAT como los casos PRELIMINARES del pipeline de
+-- medios. O sea que los totales que el mapa presenta como oficiales vienen
+-- mezclados con casos periodísticos sin confirmar.
+-- No se corrige acá porque requiere un identificador estable de fuente: hoy el
+-- modelo Fuente solo tiene `nombre`, que es un string de display, y filtrar por
+-- nombre es frágil. La corrección necesita agregar un campo `codigo` a Fuente,
+-- su migración, y poblarlo. Va en su propio PR.
+-- Lo mismo aplica a la Vista 4.
 
 DROP MATERIALIZED VIEW IF EXISTS mv_sat_provincia;
 
@@ -80,8 +91,16 @@ SELECT
   hd.anio,
   COUNT(*)::int AS total_hechos,
   SUM(hd.cantidad_victimas)::int AS total_victimas,
-  SUM(CASE WHEN hd.femicidio = 'Si' THEN 1 ELSE 0 END)::int AS femicidios,
-  COUNT(DISTINCT hd.victima_sexo) AS sexos_distintos
+  SUM(CASE WHEN hd.femicidio = 'Si' THEN 1 ELSE 0 END)::int AS femicidios
+  -- Acá había una columna sexos_distintos con COUNT(DISTINCT hd.victima_sexo).
+  -- Esa columna no existe: la real es "victimaSexo" en camelCase, creada
+  -- entrecomillada en 20260323085453_add_sat_detail_columns porque el modelo de
+  -- Prisma no le puso @map. El CREATE fallaba siempre en esta vista, y como psql
+  -- continúa tras un error salvo que se le pase ON_ERROR_STOP=1, el DROP de
+  -- arriba sí se ejecutaba y la vista quedaba sin crear. De ahí nacieron los dos
+  -- archivos SQL duplicados que este commit elimina.
+  -- Ninguna consulta de la app usaba sexos_distintos, así que se quita en lugar
+  -- de corregirla.
 FROM hechos_delictivos hd
 JOIN ubicaciones u ON hd.ubicacion_id = u.id
 WHERE hd.es_agregado = false

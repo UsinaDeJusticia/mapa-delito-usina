@@ -99,7 +99,9 @@ mapa-delito-usina/
 │   ├── actualizar-centroides.ts         # Actualiza centroides desde Georef
 │   ├── consulta-campos.ts               # Inspección de campos en BD
 │   ├── ingesta/
-│   │   ├── cargar-snic.ts               # Carga datos SNIC en BD
+│   │   ├── archivo/
+│   │   │   ├── README.md                # Por qué estos scripts no se ejecutan
+│   │   │   └── cargar-snic.ts           # Código muerto: lo reemplazó snic-departamentos.py
 │   │   ├── auditar-catalogo-snic.py     # Audita códigos SNIC: CSV oficial vs seed vs prompt vs pipeline
 │   │   ├── snic-departamentos.py        # Ingesta de departamentos desde CSV SNIC
 │   │   ├── sat-homicidios.py            # Ingesta SAT (homicidios dolosos)
@@ -107,9 +109,9 @@ mapa-delito-usina/
 │   ├── pipeline/
 │   │   └── scrapear-medios.ts           # Pipeline de scraping (~45 medios activos)
 │   └── sql/
-│       ├── create-materialized-views.sql
-│       ├── create-remaining-views.sql
-│       ├── mv_sat_provincia.sql
+│       ├── create-materialized-views.sql # ÚNICA definición de las 4 vistas materializadas
+│       ├── add-performance-indexes.sql
+│       ├── create-feedback.sql
 │       └── create-revisiones-pipeline.sql # Tabla revisiones_pipeline (fuera de Prisma)
 └── docs/
     ├── catalogo-snic.md                 # GENERADO — no editar a mano (ver catalogo:auditar)

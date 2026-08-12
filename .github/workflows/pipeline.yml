@@ -23,6 +23,20 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
 
+      # Sin esto, agent-browser/Chrome no arranca en el runner desde el 6 de
+      # agosto: "FATAL: No usable sandbox! ... has disabled unprivileged user
+      # namespaces with AppArmor". La imagen de ubuntu-latest empezó a
+      # restringir los user namespaces sin privilegios que el sandbox interno
+      # de Chrome necesita para lanzar su proceso zygote.
+      #
+      # Se restaura el mecanismo del kernel en vez de pasarle --no-sandbox a
+      # Chrome: esto no reduce el sandboxing propio de Chrome, que sigue
+      # activo pese a navegar sitios de terceros con contenido no confiable.
+      # El runner es una VM efímera exclusiva de este job, así que habilitar
+      # esto no expone nada fuera de su propio ciclo de vida.
+      - name: Habilitar user namespaces sin privilegios (requisito del sandbox de Chrome)
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       - name: Instalar Chromium para agent-browser
         run: npx agent-browser install
 

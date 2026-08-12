@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test \"tests/**/*.test.ts\"",
     "test:watch": "node --import tsx --test --watch \"tests/**/*.test.ts\"",
+    "test:py": "python3 -m unittest discover -s tests/ingesta -p 'test_*.py'",
+    "test:all": "npm test && npm run test:py",
     "georef:actualizar": "tsx scripts/actualizar-centroides.ts",
     "catalogo:auditar": "python3 scripts/ingesta/auditar-catalogo-snic.py",
     "catalogo:verificar": "python3 scripts/ingesta/auditar-catalogo-snic.py --no-escribir --check",
