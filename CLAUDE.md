@@ -102,6 +102,7 @@ mapa-delito-usina/
 │   │   ├── archivo/
 │   │   │   ├── README.md                # Por qué estos scripts no se ejecutan
 │   │   │   └── cargar-snic.ts           # Código muerto: lo reemplazó snic-departamentos.py
+│   │   ├── auditar-catalogo-snic.py     # Audita códigos SNIC: CSV oficial vs seed vs prompt vs pipeline
 │   │   ├── snic-departamentos.py        # Ingesta de departamentos desde CSV SNIC
 │   │   ├── sat-homicidios.py            # Ingesta SAT (homicidios dolosos)
 │   │   └── run_ingesta.sh               # Script orquestador de ingesta
@@ -113,6 +114,7 @@ mapa-delito-usina/
 │       ├── create-feedback.sql
 │       └── create-revisiones-pipeline.sql # Tabla revisiones_pipeline (fuera de Prisma)
 └── docs/
+    ├── catalogo-snic.md                 # GENERADO — no editar a mano (ver catalogo:auditar)
     └── informe-tecnico-ingesta.md
 ```
 
@@ -127,6 +129,9 @@ mapa-delito-usina/
 | `npm run start` | Servidor de producción |
 | `npm run lint` | ESLint |
 | `npm run georef:actualizar` | Actualiza centroides desde API Georef (IGN) |
+| `npm run catalogo:auditar` | Audita el catálogo SNIC y regenera `docs/catalogo-snic.md` |
+| `npm run catalogo:verificar` | Igual, sin escribir; exit 1 si hay desalineaciones |
+| `npm run test:catalogo` | Tests del auditor (Python `unittest`) |
 | `npm run pipeline:dry` | Pipeline de medios en modo dry-run (no escribe a BD) |
 | `npm run pipeline:run` | Pipeline de medios en modo real |
 | `npm run pipeline:medio` | Pipeline para un medio específico |

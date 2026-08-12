@@ -1,0 +1,13 @@
+anio;provincia_id;provincia_nombre;departamento_id;departamento_nombre;codigo_delito_snic_id;codigo_delito_snic_nombre;cantidad_hechos;cantidad_victimas
+2023;06;Buenos Aires;06007;Adolfo Alsina;1;Homicidios dolosos;12;13
+2023;82;Santa Fe;82084;Rosario;1;Homicidios dolosos;240;251
+2024;06;Buenos Aires;06007;Adolfo Alsina;1;Homicidios dolosos;10;10
+2023;06;Buenos Aires;06007;Adolfo Alsina;3;Muertes en siniestros viales;5;5
+2024;06;Buenos Aires;06007;Adolfo Alsina;3;Muertes en siniestros viales;7;7
+2023;06;Buenos Aires;06007;Adolfo Alsina;4;Homicidios culposos por otros hechos;2;2
+2023;06;Buenos Aires;06007;Adolfo Alsina;15;Robos;1200;-
+2024;06;Buenos Aires;06007;Adolfo Alsina;15;Robos;1150;s/d
+2023;82;Santa Fe;82084;Rosario;15;Robo;900;...
+2023;06;Buenos Aires;06007;Adolfo Alsina;99;Delito inventado que el catalogo no tiene;33;4
+2024;06;Buenos Aires;06007;Adolfo Alsina;99;Delito inventado que el catalogo no tiene;44;5
+2023;06;Buenos Aires;06007;Adolfo Alsina;;Fila sin codigo, se ignora;7;7
