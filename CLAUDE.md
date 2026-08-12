@@ -106,9 +106,9 @@ mapa-delito-usina/
 │   ├── pipeline/
 │   │   └── scrapear-medios.ts           # Pipeline de scraping (~45 medios activos)
 │   └── sql/
-│       ├── create-materialized-views.sql
-│       ├── create-remaining-views.sql
-│       ├── mv_sat_provincia.sql
+│       ├── create-materialized-views.sql # ÚNICA definición de las 4 vistas materializadas
+│       ├── add-performance-indexes.sql
+│       ├── create-feedback.sql
 │       └── create-revisiones-pipeline.sql # Tabla revisiones_pipeline (fuera de Prisma)
 └── docs/
     └── informe-tecnico-ingesta.md
