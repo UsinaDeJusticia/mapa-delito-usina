@@ -99,7 +99,9 @@ mapa-delito-usina/
 │   ├── actualizar-centroides.ts         # Actualiza centroides desde Georef
 │   ├── consulta-campos.ts               # Inspección de campos en BD
 │   ├── ingesta/
-│   │   ├── cargar-snic.ts               # Carga datos SNIC en BD
+│   │   ├── archivo/
+│   │   │   ├── README.md                # Por qué estos scripts no se ejecutan
+│   │   │   └── cargar-snic.ts           # Código muerto: lo reemplazó snic-departamentos.py
 │   │   ├── snic-departamentos.py        # Ingesta de departamentos desde CSV SNIC
 │   │   ├── sat-homicidios.py            # Ingesta SAT (homicidios dolosos)
 │   │   └── run_ingesta.sh               # Script orquestador de ingesta
