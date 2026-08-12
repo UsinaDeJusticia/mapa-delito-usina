@@ -4,11 +4,22 @@
 -- Resuelve: 533K filas consultadas al vuelo → ~600 filas pre-calculadas
 -- Resultado: de 6 segundos a milisegundos
 --
--- Ejecutar en Neon:
---   psql $DATABASE_URL -f scripts/sql/create-materialized-views.sql
+-- Ejecutar en Neon (con ON_ERROR_STOP=1 — ver por qué en hallazgo del PR #15):
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f scripts/sql/create-materialized-views.sql
 --
--- O desde OpenCode:
---   export DATABASE_URL="..." && psql $DATABASE_URL -f scripts/sql/create-materialized-views.sql
+-- ⚠️ MERGEAR UN CAMBIO A ESTE ARCHIVO NO LO APLICA A PRODUCCIÓN.
+-- Estas vistas no son migraciones de Prisma: no hay ningún workflow que las
+-- despliegue solas al mergear un PR. `REFRESH MATERIALIZED VIEW` re-ejecuta la
+-- definición YA GUARDADA en Neon, no relee este archivo — así que un cambio de
+-- WHERE, columnas o joins queda mergeado en el repo y sin efecto en producción
+-- hasta que alguien vuelva a correr este archivo entero (el DROP + CREATE de
+-- cada vista, no un REFRESH).
+--
+-- Encontrado en la corrida del runbook post-Fase-1 (agosto 2026):
+-- `mv_sat_provincia` en producción seguía con `anio <= 2024` hardcodeado —la
+-- definición de antes de este mismo archivo consolidarse en el PR #15— porque
+-- nadie la había vuelto a aplicar tras el merge. Excluía en silencio todo dato
+-- de 2025 en adelante.
 -- =============================================
 
 -- ─── Vista 1: SNIC por provincia + año ──────────────────

@@ -100,6 +100,7 @@ HECHO_CAMPOS = [
     ("contexto", "contexto"),
     ("vinculoVictimaVictimario", '"vinculoVictimaVictimario"'),
     ("femicidio", "femicidio"),
+    ("requiereRevision", '"requiereRevision"'),
     ("victimarioSexo", '"victimarioSexo"'),
     ("victimarioEdad", '"victimarioEdad"'),
     ("situacionVictimario", '"situacionVictimario"'),
@@ -333,14 +334,60 @@ def agrupar_por_hecho(csv_path):
     return grupos
 
 
-def detectar_femicidio(base):
-    motivo = base.get("motivo_origen_registro", "").strip().lower()
-    motivo_otro = base.get("motivo_origen_registro_otro", "").strip().lower()
-    if "femicidio" in motivo or "feminicidio" in motivo:
-        return "Si"
-    if "femicidio" in motivo_otro or "feminicidio" in motivo_otro:
-        return "Si"
-    return None
+# Menciones que, sin más calificación, indican un femicidio consumado de la
+# propia víctima. "Vinculado" y "tentativa" se tratan aparte, más abajo.
+_FEMICIDIO_MENCIONES = ("femicidio", "feminicidio", "transfemicidio")
+
+
+def detectar_femicidio(base, victima_sexo):
+    """
+    Determina si el hecho es un femicidio.
+
+    El CSV oficial no tiene una columna "femicidio": el dato vive en el texto
+    libre de `en_ocasion_otro_delito_otro`. La versión anterior de esta función
+    buscaba "femicidio" en `motivo_origen_registro`, que solo toma cuatro
+    valores administrativos (Denuncia particular / Intervención policial /
+    Orden judicial / Otros) — ninguno menciona nunca femicidio. Por eso siempre
+    devolvía None: no es que faltaran femicidios en el CSV, es que se estaba
+    mirando la columna equivocada.
+
+    Devuelve (femicidio, requiere_revision):
+      - ("Si", False)  femicidio consumado de esta víctima, sin ambigüedad.
+      - (None, True)   hay mención a femicidio pero no se decide sola acá:
+                        "vinculado", o una mención simple con el sexo de la
+                        víctima ausente o no femenino.
+      - (None, False)  no hay mención, o la mención es "tentativa".
+
+    "Tentativa de femicidio" describe el CONTEXTO del hecho, no a quien murió
+    en esta fila. El caso real que motivó este chequeo: un policía varón
+    muerto durante una tentativa de femicidio contra otra persona, que
+    sobrevivió — la mujer objetivo del femicidio no es la víctima de esta
+    fila, así que nunca cuenta como femicidio consumado ni necesita revisión.
+
+    "Femicidio vinculado" es la figura legal argentina para una persona
+    —a veces un hijo o hija, a veces otro adulto— asesinada por el mismo
+    agresor para dañar a la mujer. Usina decidió no reclasificarlo
+    automáticamente: se marca para revisión humana, igual que los casos
+    ambiguos del pipeline de medios.
+    """
+    texto = (base.get("en_ocasion_otro_delito_otro") or "").strip().lower()
+    if not texto or not any(m in texto for m in _FEMICIDIO_MENCIONES):
+        return None, False
+
+    if "tentativa" in texto:
+        return None, False
+
+    if "vinculado" in texto:
+        return None, True
+
+    sexo = (victima_sexo or "").strip().lower()
+    if sexo.startswith("femenino"):
+        return "Si", False
+
+    # Mención simple de femicidio pero la víctima no está marcada como mujer,
+    # o falta el dato de sexo: no se descarta en silencio, se manda a revisión
+    # para que una persona lo mire con la ficha completa.
+    return None, True
 
 
 def construir_registro(id_hecho, filas, fuente_id, tipo_delito_id):
@@ -417,7 +464,7 @@ def construir_registro(id_hecho, filas, fuente_id, tipo_delito_id):
     #   victima_18_anios_o_mas -> victimaRangoEdad (mayor/menor)
     #   en_ocasion_otro_delito -> contexto
     #   victima_relacion_inculpado / inculpado_relacion_victima -> vinculoVictimaVictimario
-    #   motivo_origen_registro -> femicidio (derivado)
+    #   en_ocasion_otro_delito_otro + victima_sexo -> femicidio, requiereRevision (derivados)
     #   inculpado_sexo      -> victimarioSexo
     #   inculpado_tr_edad   -> victimarioEdad
     #   inculpado_clase     -> situacionVictimario
@@ -434,6 +481,10 @@ def construir_registro(id_hecho, filas, fuente_id, tipo_delito_id):
     vinculo = safe_str(victima.get("victima_relacion_inculpado", ""))
     if not vinculo:
         vinculo = safe_str(imputado.get("inculpado_relacion_victima", ""))
+
+    femicidio, requiere_revision_femicidio = detectar_femicidio(
+        base, victima.get("victima_sexo", "")
+    )
 
     hecho = {
         "id": hecho_id,
@@ -460,7 +511,8 @@ def construir_registro(id_hecho, filas, fuente_id, tipo_delito_id):
         "victimaRangoEdad": rango_edad,
         "contexto": safe_str(base.get("en_ocasion_otro_delito", "")),
         "vinculoVictimaVictimario": vinculo,
-        "femicidio": detectar_femicidio(base),
+        "femicidio": femicidio,
+        "requiereRevision": requiere_revision_femicidio,
         "victimarioSexo": safe_str(imputado.get("inculpado_sexo", "")),
         "victimarioEdad": safe_int(imputado.get("inculpado_tr_edad", "")),
         "situacionVictimario": safe_str(imputado.get("inculpado_clase", "")),
@@ -508,6 +560,7 @@ def ingest(dry_run=False):
                 medios[h.get("medioComision") or "Sin dato"] += 1
 
             femicidios = sum(1 for h in hechos if h.get("femicidio") == "Si")
+            femicidios_a_revisar = sum(1 for h in hechos if h.get("requiereRevision"))
 
             vinculos = defaultdict(int)
             for h in hechos:
@@ -521,6 +574,7 @@ def ingest(dry_run=False):
             print(f" victimaSexo: {dict(sorted(sexos.items(), key=lambda x: -x[1]))}")
             print(f" medioComision (top 5): {dict(sorted(medios.items(), key=lambda x: -x[1])[:5])}")
             print(f" Femicidios detectados: {femicidios}")
+            print(f" Con mención a femicidio sin decidir (vinculado / sexo no confirmado), a revisar: {femicidios_a_revisar}")
             print(f" Vinculo (top 5): {dict(sorted(vinculos.items(), key=lambda x: -x[1])[:5])}")
             print(f" Hechos multi-victima: {multi}")
             print(f" Total victimas: {total_victimas:,}")
