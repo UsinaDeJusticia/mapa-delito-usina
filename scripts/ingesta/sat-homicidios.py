@@ -100,7 +100,13 @@ HECHO_CAMPOS = [
     ("contexto", "contexto"),
     ("vinculoVictimaVictimario", '"vinculoVictimaVictimario"'),
     ("femicidio", "femicidio"),
-    ("requiereRevision", '"requiereRevision"'),
+    # A diferencia de las demás columnas SAT de esta lista, requiereRevision
+    # NO es una columna nueva de este script: ya existía (prisma/schema.prisma,
+    # migración 20260806120000_add_requiere_revision) con
+    # @map("requiere_revision") — es decir, snake_case en la base, sin comillas.
+    # Va sin comillas a propósito; entrecomillarla como las demás apunta a una
+    # columna que no existe.
+    ("requiereRevision", "requiere_revision"),
     ("victimarioSexo", '"victimarioSexo"'),
     ("victimarioEdad", '"victimarioEdad"'),
     ("situacionVictimario", '"situacionVictimario"'),
