@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useDuckDB } from './useDuckDB'
 import type { FiltrosActivos } from '@/components/mapa/FiltrosSAT'
+import { numeroONull, sumarConDato } from '@/lib/mapa/metricas'
 
 interface ProvinciaData {
   provincia: string
@@ -10,8 +11,10 @@ interface ProvinciaData {
   latitud: number
   longitud: number
   totalHechos: number
-  totalVictimas: number
-  delitos: Array<{ nombre: string; hechos: number; victimas: number }>
+  // null = la fuente no informa el dato. Ver src/lib/mapa/metricas.ts.
+  totalVictimas: number | null
+  victimasParcial?: boolean
+  delitos: Array<{ nombre: string; hechos: number; victimas: number | null }>
 }
 
 interface MapaDataResult {
@@ -52,12 +55,21 @@ function padId(id: string): string {
   return id.padStart(2, '0')
 }
 
+/**
+ * Este es el camino por defecto del mapa: DuckDB sobre los Parquet, en el
+ * browser. La API es el respaldo. Así que la distinción entre "sin dato" y
+ * "cero" tiene que hacerse acá igual que en `src/lib/mapa/queries.ts`, o el
+ * arreglo del servidor no se ve nunca.
+ *
+ * `SUM(cantidad_victimas)` en Parquet devuelve NULL cuando ninguna fila del
+ * grupo trae el dato, exactamente como en Postgres.
+ */
 function enrichWithCentroids(
   rows: Array<{
     provincia_id: string
     provincia_nombre: string
     total_hechos: number
-    total_victimas: number
+    total_victimas: number | null
     tipo_delito_nombre?: string
     femicidios?: number
   }>,
@@ -70,13 +82,14 @@ function enrichWithCentroids(
     const centroide = PROVINCIAS_CENTROIDES[paddedId]
     if (!centroide) continue
 
-    const hechos = Number(row.total_hechos)
-    const victimas = Number(row.total_victimas)
+    const hechos = numeroONull(row.total_hechos) ?? 0
+    const victimas = numeroONull(row.total_victimas)
 
     const existing = map.get(paddedId)
     if (existing) {
       existing.totalHechos += hechos
-      existing.totalVictimas += victimas
+      existing.totalVictimas = sumarConDato(existing.totalVictimas, victimas)
+      if (victimas === null) existing.victimasParcial = true
       if (row.tipo_delito_nombre) {
         existing.delitos.push({ nombre: row.tipo_delito_nombre, hechos, victimas })
       }
@@ -92,12 +105,18 @@ function enrichWithCentroids(
         longitud: centroide.longitud,
         totalHechos: hechos,
         totalVictimas: victimas,
+        victimasParcial: false,
         delitos: [{ nombre: delitoNombre, hechos, victimas }],
       })
     }
   }
 
-  return Array.from(map.values())
+  // Sin ningún dato no hay total parcial: no hay nada que se esté sumando a medias.
+  const provincias = Array.from(map.values())
+  for (const p of provincias) {
+    if (p.totalVictimas === null) p.victimasParcial = false
+  }
+  return provincias
 }
 
 async function queryDuckDB(
@@ -171,7 +190,7 @@ async function queryDuckDB(
       provincia_id: string
       provincia_nombre: string
       total_hechos: number
-      total_victimas: number
+      total_victimas: number | null
       tipo_delito_nombre?: string
       femicidios?: number
     }

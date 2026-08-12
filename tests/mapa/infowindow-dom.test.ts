@@ -7,6 +7,7 @@ import {
   contenidoProvincia,
   contenidoCeldaH3,
 } from '../../src/lib/mapa/infowindow-dom'
+import { SIN_DATO, PARCIAL } from '../../src/lib/mapa/metricas'
 
 let doc: Document
 
@@ -275,5 +276,61 @@ describe('contenidoCeldaH3', () => {
     )
     assertSinHtmlEjecutable(el, 'count no numérico')
     assert.match(el.textContent!, /0 hechos/)
+  })
+})
+
+/**
+ * Sin dato vs cero, en la capa donde el usuario lo ve.
+ *
+ * El conteo de víctimas puede faltar en la fuente. Antes se renderizaba como
+ * "0 víctimas", que se lee como "no hubo víctimas". Estos tests fijan que la
+ * ausencia se diga con palabras y que un cero medido siga mostrándose como 0.
+ */
+describe('víctimas sin dato en los globos del mapa', () => {
+  test('la burbuja provincial dice "sin dato", no 0', () => {
+    const el = contenidoProvincia(
+      { provincia: 'Chubut', totalHechos: 312, totalVictimas: null, delitos: [] },
+      doc
+    )
+    const texto = el.textContent!
+    assert.ok(texto.includes(SIN_DATO), `debería decir "${SIN_DATO}": ${texto}`)
+    assert.ok(
+      !/Víctimas\s*0(?!\d)/.test(texto),
+      'no debe afirmar cero víctimas donde no se sabe cuántas hubo'
+    )
+    assert.ok(texto.includes('312'), 'los hechos, que sí se conocen, se siguen mostrando')
+  })
+
+  test('un cero medido sigue siendo 0', () => {
+    // Distinguir ausencia de cero no debe borrar los ceros legítimos.
+    const el = contenidoProvincia(
+      { provincia: 'Tierra del Fuego', totalHechos: 0, totalVictimas: 0, delitos: [] },
+      doc
+    )
+    const texto = el.textContent!
+    assert.ok(!texto.includes(SIN_DATO), 'un cero medido no es una ausencia')
+    assert.match(texto, /0/)
+  })
+
+  test('la celda H3 sin conteo de víctimas no inventa una por hecho', () => {
+    // El bug: `Number(row.cantidad_victimas) || 1` hacía que cada hecho sin dato
+    // contara como una víctima, así que la celda siempre mostraba una cifra.
+    const el = contenidoCeldaH3({ count: 4, victimas: null }, doc)
+    const texto = el.textContent!
+    assert.match(texto, /4 hechos/)
+    assert.ok(texto.includes(SIN_DATO), `debería decir "${SIN_DATO}": ${texto}`)
+    assert.ok(!/\d+ víctimas/.test(texto), 'no debe afirmar una cantidad de víctimas')
+  })
+
+  test('la celda H3 avisa cuando el conteo es parcial', () => {
+    const el = contenidoCeldaH3({ count: 5, victimas: 3, victimasParcial: true }, doc)
+    const texto = el.textContent!
+    assert.match(texto, /3 víctimas/)
+    assert.ok(texto.includes(PARCIAL), 'un total incompleto tiene que declararse')
+  })
+
+  test('un conteo completo no se marca como parcial', () => {
+    const el = contenidoCeldaH3({ count: 2, victimas: 2, victimasParcial: false }, doc)
+    assert.ok(!el.textContent!.includes(PARCIAL))
   })
 })

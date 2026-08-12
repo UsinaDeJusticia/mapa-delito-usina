@@ -24,6 +24,7 @@ import type { HechoMedio } from './capas'
 import { useGeolocalizacion } from './hooks/useGeolocalizacion'
 import { precargarGeoJSON } from './hooks/useGeoJSON'
 import { useMapaData } from '@/hooks/useMapaData'
+import { agregarMetrica, formatearAgregado, detalleParcial, SIN_DATO } from '@/lib/mapa/metricas'
 
 // ─── Tipos ───────────────────────────────────────────────
 interface ProvinciaData {
@@ -32,8 +33,10 @@ interface ProvinciaData {
   latitud: number
   longitud: number
   totalHechos: number
-  totalVictimas: number
-  delitos: Array<{ nombre: string; hechos: number; victimas: number }>
+  // null = la fuente no informa el dato. Ver src/lib/mapa/metricas.ts.
+  totalVictimas: number | null
+  victimasParcial?: boolean
+  delitos: Array<{ nombre: string; hechos: number; victimas: number | null }>
 }
 
 interface MapaDelitoProps {
@@ -238,7 +241,15 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
   }))
 
   const totalNacional = datos.reduce((acc, d) => acc + (d.totalHechos || 0), 0)
-  const totalVictimas = datos.reduce((acc, d) => acc + (d.totalVictimas || 0), 0)
+
+  // El total nacional de víctimas se agrega con agregarMetrica en lugar de un
+  // reduce con `|| 0`: si ninguna provincia trae el dato el total es "sin dato",
+  // y si solo algunas lo traen el total queda marcado como parcial. Sumar los
+  // faltantes como cero daría una cifra más baja que la real presentada como
+  // definitiva.
+  const victimasNacional = agregarMetrica(datos.map(d => d.totalVictimas))
+  const victimasTexto = formatearAgregado(victimasNacional)
+  const victimasAclaracion = detalleParcial(victimasNacional, 'provincias')
 
   // Siempre arranca en vista nacional — geo mueve el mapa cuando llega
   const centroInicial = ARGENTINA_CENTER
@@ -350,7 +361,16 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
                 <span className="font-bold text-[#1E427C]">{totalNacional.toLocaleString('es-AR')}</span>
                 <div className="w-px h-3 bg-gray-200" />
                 <span className="text-gray-500">Víctimas:</span>
-                <span className="font-bold text-[#1E427C]">{totalVictimas.toLocaleString('es-AR')}</span>
+                <span
+                  className={
+                    victimasTexto === SIN_DATO
+                      ? 'italic text-gray-400'
+                      : 'font-bold text-[#1E427C]'
+                  }
+                  title={victimasAclaracion ?? undefined}
+                >
+                  {victimasTexto}
+                </span>
               </div>
             )}
 
@@ -418,8 +438,15 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
               <div className="w-px h-4 sm:h-5 bg-gray-200" />
               <div>
                 <span className="text-gray-500">Víctimas:</span>{' '}
-                <span className="font-bold text-[#1E427C]">
-                  {totalVictimas.toLocaleString('es-AR')}
+                <span
+                  className={
+                    victimasTexto === SIN_DATO
+                      ? 'italic text-gray-400'
+                      : 'font-bold text-[#1E427C]'
+                  }
+                  title={victimasAclaracion ?? undefined}
+                >
+                  {victimasTexto}
                 </span>
               </div>
             </div>

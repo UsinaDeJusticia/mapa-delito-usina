@@ -5,26 +5,29 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   LineChart, Line, CartesianGrid,
 } from 'recharts'
+import { SIN_DATO, formatearMetrica, formatearPromedio } from '@/lib/mapa/metricas'
 
 interface ProvinciaData {
   provincia: string
   provinciaId: string
   totalHechos: number
-  totalVictimas: number
-  delitos: Array<{ nombre: string; hechos: number; victimas: number }>
+  // null = la fuente no informa el dato. Ver src/lib/mapa/metricas.ts.
+  totalVictimas: number | null
+  victimasParcial?: boolean
+  delitos: Array<{ nombre: string; hechos: number; victimas: number | null }>
 }
 
 interface TendenciaData {
   anio: number
   hechos: number
-  victimas: number
+  victimas: number | null
   variacionInteranual: number | null
 }
 
 interface DelitoData {
   nombre: string
   hechos: number
-  victimas: number
+  victimas: number | null
 }
 
 export function PanelEstadisticas({
@@ -116,6 +119,11 @@ export function PanelEstadisticas({
 
   const badgeText = fuente === 'snic' ? 'OFICIAL' : 'OFICIAL — SAT'
 
+  // Un único lugar donde se decide cómo se muestra el conteo de víctimas, para
+  // que las tres apariciones del panel no puedan divergir.
+  const victimasSinDato = provincia.totalVictimas === null
+  const victimasTexto = formatearMetrica(provincia.totalVictimas)
+
   return (
     <div className="absolute top-0 right-0 w-full sm:w-[420px] h-full bg-white/95 backdrop-blur-sm shadow-2xl z-30 overflow-y-auto">
       {/* Header */}
@@ -145,11 +153,25 @@ export function PanelEstadisticas({
             {fuente === 'snic' ? 'Hechos registrados' : 'Homicidios dolosos'}
           </p>
         </div>
+        {/*
+          Víctimas puede no estar informado por la fuente. En ese caso dice
+          "sin dato" en gris, no un 0 en negrita: el 0 se lee como "no hubo
+          víctimas", que es una afirmación que acá no se puede hacer.
+        */}
         <div className="bg-usina-50 rounded-xl p-4">
-          <p className="text-2xl font-bold text-usina-900">
-            {provincia.totalVictimas.toLocaleString('es-AR')}
+          <p
+            className={
+              victimasTexto === SIN_DATO
+                ? 'text-base italic text-gray-400 pt-1.5'
+                : 'text-2xl font-bold text-usina-900'
+            }
+            title={victimasSinDato ? 'La fuente oficial no informa el conteo de víctimas para esta jurisdicción y período.' : undefined}
+          >
+            {victimasTexto}
           </p>
-          <p className="text-xs text-gray-500 mt-1">Víctimas</p>
+          <p className="text-xs text-gray-500 mt-1">
+            Víctimas{provincia.victimasParcial ? ' (parcial)' : ''}
+          </p>
         </div>
       </div>
 
@@ -204,16 +226,22 @@ export function PanelEstadisticas({
               </div>
               <div className="flex justify-between items-center py-2 border-b border-gray-100">
                 <span className="text-sm text-gray-600">Total de víctimas</span>
-                <span className="text-sm font-bold text-usina-900">
-                  {provincia.totalVictimas.toLocaleString('es-AR')}
+                <span
+                  className={
+                    victimasTexto === SIN_DATO
+                      ? 'text-sm italic text-gray-400'
+                      : 'text-sm font-bold text-usina-900'
+                  }
+                >
+                  {victimasTexto}
                 </span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-gray-100">
                 <span className="text-sm text-gray-600">Promedio víctimas/hecho</span>
                 <span className="text-sm font-bold text-usina-900">
-                  {provincia.totalHechos > 0
-                    ? (provincia.totalVictimas / provincia.totalHechos).toFixed(2)
-                    : '—'}
+                  {/* Sin conteo de víctimas no hay promedio: formatearPromedio
+                      devuelve '—' en vez de dividir null por hechos y mostrar 0. */}
+                  {formatearPromedio(provincia.totalVictimas, provincia.totalHechos)}
                 </span>
               </div>
             </div>

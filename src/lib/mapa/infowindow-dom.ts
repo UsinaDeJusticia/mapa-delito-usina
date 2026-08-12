@@ -13,6 +13,8 @@
  * a string en ningún momento.
  */
 
+import { SIN_DATO, PARCIAL, formatearMetrica } from './metricas'
+
 const USINA_AZUL = '#1E427C'
 
 /**
@@ -156,7 +158,11 @@ export interface DatosProvincia {
 
 const MAX_DELITOS_MOSTRADOS = 3
 
-/** Formatea un número, tolerando null y valores no numéricos. */
+/**
+ * Formatea un número que siempre existe (conteos de hechos, que son NOT NULL en
+ * la base). Para métricas que pueden faltar usar `formatearMetrica`, que
+ * devuelve SIN_DATO en vez de un cero inventado.
+ */
 function numero(v: unknown): string {
   return typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString('es-AR') : '0'
 }
@@ -181,15 +187,27 @@ export function contenidoProvincia(
   )
 
   // ── Métricas ──
+  // Víctimas usa formatearMetrica: cuando la fuente no informa el dato dice
+  // "sin dato", no "0". Afirmar cero víctimas donde no se sabe cuántas hubo es
+  // el error que este componente tiene que no cometer.
   const metricas = crear(doc, 'div', 'display:flex;gap:20px;margin-bottom:8px;')
   for (const [etiqueta, valor] of [
     ['Hechos', numero(provincia.totalHechos)],
-    ['Víctimas', numero(provincia.totalVictimas)],
+    ['Víctimas', formatearMetrica(provincia.totalVictimas)],
   ] as const) {
+    const ausente = valor === SIN_DATO
     const bloque = crear(doc, 'div', '')
     bloque.appendChild(crear(doc, 'div', 'font-size:11px;color:#6B7280;', etiqueta))
     bloque.appendChild(
-      crear(doc, 'div', 'font-size:18px;font-weight:700;color:#111827;', valor)
+      crear(
+        doc,
+        'div',
+        ausente
+          // Gris e itálico: se lee como una aclaración, no como una cifra.
+          ? 'font-size:13px;font-style:italic;color:#9CA3AF;padding-top:3px;'
+          : 'font-size:18px;font-weight:700;color:#111827;',
+        valor
+      )
     )
     metricas.appendChild(bloque)
   }
@@ -235,7 +253,8 @@ export function contenidoProvincia(
 
 export interface DatosCeldaH3 {
   count: number
-  victimas: number
+  victimas: number | null
+  victimasParcial?: boolean
 }
 
 /**
@@ -256,7 +275,7 @@ export function contenidoCeldaH3(
 
   const hechos = typeof celda.count === 'number' && Number.isFinite(celda.count) ? celda.count : 0
   const victimas =
-    typeof celda.victimas === 'number' && Number.isFinite(celda.victimas) ? celda.victimas : 0
+    typeof celda.victimas === 'number' && Number.isFinite(celda.victimas) ? celda.victimas : null
 
   cont.appendChild(
     crear(
@@ -267,12 +286,22 @@ export function contenidoCeldaH3(
     )
   )
   cont.appendChild(doc.createElement('br'))
+
+  // Sin conteo de víctimas se dice así. Antes cada hecho sin dato contaba como
+  // una víctima, de modo que la celda siempre mostraba una cifra aunque fuera
+  // inventada.
+  const textoVictimas =
+    victimas === null
+      ? `Víctimas: ${SIN_DATO}`
+      : `${numero(victimas)} víctima${victimas === 1 ? '' : 's'}` +
+        (celda.victimasParcial ? ` (${PARCIAL})` : '')
+
   cont.appendChild(
     crear(
       doc,
       'span',
-      'color:#666;',
-      `${numero(victimas)} víctima${victimas === 1 ? '' : 's'}`
+      victimas === null ? 'color:#9CA3AF;font-style:italic;' : 'color:#666;',
+      textoVictimas
     )
   )
 

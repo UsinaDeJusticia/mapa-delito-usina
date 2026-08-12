@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client'
+import { numeroONull, sumarConDato } from './metricas'
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient }
 export const prisma = globalForPrisma.prisma || new PrismaClient()
@@ -10,20 +11,30 @@ if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 
 export type FuenteDatos = 'snic' | 'sat'
 
+/**
+ * `totalVictimas` y `victimas` son `number | null` a propósito.
+ *
+ * `estadisticas_agregadas.cantidad_victimas` es nullable y muchas filas del SNIC
+ * no lo traen, así que `SUM(...)` devuelve NULL. Colapsar eso a 0 haría que el
+ * mapa afirme "0 víctimas" donde en realidad no se sabe cuántas hubo. Ver
+ * `src/lib/mapa/metricas.ts`.
+ */
 export interface ProvinciaEstadistica {
   provincia: string
   provinciaId: string
   latitud: number
   longitud: number
   totalHechos: number
-  totalVictimas: number
-  delitos: Array<{ nombre: string; hechos: number; victimas: number }>
+  totalVictimas: number | null
+  /** true si el total suma solo algunos delitos porque a otros les falta el dato. */
+  victimasParcial: boolean
+  delitos: Array<{ nombre: string; hechos: number; victimas: number | null }>
 }
 
 export interface PuntoTendencia {
   anio: number
   hechos: number
-  victimas: number
+  victimas: number | null
   variacionInteranual: number | null
 }
 
@@ -71,7 +82,7 @@ async function getEstadisticasSNIC(
     provincia_id: string
     provincia_nombre: string
     total_hechos: number
-    total_victimas: number
+    total_victimas: number | null
     tipo_delito_nombre?: string
   }>
 
@@ -106,13 +117,16 @@ async function getEstadisticasSNIC(
     const existing = porProvincia.get(row.provincia_id)
     const delitoInfo = {
       nombre: row.tipo_delito_nombre || 'Todos los delitos',
-      hechos: Number(row.total_hechos),
-      victimas: Number(row.total_victimas),
+      hechos: numeroONull(row.total_hechos) ?? 0,
+      victimas: numeroONull(row.total_victimas),
     }
 
     if (existing) {
       existing.totalHechos += delitoInfo.hechos
-      existing.totalVictimas += delitoInfo.victimas
+      // sumarConDato, no `+=`: si ningún delito de la provincia trae víctimas el
+      // total queda en null, y si algunos sí y otros no queda marcado parcial.
+      existing.totalVictimas = sumarConDato(existing.totalVictimas, delitoInfo.victimas)
+      if (delitoInfo.victimas === null) existing.victimasParcial = true
       if (row.tipo_delito_nombre) {
         existing.delitos.push(delitoInfo)
       }
@@ -124,9 +138,16 @@ async function getEstadisticasSNIC(
         longitud: centroide.longitud,
         totalHechos: delitoInfo.hechos,
         totalVictimas: delitoInfo.victimas,
+        victimasParcial: false,
         delitos: row.tipo_delito_nombre ? [delitoInfo] : [],
       })
     }
+  }
+
+  // Una provincia con un solo delito sin dato tiene totalVictimas null, no
+  // parcial: no hay nada que esté sumando a medias.
+  for (const p of Array.from(porProvincia.values())) {
+    if (p.totalVictimas === null) p.victimasParcial = false
   }
 
   // Años disponibles (desde materialized view)
@@ -154,7 +175,7 @@ async function getEstadisticasSAT(
     provincia_id: string
     provincia_nombre: string
     total_hechos: number
-    total_victimas: number
+    total_victimas: number | null
     femicidios: number
   }> = await prisma.$queryRaw`
     SELECT provincia_id, provincia_nombre,
@@ -172,17 +193,20 @@ async function getEstadisticasSAT(
     .map(row => {
       const paddedId = row.provincia_id.padStart(2, '0')
       const centroide = PROVINCIAS_CENTROIDES[paddedId]
+      const hechos = numeroONull(row.total_hechos) ?? 0
+      const victimas = numeroONull(row.total_victimas)
       return {
         provincia: row.provincia_nombre || centroide.nombre,
         provinciaId: paddedId,
         latitud: centroide.latitud,
         longitud: centroide.longitud,
-        totalHechos: Number(row.total_hechos),
-        totalVictimas: Number(row.total_victimas),
+        totalHechos: hechos,
+        totalVictimas: victimas,
+        victimasParcial: false,
         delitos: [{
           nombre: 'Homicidios dolosos',
-          hechos: Number(row.total_hechos),
-          victimas: Number(row.total_victimas),
+          hechos,
+          victimas,
         }],
       }
     })
@@ -263,7 +287,7 @@ export async function getEstadisticasSATFiltrado(
     provincia_id: string
     provincia_nombre: string
     total_hechos: number
-    total_victimas: number
+    total_victimas: number | null
   }> = await prisma.$queryRawUnsafe(sql, ...params)
 
   const provincias: ProvinciaEstadistica[] = rows
@@ -272,17 +296,20 @@ export async function getEstadisticasSATFiltrado(
       const centroide = PROVINCIAS_CENTROIDES[paddedId]
       if (!centroide) return null
 
+      const hechos = numeroONull(row.total_hechos) ?? 0
+      const victimas = numeroONull(row.total_victimas)
       return {
         provincia: row.provincia_nombre || centroide.nombre,
         provinciaId: paddedId,
         latitud: centroide.latitud,
         longitud: centroide.longitud,
-        totalHechos: Number(row.total_hechos),
-        totalVictimas: Number(row.total_victimas),
+        totalHechos: hechos,
+        totalVictimas: victimas,
+        victimasParcial: false,
         delitos: [{
           nombre: 'Homicidios dolosos',
-          hechos: Number(row.total_hechos),
-          victimas: Number(row.total_victimas),
+          hechos,
+          victimas,
         }],
       }
     })
@@ -333,7 +360,7 @@ export async function getTendencias(
 
   if (!tipoDelito) return null
 
-  let datos: Array<{ anio: number; total_hechos: number; total_victimas: number }>
+  let datos: Array<{ anio: number; total_hechos: number; total_victimas: number | null }>
 
   if (provinciaId) {
     datos = await prisma.$queryRaw`
@@ -360,8 +387,8 @@ export async function getTendencias(
 
   const serie: PuntoTendencia[] = datos.map((d, i) => {
     const anterior = i > 0 ? datos[i - 1] : null
-    const hechos = Number(d.total_hechos)
-    const hechosAnt = anterior ? Number(anterior.total_hechos) : 0
+    const hechos = numeroONull(d.total_hechos) ?? 0
+    const hechosAnt = anterior ? numeroONull(anterior.total_hechos) ?? 0 : 0
     const variacion = anterior && hechosAnt > 0
       ? Math.round(((hechos - hechosAnt) / hechosAnt * 100) * 10) / 10
       : null
@@ -369,7 +396,7 @@ export async function getTendencias(
     return {
       anio: Number(d.anio),
       hechos,
-      victimas: Number(d.total_victimas),
+      victimas: numeroONull(d.total_victimas),
       variacionInteranual: variacion,
     }
   })
