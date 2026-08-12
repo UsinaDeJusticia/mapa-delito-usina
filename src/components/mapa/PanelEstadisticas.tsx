@@ -217,8 +217,27 @@ export function PanelEstadisticas({
                 </span>
               </div>
             </div>
-            <p className="text-xs text-gray-400 mt-4">
-              Filtros detallados (sexo, arma, femicidio) disponibles próximamente.
+            {/*
+              Aclaración de lectura. Los femicidios se cuentan como categoría
+              propia, así que el total de homicidios dolosos no los incluye. Sin
+              esta nota, una baja del número se lee como "hubo menos homicidios"
+              cuando en realidad el dato se separó en dos categorías.
+            */}
+            <div className="mt-4 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+              <p className="text-xs text-amber-900">
+                Los <strong>femicidios se cuentan aparte</strong> y no están incluidos en este
+                total. Para la cifra comparable con la estadística oficial, sumá homicidios
+                dolosos más femicidios.{' '}
+                <a
+                  href="/metodologia"
+                  className="underline font-medium hover:text-amber-950"
+                >
+                  Ver metodología
+                </a>
+              </p>
+            </div>
+            <p className="text-xs text-gray-400 mt-3">
+              Filtros detallados (sexo, arma) disponibles próximamente.
             </p>
           </div>
         </>

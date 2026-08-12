@@ -63,6 +63,12 @@ export interface HechoExtraido {
   medioUtilizado: string | null
   descripcionBreve: string | null
   nombreVictima: string | null
+  /**
+   * Femicidio no es un código SNIC: es un homicidio doloso (código 1) marcado
+   * aparte. Se guarda en la columna hechos_delictivos.femicidio, la misma que
+   * usa la ingesta oficial del SAT.
+   */
+  esFemicidio: boolean
   confianzaExtraccion: number
   requiereRevision?: boolean
 }
@@ -78,12 +84,25 @@ CRITERIO DE INCLUSIÓN:
 - Si no hay muertos ni heridos graves, seteá "esHechoDelictivo": false y completá el resto de los campos en null o vacíos.
 
 CÓDIGOS SNIC REGLAMENTARIOS:
-Asigná obligatoriamente uno de estos códigos según el hecho principal:
-- 1 = Homicidio doloso (incluye muertes en ocasión de robo, sicariato, linchamientos).
-- 2 = Homicidio doloso en grado de tentativa (heridos graves por ataques letales).
-- 3 = Homicidio culposo (accidentes de tránsito fatales, negligencia médica, accidentes laborales).
-- 4 = Femicidio / Transfemicidio (violencia de género con resultado de muerte).
+Asigná obligatoriamente uno de estos códigos según el hecho principal. Los
+nombres son los del catálogo oficial:
+- 1 = Homicidios dolosos (incluye muertes en ocasión de robo, sicariato, linchamientos, y TAMBIÉN los femicidios).
+- 2 = Homicidios dolosos en grado de tentativa (heridos graves por ataques letales).
+- 3 = Muertes en siniestros viales (SOLO tránsito: choques, atropellamientos).
+- 4 = Homicidios culposos por otros hechos (negligencia médica, accidentes laborales, imprudencia no vial).
 - 0 = Muerte violenta de causa dudosa / En investigación (cuerpos hallados sin causa clara aún).
+
+FEMICIDIO — SE MARCA APARTE, NO ES UN CÓDIGO:
+Un femicidio o transfemicidio es un homicidio doloso, así que va con snic_codigo 1
+y además con "es_femicidio": true. NUNCA uses el código 4 para un femicidio: ese
+código es de homicidios culposos (negligencia, accidentes laborales) y clasificar
+un femicidio ahí lo vuelve indistinguible de una muerte accidental.
+Marcá es_femicidio true cuando el hecho sea la muerte de una mujer o persona
+trans/travesti en un contexto de violencia de género: pareja o expareja, violencia
+familiar, violencia sexual, o cuando la noticia lo nombre explícitamente como
+femicidio, transfemicidio o crimen de odio por identidad de género.
+Si no hay elementos para afirmarlo, poné false. No lo infieras solo del sexo de la
+víctima: una mujer víctima de un robo violento no es necesariamente un femicidio.
 
 LÓGICA DE FLEXIBILIDAD (CRÍTICO PARA CONFIANZA):
 1. Fecha del hecho: Buscá expresiones temporales ("ayer", "esta madrugada"). Si el texto no permite calcular el día exacto, usá la fecha actual de la nota/sistema. NO penalices la confianza por esto.
@@ -105,6 +124,7 @@ Respondé EXCLUSIVAMENTE con un objeto JSON válido, sin backticks, sin texto in
   "cantidad_victimas": 1,
   "resumen_hecho": "Breve descripción objetiva de los hechos en un párrafo",
   "nombre_victima": "Nombre completo de la/s víctima/s si figura en la noticia, sino null",
+  "es_femicidio": false,
   "requiereRevision": false,
   "confianzaExtraccion": 90
 }`
@@ -113,12 +133,16 @@ Respondé EXCLUSIVAMENTE con un objeto JSON válido, sin backticks, sin texto in
 // TIPOS INTERNOS Y MAPEO
 // ════════════════════════════════════════════
 
+// Nombres alineados con el catálogo real de prisma/seed.ts. Antes el 3 decía
+// "Homicidio culposo" y el 4 "Femicidio", ninguno de los dos coincidía con el
+// catálogo oficial que se siembra en tipos_delito: el 3 es vial y el 4 es culposo
+// no vial. Femicidio no tiene código propio, se marca con el flag esFemicidio.
 const SNIC_DESCRIPCION: Record<number, string> = {
   0: 'Muerte violenta en investigación',
-  1: 'Homicidio doloso',
-  2: 'Tentativa de homicidio',
-  3: 'Homicidio culposo',
-  4: 'Femicidio',
+  1: 'Homicidios dolosos',
+  2: 'Homicidios dolosos en grado de tentativa',
+  3: 'Muertes en siniestros viales',
+  4: 'Homicidios culposos por otros hechos',
 }
 
 /**
@@ -144,6 +168,7 @@ function mapearRespuesta(resp: ExtraccionValidada): HechoExtraido {
     medioUtilizado: null,
     descripcionBreve: resp.resumenHecho,
     nombreVictima: resp.nombreVictima,
+    esFemicidio: resp.esFemicidio,
     confianzaExtraccion: resp.confianzaExtraccion,
     requiereRevision: resp.requiereRevision,
   }
@@ -163,6 +188,7 @@ const RESPUESTA_FALLBACK: HechoExtraido = {
   medioUtilizado: null,
   descripcionBreve: null,
   nombreVictima: null,
+  esFemicidio: false,
   confianzaExtraccion: 0,
   requiereRevision: false,
 }

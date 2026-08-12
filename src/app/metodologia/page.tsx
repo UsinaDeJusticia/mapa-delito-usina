@@ -105,6 +105,56 @@ export default function MetodologiaPage() {
           </div>
         </Seccion>
 
+        {/* Cómo se cuentan los femicidios */}
+        <Seccion titulo="Cómo se cuentan los femicidios">
+          <div className="space-y-3 text-xs text-gray-600">
+            <p>
+              Los femicidios y transfemicidios se cuentan <strong>como categoría propia</strong> en
+              este mapa. Un femicidio es jurídicamente un homicidio doloso, pero visibilizarlo
+              como tal es parte de la misión de Usina de Justicia, así que se muestra separado y
+              no diluido dentro del total.
+            </p>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <p className="text-xs font-semibold text-amber-900 mb-2">
+                Importante para leer las cifras
+              </p>
+              <p className="text-xs text-amber-900">
+                Como los femicidios se cuentan aparte, el número que el mapa muestra bajo
+                <strong> &ldquo;homicidios dolosos&rdquo;</strong> no los incluye. Si compara ese
+                número con el de un año anterior a esta separación, va a parecer que los
+                homicidios dolosos bajaron: <strong>no bajaron</strong>, se separaron en dos
+                categorías. Para obtener la cifra comparable con las estadísticas oficiales del
+                Ministerio de Seguridad hay que <strong>sumar homicidios dolosos más
+                femicidios</strong>.
+              </p>
+            </div>
+
+            <p>
+              En la base de datos cada caso conserva su código del catálogo oficial —los
+              femicidios quedan registrados como homicidios dolosos, código 1— y la condición de
+              femicidio se guarda en un campo separado. Por eso el dato oficial nunca se pierde y
+              la cifra comparable siempre se puede reconstruir.
+            </p>
+
+            <p>
+              El criterio para marcar un caso como femicidio es que la muerte de una mujer o de
+              una persona travesti o trans ocurra en un contexto de violencia de género: pareja o
+              expareja, violencia familiar, violencia sexual, o que la fuente lo nombre
+              explícitamente como femicidio, transfemicidio o crimen de odio por identidad de
+              género. <strong>No se infiere del sexo de la víctima</strong>: una mujer víctima de
+              un robo violento no se cuenta automáticamente como femicidio.
+            </p>
+
+            <p className="text-gray-500">
+              Los casos provenientes de la fuente oficial SAT usan el criterio del propio
+              organismo. Los del monitoreo periodístico son clasificados automáticamente y
+              revisados por el equipo de Usina, y mantienen el estado PRELIMINAR hasta esa
+              revisión.
+            </p>
+          </div>
+        </Seccion>
+
         {/* Sección 3 */}
         <Seccion titulo="Metodología de procesamiento">
           <div className="space-y-3">
@@ -117,7 +167,7 @@ export default function MetodologiaPage() {
               <ol className="text-xs text-gray-600 space-y-1 list-decimal list-inside">
                 <li>Palabras clave en título: descarte inmediato de noticias de drogas/sentencias sin muertes</li>
                 <li>Clasificación LLM: el modelo extrae tipo, ubicación, fecha y confianza</li>
-                <li>Validación SNIC: solo códigos 0–4 (homicidio doloso, femicidio, culposo, tentativa)</li>
+                <li>Validación SNIC: solo códigos 0–4 del catálogo oficial (homicidios dolosos, tentativa, siniestros viales, culposos por otros hechos, y muertes en investigación)</li>
               </ol>
             </div>
             <div className="bg-white border border-gray-200 rounded-xl p-4">
