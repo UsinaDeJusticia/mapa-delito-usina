@@ -33,8 +33,15 @@ import time
 import uuid
 from collections import defaultdict
 from datetime import datetime
-import psycopg2
-from psycopg2.extras import execute_values
+try:
+    import psycopg2
+    from psycopg2.extras import execute_values
+except ImportError:  # pragma: no cover
+    # El driver solo hace falta para escribir en la base. El modo --dry-run y los
+    # tests del mapeo de columnas no lo necesitan, así que importarlo de forma
+    # obligatoria impedía correrlos en una máquina sin psycopg2 instalado.
+    psycopg2 = None
+    execute_values = None
 
 CSV_PATH = "data/snic/SAT-HD-BU_2017-2024.csv"
 SEPARATOR = ";"
@@ -43,8 +50,77 @@ FUENTE_NOMBRE = "SAT-SNIC"
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
+# tipos_delito.codigo_snic es TEXT desde la migración
+# 20260324190907_codigo_snic_to_string. Nunca comparar ni insertar un entero acá.
+CODIGO_SNIC_HOMICIDIO_DOLOSO = "1"
+
 _fuente_id = None
 _tipo_delito_hd_id = None
+
+# ════════════════════════════════════════════
+# MAPEO DE COLUMNAS DE hechos_delictivos
+# ════════════════════════════════════════════
+# Cada entrada es (clave_en_el_diccionario, identificador_sql).
+#
+# Los dos roles son distintos y antes estaban mezclados en una sola lista. Los
+# campos SAT se crearon en camelCase entrecomillado (ver
+# prisma/migrations/20260323085453_add_sat_detail_columns) porque el modelo de
+# Prisma no les puso @map, así que en SQL hay que citarlos. Pero la clave del
+# diccionario que arma construir_registro() NO lleva comillas.
+#
+# Al usar la misma lista para ambas cosas, h.get('"lugarHecho"') devolvía None y
+# once columnas de detalle de la víctima y del victimario se escribían vacías,
+# mientras el SQL quedaba sintácticamente válido. El camino de --dry-run leía las
+# claves correctas, así que la prueba en seco mostraba los datos completos y era
+# ciega al defecto.
+HECHO_CAMPOS = [
+    # (clave del dict, identificador SQL)
+    ("id", "id"),
+    ("tipo_delito_id", "tipo_delito_id"),
+    ("ubicacion_id", "ubicacion_id"),
+    ("fuente_id", "fuente_id"),
+    ("anio", "anio"),
+    ("mes", "mes"),
+    ("fecha_hecho", "fecha_hecho"),
+    ("cantidad_hechos", "cantidad_hechos"),
+    ("cantidad_victimas", "cantidad_victimas"),
+    ("es_agregado", "es_agregado"),
+    ("confianza", "confianza"),
+    ("created_at", "created_at"),
+    ("updated_at", "updated_at"),
+    # Columnas SAT. Las que van entre comillas en SQL son camelCase en la base.
+    ("hora", "hora"),
+    ("lugarHecho", '"lugarHecho"'),
+    ("subtipo", "subtipo"),
+    ("medioComision", '"medioComision"'),
+    ("medioDetalle", '"medioDetalle"'),
+    ("victimaSexo", '"victimaSexo"'),
+    ("victimaEdad", '"victimaEdad"'),
+    ("victimaRangoEdad", '"victimaRangoEdad"'),
+    ("contexto", "contexto"),
+    ("vinculoVictimaVictimario", '"vinculoVictimaVictimario"'),
+    ("femicidio", "femicidio"),
+    ("victimarioSexo", '"victimarioSexo"'),
+    ("victimarioEdad", '"victimarioEdad"'),
+    ("situacionVictimario", '"situacionVictimario"'),
+    ("cantidadImputados", '"cantidadImputados"'),
+]
+
+HECHO_CLAVES = [clave for clave, _ in HECHO_CAMPOS]
+HECHO_SQL = [ident for _, ident in HECHO_CAMPOS]
+
+
+def verificar_mapeo_columnas(registro):
+    """
+    Comprueba que toda clave declarada en HECHO_CAMPOS exista en el registro que
+    arma construir_registro(). Devuelve la lista de claves faltantes.
+
+    Es la red que atrapa exactamente el defecto que estuvo activo: si alguien
+    vuelve a mezclar identificadores SQL con claves de diccionario, o renombra un
+    campo en construir_registro sin actualizar el mapeo, la ingesta aborta en vez
+    de escribir NULL en silencio sobre datos de víctimas.
+    """
+    return [clave for clave in HECHO_CLAVES if clave not in registro]
 
 PROVINCIAS_CENTROIDES = {
     "02": {"latitud": -34.6037, "longitud": -58.3816},
@@ -203,13 +279,17 @@ def obtener_tipo_delito_homicidio(cur):
     if _tipo_delito_hd_id:
         return _tipo_delito_hd_id
 
+    # codigo_snic es TEXT desde la migración 20260324190907_codigo_snic_to_string.
+    # Comparar contra el entero 1 hacía que Postgres rechazara la consulta entera
+    # con "operator does not exist: text = integer", así que esta función venía
+    # fallando y con ella toda la ingesta SAT. Se compara contra el string '1'.
     cur.execute('''
         SELECT id FROM tipos_delito
         WHERE LOWER(nombre) LIKE '%%homicidio%%doloso%%'
            OR LOWER(nombre) LIKE '%%homicidios dolosos%%'
-           OR codigo_snic = 1
+           OR codigo_snic = %s
         LIMIT 1
-    ''')
+    ''', (CODIGO_SNIC_HOMICIDIO_DOLOSO,))
     row = cur.fetchone()
 
     if row:
@@ -220,13 +300,27 @@ def obtener_tipo_delito_homicidio(cur):
         cur.execute('''
             INSERT INTO tipos_delito (id, nombre, codigo_snic, categoria)
             VALUES (%s, %s, %s, %s)
-        ''', (_tipo_delito_hd_id, "Homicidios dolosos", 1, "CONTRA_PERSONAS"))
+        ''', (
+            _tipo_delito_hd_id,
+            "Homicidios dolosos",
+            CODIGO_SNIC_HOMICIDIO_DOLOSO,  # string, no entero: la columna es TEXT
+            "CONTRA_PERSONAS",
+        ))
         print(f"  TipoDelito creado: Homicidios dolosos -> {_tipo_delito_hd_id}")
 
     return _tipo_delito_hd_id
 
 
 def agrupar_por_hecho(csv_path):
+    # El CSV está gitignoreado (data/snic/), así que la ausencia es el caso más
+    # común al correr esto en una máquina nueva. Un mensaje claro en vez de un
+    # traceback de FileNotFoundError.
+    if not os.path.isfile(csv_path):
+        print(f"\n❌ No se encontró el CSV de entrada: {csv_path}")
+        print("   Ese archivo no está en el repositorio (data/snic/ está gitignoreado).")
+        print("   Copiá el CSV del SAT a esa ruta antes de correr la ingesta.")
+        sys.exit(1)
+
     grupos = defaultdict(list)
     with open(csv_path, "r", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f, delimiter=SEPARATOR)
@@ -444,6 +538,12 @@ def ingest(dry_run=False):
         print("\n Dry run completo.")
         return
 
+    if psycopg2 is None:
+        print("\n❌ psycopg2 no está instalado y hace falta para escribir en la base.")
+        print("   Instalalo con: pip install psycopg2-binary")
+        print("   O corré con --dry-run, que no necesita driver.")
+        sys.exit(1)
+
     conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
 
@@ -470,20 +570,19 @@ def ingest(dry_run=False):
         "id", "provincia", "provincia_id", "departamento", "departamento_id",
         "localidad", "latitud", "longitud", "es_centroide", "fuente_ubicacion"
     ]
-    HECHO_COLS = [
-        "id", "tipo_delito_id", "ubicacion_id", "fuente_id",
-        "anio", "mes", "fecha_hecho", "cantidad_hechos", "cantidad_victimas",
-        "es_agregado", "confianza", "created_at", "updated_at",
-        "hora", "\"lugarHecho\"", "subtipo", "\"medioComision\"", "\"medioDetalle\"",
-        "\"victimaSexo\"", "\"victimaEdad\"", "\"victimaRangoEdad\"",
-        "contexto", "\"vinculoVictimaVictimario\"", "femicidio",
-        "\"victimarioSexo\"", "\"victimarioEdad\"", "\"situacionVictimario\"",
-        "\"cantidadImputados\""
-    ]
+    # Verificación previa: si el mapeo de columnas no coincide con lo que arma
+    # construir_registro(), abortar antes de escribir una sola fila. Escribir
+    # NULL sobre datos de víctimas ya cargados es peor que no correr.
+    if hechos:
+        faltantes = verificar_mapeo_columnas(hechos[0])
+        if faltantes:
+            print(f"\n❌ ABORTADO: HECHO_CAMPOS declara claves que el registro no tiene: {faltantes}")
+            print("   Corregí el mapeo antes de correr la ingesta. No se escribió nada.")
+            sys.exit(1)
 
     # Armar tuples con columnas fijas (None para valores faltantes)
     ubi_tuples = [tuple(u.get(c) for c in UBI_COLS) for u in ubicaciones]
-    hecho_tuples = [tuple(h.get(c) for c in HECHO_COLS) for h in hechos]
+    hecho_tuples = [tuple(h.get(c) for c in HECHO_CLAVES) for h in hechos]
 
     ubi_cols_str = ", ".join(UBI_COLS)
     ubi_update = ", ".join([f"{c} = EXCLUDED.{c}" for c in UBI_COLS if c != "id"])
@@ -492,8 +591,20 @@ def ingest(dry_run=False):
         ON CONFLICT (id) DO UPDATE SET {ubi_update}
     '''
 
-    hecho_cols_str = ", ".join(HECHO_COLS)
-    hecho_update = ", ".join([f"{c} = EXCLUDED.{c}" for c in HECHO_COLS if c != "id"])
+    hecho_cols_str = ", ".join(HECHO_SQL)
+    # COALESCE en el UPDATE: un re-run solo sobrescribe cuando trae un valor
+    # nuevo, y nunca reemplaza un dato ya cargado por NULL. Sin esto, cualquier
+    # regresión futura en el armado del registro vaciaría en silencio las
+    # columnas de detalle de las filas SAT ya existentes, porque los ids son
+    # deterministas (sat-hd-{id_hecho}) y todas caen en el ON CONFLICT.
+    # updated_at se excluye del COALESCE porque siempre debe reflejar la corrida.
+    hecho_update = ", ".join([
+        f"{ident} = EXCLUDED.{ident}"
+        if ident == "updated_at"
+        else f"{ident} = COALESCE(EXCLUDED.{ident}, hechos_delictivos.{ident})"
+        for ident in HECHO_SQL
+        if ident != "id"
+    ])
     SQL_HECHO = f'''
         INSERT INTO hechos_delictivos ({hecho_cols_str}) VALUES %s
         ON CONFLICT (id) DO UPDATE SET {hecho_update}
