@@ -201,8 +201,19 @@ class TestIntegracionConstruirRegistro(unittest.TestCase):
     def test_requiereRevision_esta_en_el_mapeo_de_columnas(self):
         # Si alguien saca este campo de HECHO_CAMPOS sin querer, este test lo
         # detecta antes que un INSERT roto contra Neon.
+        #
+        # El identificador SQL es "requiere_revision" (snake_case, SIN
+        # comillas), no '"requiereRevision"'. A diferencia de las demás
+        # columnas SAT de esta lista, requiereRevision ya existía antes de
+        # este script y tiene @map("requiere_revision") en schema.prisma — es
+        # decir, es snake_case en la base. La primera versión de este fix
+        # asumía el mismo patrón camelCase que las columnas SAT nuevas y
+        # entrecomillaba "requiereRevision", apuntando a una columna que no
+        # existe. Ver TestColumnasContraSchemaPrisma para la guarda genérica
+        # que evita que se repita con cualquier campo, no solo este.
         self.assertIn("requiereRevision", sat.HECHO_CLAVES)
-        self.assertIn('"requiereRevision"', sat.HECHO_SQL)
+        self.assertIn("requiere_revision", sat.HECHO_SQL)
+        self.assertNotIn('"requiereRevision"', sat.HECHO_SQL)
 
     def test_el_registro_completo_satisface_verificar_mapeo_columnas(self):
         hecho = self._construir("Femicidio", "Femenino")

@@ -73,8 +73,23 @@ class TestMapeoDeColumnas(unittest.TestCase):
         """
         Postgres pliega a minúsculas los identificadores sin comillas, así que
         las columnas camelCase de la base necesitan comillas en el SQL.
+
+        Regla válida para las columnas SAT que agregó este script (no tienen
+        @map en schema.prisma, así que son camelCase en la base tal cual el
+        nombre del campo) — NO es una regla universal. `requiereRevision` es
+        la prueba: es un campo camelCase más viejo que sí tiene
+        @map("requiere_revision"), o sea que es snake_case en la base, y
+        quedó excluido a propósito. La primera versión del fix de
+        detectar_femicidio() asumió que seguía el mismo patrón que estas
+        columnas sin chequear su @map, y apuntó a una columna que no existe.
+        Ver test_sat_columnas_contra_schema.py para la guarda que sí cruza
+        contra schema.prisma en vez de asumir un patrón por el nombre.
         """
+        EXCLUIDAS_CON_MAP_SNAKE_CASE = {"requiereRevision"}
+
         for clave, ident in sat.HECHO_CAMPOS:
+            if clave in EXCLUIDAS_CON_MAP_SNAKE_CASE:
+                continue
             if any(c.isupper() for c in clave):
                 self.assertEqual(
                     ident,
