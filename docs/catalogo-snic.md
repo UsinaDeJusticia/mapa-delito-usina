@@ -34,14 +34,6 @@ Para completarla, conseguí el CSV en `data/snic/snic-departamentos-anual.csv` y
 
   </details>
 
-- **El prompt y el catálogo no significan lo mismo con el código 3**
-  prompt:   'Homicidio culposo'
-  seed.ts:  'Muertes en siniestros viales'
-
-- **El prompt y el catálogo no significan lo mismo con el código 4**
-  prompt:   'Femicidio / Transfemicidio'
-  seed.ts:  'Homicidios culposos por otros hechos'
-
 ## Catálogo cargado en la base (`prisma/seed.ts`)
 
 32 tipos de delito.
@@ -88,9 +80,9 @@ Solo un subconjunto: el pipeline busca homicidios, no todo el catálogo.
 | Código | En el prompt | En SNIC_DESCRIPCION | En el catálogo |
 |---|---|---|---|
 | 0 | Muerte violenta de causa dudosa / En investigación | Muerte violenta en investigación | **no existe** |
-| 1 | Homicidio doloso | Homicidio doloso | Homicidios dolosos |
-| 2 | Homicidio doloso en grado de tentativa | Tentativa de homicidio | Homicidios dolosos en grado de tentativa |
-| 3 | Homicidio culposo | Homicidio culposo | Muertes en siniestros viales |
-| 4 | Femicidio / Transfemicidio | Femicidio | Homicidios culposos por otros hechos |
+| 1 | Homicidios dolosos | Homicidios dolosos | Homicidios dolosos |
+| 2 | Homicidios dolosos en grado de tentativa | Homicidios dolosos en grado de tentativa | Homicidios dolosos en grado de tentativa |
+| 3 | Muertes en siniestros viales | Muertes en siniestros viales | Muertes en siniestros viales |
+| 4 | Homicidios culposos por otros hechos | Homicidios culposos por otros hechos | Homicidios culposos por otros hechos |
 
 Códigos que el pipeline acepta al guardar: 0, 1, 2, 3, 4.
