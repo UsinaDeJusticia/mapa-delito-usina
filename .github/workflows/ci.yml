@@ -50,6 +50,11 @@ jobs:
       - name: Tests
         run: npm test
 
+      # Los scripts de ingesta son Python. Los tests usan solo unittest de la
+      # stdlib, así que no hace falta instalar nada ni el driver de Postgres.
+      - name: Tests de ingesta (Python)
+        run: npm run test:py
+
       - name: Build
         run: npx next build
         env:
