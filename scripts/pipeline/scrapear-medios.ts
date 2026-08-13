@@ -732,7 +732,7 @@ async function main() {
 
       // ── DRY RUN: solo mostrar ──
       if (DRY_RUN) {
-        log('🔍', `[DRY RUN] ${dedup.esNuevo ? 'NUEVO' : 'COBERTURA'}: ${datos.tipoHecho} | SNIC:${datos.codigoSnicEstimado} | ${provinciaParaGeoref} | confianza:${datos.confianzaExtraccion}% | revision:${datos.requiereRevision ? '⚠️ SI' : 'no'} | ${noticia.url}`)
+        log('🔍', `[DRY RUN] ${dedup.esNuevo ? 'NUEVO' : 'COBERTURA'}: ${datos.tipoHecho} | SNIC:${datos.codigoSnicEstimado} | ${provinciaParaGeoref} | confianza:${datos.confianzaExtraccion}% | revision:${(datos.requiereRevision || dedup.requiereRevision) ? '⚠️ SI' : 'no'} | ${noticia.url}`)
         if (dedup.esNuevo) totalInsertadas++
         else totalVinculadas++
         continue
@@ -794,7 +794,13 @@ async function main() {
               urlFuente: noticia.url,
               esAgregado: false,
               esCasoUsina: false,
-              requiereRevision: datos.requiereRevision ?? false,
+              // Dos señales distintas piden revisión, y ninguna reemplaza a
+              // la otra: la extracción puede estar segura del hecho pero la
+              // deduplicación no pudo confirmar si es nuevo (proveedor de IA
+              // caído o respuesta inválida) — o al revés. dedup.requiereRevision
+              // es la que faltaba: antes, una falla del deduplicador insertaba
+              // el hecho como nuevo sin ninguna marca visible en el panel.
+              requiereRevision: (datos.requiereRevision ?? false) || dedup.requiereRevision,
               nombreVictima: datos.nombreVictima ?? null,
               // 'Si' o null, igual formato que escribe la ingesta oficial del
               // SAT, para que las vistas que cuentan femicidio = 'Si' incluyan

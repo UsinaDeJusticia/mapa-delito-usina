@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { mismoNombreVictima } from '../../src/lib/mapa/deduplicador'
+import { mismoNombreVictima, FALLBACK_DEDUP } from '../../src/lib/mapa/deduplicador'
 
 // ════════════════════════════════════════════
 // mismoNombreVictima
@@ -41,5 +41,45 @@ describe('mismoNombreVictima', () => {
     assert.equal(mismoNombreVictima(null, 'Juan Pérez'), false)
     assert.equal(mismoNombreVictima('Juan Pérez', undefined), false)
     assert.equal(mismoNombreVictima('', ''), false)
+  })
+})
+
+// ════════════════════════════════════════════
+// FALLBACK_DEDUP
+// ════════════════════════════════════════════
+//
+// EL DEFECTO: cuando el proveedor de IA fallaba o devolvía algo inválido,
+// deduplicar() caía a este resultado con confianza baja. El comentario decía
+// "la confianza baja deja el caso marcado para revisión", pero nada lo hacía:
+// requiereRevision en el hecho creado venía únicamente de la confianza de
+// EXTRACCIÓN (datos.requiereRevision), nunca de la deduplicación. Con
+// OpenCode Go como único proveedor (ver docs/llm/DECISIONS.md), una caída de
+// una hora insertaba un duplicado por cada noticia procesada, sin ninguna
+// marca visible en /admin/revisiones — para una organización que publica
+// estadística de homicidios, inflar los números así es peor que demorar un
+// dato.
+//
+// Encontrado revisando `claude/review-duckdb-architecture-zfJFO` antes de
+// archivarla: esa rama había detectado el mismo problema en junio, con una
+// solución más elaborada (política PIPELINE_DEDUP_FALLO configurable) que no
+// llegó a mergearse. Esta es la versión mínima: la marca siempre queda
+// puesta, sin agregar una variable de entorno nueva.
+
+describe('FALLBACK_DEDUP', () => {
+  test('pide revisión — es la corrección de este fix', () => {
+    assert.equal(
+      FALLBACK_DEDUP.requiereRevision,
+      true,
+      'sin esto, una falla del proveedor de IA inserta duplicados sin ninguna marca'
+    )
+  })
+
+  test('sigue asumiendo hecho nuevo, con confianza baja', () => {
+    // Preferir un duplicado (que un humano puede fusionar) a vincular la
+    // cobertura al hecho equivocado — ese comportamiento no cambia con este
+    // fix, solo se le agrega la marca de revisión que faltaba.
+    assert.equal(FALLBACK_DEDUP.esNuevo, true)
+    assert.equal(FALLBACK_DEDUP.candidatoId, null)
+    assert.ok(FALLBACK_DEDUP.confianza < 50, 'la confianza tiene que quedar baja')
   })
 })

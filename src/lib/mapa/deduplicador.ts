@@ -46,6 +46,14 @@ export interface ResultadoDeduplicacion {
   confianza: number
   razon: string
   urlDuplicada: boolean
+  /**
+   * true cuando la decisión no es confiable (el proveedor de IA falló o
+   * devolvió algo inválido) y el hecho necesita que una persona lo revise.
+   * En todos los demás casos —URL duplicada, sin candidatos, coincidencia
+   * determinista por nombre, o una respuesta de IA válida— la decisión es
+   * confiable y esto es false.
+   */
+  requiereRevision: boolean
 }
 
 // ════════════════════════════════════════════
@@ -202,10 +210,18 @@ function coincidenciaPorNombre(
 // CONFIRMACIÓN POR IA
 // ════════════════════════════════════════════
 
+interface ResultadoConfirmacionIA {
+  esNuevo: boolean
+  candidatoId: string | null
+  confianza: number
+  razon: string
+  requiereRevision: boolean
+}
+
 async function confirmarConIA(
   datos: DatosNoticia,
   candidatos: Awaited<ReturnType<typeof buscarHechosSimilares>>
-): Promise<{ esNuevo: boolean; candidatoId: string | null; confianza: number; razon: string }> {
+): Promise<ResultadoConfirmacionIA> {
 
   if (candidatos.length === 0) {
     return {
@@ -213,6 +229,7 @@ async function confirmarConIA(
       candidatoId: null,
       confianza: 95,
       razon: 'Sin candidatos similares en los últimos 30 días',
+      requiereRevision: false,
     }
   }
 
@@ -276,7 +293,9 @@ o
       return FALLBACK_DEDUP
     }
 
-    return validado.valor
+    // Una respuesta válida del modelo es una decisión confiable: no necesita
+    // revisión por el solo hecho de haber pasado por la IA.
+    return { ...validado.valor, requiereRevision: false }
 
   } catch (error) {
     // Error del proveedor, distinto de una decisión negativa del modelo.
@@ -288,15 +307,24 @@ o
 /**
  * Ante error del proveedor o respuesta inválida se asume hecho nuevo con
  * confianza baja: es preferible un duplicado, que el revisor humano puede
- * fusionar, a vincular la cobertura al hecho equivocado. La confianza baja
- * deja el caso marcado para revisión.
+ * fusionar, a vincular la cobertura al hecho equivocado.
+ *
+ * `requiereRevision: true` es la parte que antes faltaba. El comentario
+ * original decía que "la confianza baja deja el caso marcado para revisión",
+ * pero nada lo hacía: el hecho se creaba con `requiereRevision` solo desde la
+ * confianza de EXTRACCIÓN, nunca desde esta. Con un solo proveedor de LLM (ver
+ * docs/llm/DECISIONS.md), una caída de una hora insertaba un duplicado por
+ * cada noticia, sin ninguna marca visible en /admin/revisiones.
  */
-const FALLBACK_DEDUP = {
+// Exportado solo para que el test pueda fijar el contrato exacto sin tener
+// que mockear Prisma ni el cliente LLM para llegar hasta acá.
+export const FALLBACK_DEDUP: ResultadoConfirmacionIA = {
   esNuevo: true,
   candidatoId: null,
   confianza: 30,
   razon: 'Respuesta de IA inválida o error del proveedor; asumido nuevo por precaución',
-} as const
+  requiereRevision: true,
+}
 
 // ════════════════════════════════════════════
 // FUNCIÓN PRINCIPAL
@@ -328,6 +356,7 @@ export async function deduplicar(datos: DatosNoticia): Promise<ResultadoDeduplic
       confianza: 100,
       razon: 'URL ya procesada',
       urlDuplicada: true,
+      requiereRevision: false,
     }
   }
 
@@ -342,6 +371,7 @@ export async function deduplicar(datos: DatosNoticia): Promise<ResultadoDeduplic
       confianza: 95,
       razon: 'Sin hechos similares en los últimos 30 días',
       urlDuplicada: false,
+      requiereRevision: false,
     }
   }
 
@@ -356,6 +386,7 @@ export async function deduplicar(datos: DatosNoticia): Promise<ResultadoDeduplic
       confianza: 97,
       razon: `Misma víctima ya registrada (${porNombre.nombre})`,
       urlDuplicada: false,
+      requiereRevision: false,
     }
   }
 
@@ -367,6 +398,7 @@ export async function deduplicar(datos: DatosNoticia): Promise<ResultadoDeduplic
     confianza: resultado.confianza,
     razon: resultado.razon,
     urlDuplicada: false,
+    requiereRevision: resultado.requiereRevision,
   }
 }
 
