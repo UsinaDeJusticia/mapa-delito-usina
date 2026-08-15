@@ -1,3 +1,5 @@
+import { CSP_ESTRICTA, CSP_OBSERVADA } from './src/config/csp.mjs'
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
@@ -12,6 +14,19 @@ const nextConfig = {
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'X-Frame-Options', value: 'DENY' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          // Dos capas, ver src/config/csp.mjs: la primera bloquea de verdad y
+          // solo trae directivas que no pueden romper esta app; la segunda
+          // observa las que tocan la carga del mapa, para poder ajustarlas con
+          // violaciones reales antes de ponerlas a bloquear.
+          { key: 'Content-Security-Policy', value: CSP_ESTRICTA },
+          { key: 'Content-Security-Policy-Report-Only', value: CSP_OBSERVADA },
+          // Limita qué APIs del navegador puede pedir la página. La geolocalización
+          // queda habilitada para el propio origen porque el mapa la usa
+          // (useGeolocalizacion); el resto se apaga.
+          {
+            key: 'Permissions-Policy',
+            value: 'geolocation=(self), camera=(), microphone=(), payment=(), usb=()',
+          },
         ],
       },
       {
