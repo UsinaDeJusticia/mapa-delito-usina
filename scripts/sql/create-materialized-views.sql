@@ -82,16 +82,27 @@ CREATE INDEX idx_mv_snic_pd_delito
 -- Usada por: mapa en modo SAT
 -- ~200 filas (24 prov × 8 años)
 --
--- ⚠️ PENDIENTE DE INTEGRIDAD (hallazgo #10 del plan de seguridad)
--- El filtro `es_agregado = false` no distingue la fuente: incluye tanto los
--- microdatos oficiales del SAT como los casos PRELIMINARES del pipeline de
--- medios. O sea que los totales que el mapa presenta como oficiales vienen
--- mezclados con casos periodísticos sin confirmar.
--- No se corrige acá porque requiere un identificador estable de fuente: hoy el
--- modelo Fuente solo tiene `nombre`, que es un string de display, y filtrar por
--- nombre es frágil. La corrección necesita agregar un campo `codigo` a Fuente,
--- su migración, y poblarlo. Va en su propio PR.
--- Lo mismo aplica a la Vista 4.
+-- ✅ HALLAZGO #10 — RESUELTO (era: "el filtro es_agregado = false no distingue
+-- la fuente"). El panel rotula estos totales como "OFICIAL — SAT", pero
+-- `es_agregado = false` por sí solo incluía TAMBIÉN los casos PRELIMINARES del
+-- pipeline de medios: cifras periodísticas sin confirmar presentadas como dato
+-- oficial.
+--
+-- El comentario anterior decía que la corrección exigía agregar un campo
+-- `codigo` a Fuente porque "el modelo solo tiene nombre, que es un string de
+-- display". Eso era un error de lectura del esquema: `fuentes.tipo` ya existe y
+-- ya es un enum estable (TipoFuente: OFICIAL / PERIODISTICA / CIUDADANA /
+-- USINA / ACADEMICA). Las dos ingestas oficiales crean su fuente con
+-- tipo='OFICIAL' y el pipeline de medios con tipo='PERIODISTICA', así que
+-- alcanza con filtrar por ahí — sin migración ni columna nueva.
+--
+-- El JOIN es INNER a propósito: hechos_delictivos.fuente_id es NOT NULL, así
+-- que no puede descartar filas por sí mismo.
+--
+-- Consecuencia visible y esperada: los hechos del pipeline salen de este
+-- agregado. Siguen viéndose en el mapa como pines individuales, que es su
+-- lugar — los sirve /api/mapa/hechos-medios, con su propia leyenda de
+-- PRELIMINAR. Lo mismo aplica a la Vista 4.
 
 DROP MATERIALIZED VIEW IF EXISTS mv_sat_provincia;
 
@@ -114,7 +125,9 @@ SELECT
   -- de corregirla.
 FROM hechos_delictivos hd
 JOIN ubicaciones u ON hd.ubicacion_id = u.id
+JOIN fuentes f ON hd.fuente_id = f.id
 WHERE hd.es_agregado = false
+  AND f.tipo = 'OFICIAL'
   AND hd.anio <= EXTRACT(YEAR FROM CURRENT_DATE)::int
   AND u.provincia IS NOT NULL
 GROUP BY u.provincia_id, u.provincia, hd.anio
@@ -137,10 +150,16 @@ FROM (SELECT DISTINCT anio FROM estadisticas_agregadas ORDER BY anio) sub
 UNION ALL
 SELECT 'sat' AS fuente, anio
 FROM (
-  SELECT DISTINCT anio FROM hechos_delictivos
-  WHERE es_agregado = false
-    AND anio <= EXTRACT(YEAR FROM CURRENT_DATE)::int
-  ORDER BY anio
+  -- Mismo filtro por tipo de fuente que la Vista 3, por la misma razón: el
+  -- selector de años del modo SAT no debe ofrecer años que solo existen por
+  -- datos del pipeline periodístico. Ver el comentario de la Vista 3.
+  SELECT DISTINCT hd.anio
+  FROM hechos_delictivos hd
+  JOIN fuentes f ON hd.fuente_id = f.id
+  WHERE hd.es_agregado = false
+    AND f.tipo = 'OFICIAL'
+    AND hd.anio <= EXTRACT(YEAR FROM CURRENT_DATE)::int
+  ORDER BY hd.anio
 ) sub2;
 
 CREATE INDEX idx_mv_anios_fuente ON mv_anios_disponibles (fuente);

@@ -239,8 +239,14 @@ export async function getEstadisticasSATFiltrado(
   anio: number,
   filtros: FiltrosSAT
 ): Promise<{ provincias: ProvinciaEstadistica[]; aniosDisponibles: number[] }> {
+  // f.tipo = 'OFICIAL' acompaña siempre a es_agregado = false en el modo SAT.
+  // Sin ese filtro, esta consulta —que alimenta el mismo panel rotulado
+  // "OFICIAL — SAT"— mezcla los casos PRELIMINARES del pipeline de medios con
+  // los microdatos oficiales. Es el hallazgo #10; ver el comentario extenso en
+  // scripts/sql/create-materialized-views.sql (Vista 3).
   const condiciones: string[] = [
     'hd.es_agregado = false',
+    `f.tipo = 'OFICIAL'`,
     `hd.anio = ${anio}`,
   ]
   const params: unknown[] = []
@@ -277,6 +283,7 @@ export async function getEstadisticasSATFiltrado(
       SUM(hd.cantidad_victimas)::int AS total_victimas
     FROM hechos_delictivos hd
     JOIN ubicaciones u ON hd.ubicacion_id = u.id
+    JOIN fuentes f ON hd.fuente_id = f.id
     WHERE ${whereClause}
       AND u.provincia IS NOT NULL
     GROUP BY u.provincia_id, u.provincia
