@@ -16,6 +16,7 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
+import { validarDestino } from './url-segura'
 
 /**
  * Formato de referencia que emite agent-browser en sus snapshots: `[ref=e1]`,
@@ -229,22 +230,20 @@ function validarIndiceTab(indice: number): number {
 }
 
 /**
- * Valida una URL antes de navegar. Solo HTTPS y HTTP: nada de `file:`,
- * `javascript:`, `data:` ni esquemas desconocidos.
+ * Valida una URL antes de navegar: esquema, y además destino.
  *
- * Nota: esto no es control de SSRF completo (dominio, redirects e IP final se
- * abordan en la Fase 5 del plan). Es la validación de esquema mínima para que
- * el pipeline no navegue a un esquema arbitrario.
+ * Antes solo comprobaba el esquema, y dejaba anotado que el destino quedaba
+ * para más adelante. Ahora delega en `validarDestino`, que además rechaza
+ * loopback, redes privadas y —lo que más importa— el endpoint de metadatos de
+ * nube (169.254.169.254). Ver src/lib/pipeline/url-segura.ts para el alcance
+ * exacto de esa defensa y para lo que NO cubre (resolución DNS).
  */
 export function validarUrlNavegable(url: string): string {
-  let parsed: URL
   try {
-    parsed = new URL(url)
-  } catch {
-    throw new RefInvalidoError('URL no parseable')
+    return validarDestino(url)
+  } catch (e) {
+    // Se re-envuelve en el error propio de este módulo para no cambiarle el
+    // tipo de excepción a quien ya lo maneja.
+    throw new RefInvalidoError(e instanceof Error ? e.message : 'URL inválida')
   }
-  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-    throw new RefInvalidoError(`esquema no permitido: ${parsed.protocol}`)
-  }
-  return parsed.toString()
 }
