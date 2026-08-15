@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/auth'
+import { requerirAdmin } from '@/lib/auth/admin'
 import { prisma } from '@/lib/mapa/queries'
 
 export async function GET(req: NextRequest) {
-  const session = await auth()
+  const session = await requerirAdmin()
   if (!session?.user) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
@@ -193,7 +193,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth()
+  const session = await requerirAdmin()
   if (!session?.user) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
