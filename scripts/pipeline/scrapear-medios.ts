@@ -27,6 +27,7 @@ import {
   resolverEjecutable,
   EjecutableNoEncontradoError,
 } from '../../src/lib/pipeline/browser-cmd'
+import { esDestinoPermitido } from '../../src/lib/pipeline/url-segura'
 import {
   parsearJsonLLM,
   validarLinksIdentificados,
@@ -428,6 +429,24 @@ async function scrapearMedio(medio: MedioConfig, yaPrewarmed: boolean): Promise<
 
         // Obtener URL del artículo
         const urlArticulo = ab(comandos.getUrl())
+
+        // ¿Dónde aterrizamos realmente?
+        //
+        // El paso anterior fue un CLICK sobre un link de la portada del medio,
+        // no una navegación a una URL que hayamos validado. El browser sigue
+        // adonde apunte ese link, y cualquiera que consiga poner un <a href>
+        // en esa portada —una nota patrocinada, un widget de terceros
+        // comprometido— elige a qué se conecta nuestro servidor. El destino
+        // clásico es 169.254.169.254, el endpoint de metadatos de la nube.
+        //
+        // Se comprueba ACÁ, antes de extraer el texto, porque lo que se
+        // extrae termina en el prompt del modelo y en la base.
+        if (!esDestinoPermitido(urlArticulo)) {
+          log('🛑', `Destino no permitido tras el click, se descarta: ${urlArticulo.slice(0, 120)}`)
+          ab(comandos.cerrarTab())
+          ab(comandos.tab(0))
+          continue
+        }
 
         // Obtener título
         const titulo = ab(comandos.getTitulo()) || link.titulo

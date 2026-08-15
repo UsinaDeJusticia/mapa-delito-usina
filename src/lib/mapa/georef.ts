@@ -42,8 +42,11 @@ export async function getProvinciasGeoref(): Promise<GeorefProvincia[]> {
  */
 export async function getDepartamentosGeoref(provinciaId: string): Promise<GeorefDepartamento[]> {
   try {
+    // encodeURIComponent, igual que en el resto del archivo: sin esto un
+    // provinciaId con `&` inyecta parámetros extra en la query. El host es
+    // constante, así que no es SSRF, pero un `&max=5000` no autorizado sí.
     const res = await fetch(
-      `${GEOREF_BASE}/departamentos?provincia=${provinciaId}&campos=id,nombre,centroide,provincia&max=100`,
+      `${GEOREF_BASE}/departamentos?provincia=${encodeURIComponent(provinciaId)}&campos=id,nombre,centroide,provincia&max=100`,
       { next: { revalidate: 86400 } }
     )
     if (!res.ok) throw new Error(`Georef API error: ${res.status}`)
