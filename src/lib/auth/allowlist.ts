@@ -73,12 +73,42 @@ export function evaluarAllowlist(
 }
 
 /**
+ * Construye el contexto de autorización desde las variables de entorno.
+ *
+ * Se lee en cada llamada, no una sola vez al importar el módulo: así, sacar un
+ * email de ALLOWED_EMAILS y redesplegar tiene efecto sobre las sesiones que ya
+ * están abiertas. Cachearlo en una constante de módulo era parte de por qué la
+ * revocación no surtía efecto.
+ */
+export function contextoDesdeEnv(): ContextoAutorizacion {
+  return {
+    allowlist: parsearAllowlist(process.env.ALLOWED_EMAILS),
+    esProduccion: process.env.NODE_ENV === 'production',
+  }
+}
+
+/**
+ * ¿El dueño de esta sesión sigue autorizado?
+ *
+ * Es la misma evaluación que se hace al iniciar sesión, pero pensada para
+ * repetirse en cada request. Tener sesión válida y estar autorizado son cosas
+ * distintas: el token sigue siendo criptográficamente válido después de que a
+ * la persona se le quitó el acceso.
+ */
+export function sesionSigueAutorizada(
+  email: string | undefined | null,
+  contexto: ContextoAutorizacion = contextoDesdeEnv()
+): boolean {
+  return evaluarAllowlist(email, contexto).permitido
+}
+
+/**
  * Decide si una ruta requiere sesión.
  *
- * Nota: por ahora solo verifica que haya sesión, igual que antes. Revalidar la
- * allowlist en cada request está previsto para la Fase 3 del plan; hacerlo acá
- * cambiaría el comportamiento de sesiones ya emitidas y queda fuera del alcance
- * de esta fase de contención.
+ * Solo cubre las páginas `/admin/*`, que son las que pasa el middleware. Las
+ * rutas `/api/admin/*` NO caen acá —el matcher del middleware es
+ * `/admin/:path*`, que no matchea `/api/admin/...`— y se protegen ellas mismas
+ * con `requerirAdmin()` de `@/lib/auth/admin`.
  */
 export function requiereSesion(pathname: string): boolean {
   return pathname.startsWith('/admin')

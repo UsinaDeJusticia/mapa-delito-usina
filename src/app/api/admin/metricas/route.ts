@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@/auth'
+import { requerirAdmin } from '@/lib/auth/admin'
 import { prisma } from '@/lib/mapa/queries'
 
 export async function GET() {
-  const session = await auth()
+  const session = await requerirAdmin()
   if (!session?.user) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }

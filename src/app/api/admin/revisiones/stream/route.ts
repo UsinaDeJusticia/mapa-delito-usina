@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { auth } from '@/auth'
+import { requerirAdmin } from '@/lib/auth/admin'
 import { prisma } from '@/lib/mapa/queries'
 
 export const runtime = 'nodejs'
@@ -10,7 +10,7 @@ const POLL_INTERVAL_MS = 4000
 const MAX_DURATION_MS = 270_000
 
 export async function GET(req: NextRequest) {
-  const session = await auth()
+  const session = await requerirAdmin()
   if (!session?.user) {
     return new Response('No autorizado', { status: 401 })
   }
