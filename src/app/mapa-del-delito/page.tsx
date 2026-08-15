@@ -1,18 +1,8 @@
-import dynamic from 'next/dynamic'
 import type { Metadata } from 'next'
-
-// Dynamic import porque Google Maps requiere window
-const MapaDelito = dynamic(
-  () => import('@/components/mapa/MapaDelito'),
-  { ssr: false, loading: () => (
-    <div className="w-full h-screen flex items-center justify-center bg-gray-50">
-      <div className="flex flex-col items-center gap-3">
-        <div className="w-10 h-10 border-4 border-[#2D1B4E] border-t-transparent rounded-full animate-spin" />
-        <p className="text-[#2D1B4E] font-medium">Cargando mapa...</p>
-      </div>
-    </div>
-  )}
-)
+// El dynamic import con ssr:false vive en el wrapper, que es Client Component.
+// Desde Next 15 no se puede declarar acá: esta página es Server Component
+// porque exporta `metadata`.
+import MapaDelito from '@/components/mapa/MapaDelitoWrapper'
 
 export const metadata: Metadata = {
   title: 'Mapa Nacional del Delito | Usina de Justicia',
