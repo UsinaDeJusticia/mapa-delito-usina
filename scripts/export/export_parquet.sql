@@ -77,7 +77,16 @@ COPY (
     hd.contexto
   FROM neon.public.hechos_delictivos hd
   JOIN neon.public.ubicaciones u ON hd.ubicacion_id = u.id
+  JOIN neon.public.fuentes f ON hd.fuente_id = f.id
+  -- f.tipo = 'OFICIAL': este Parquet alimenta el modo SAT del mapa, que se
+  -- presenta como dato oficial. Sin el filtro arrastra los casos PRELIMINARES
+  -- del pipeline de medios. Mismo hallazgo #10 que las vistas materializadas;
+  -- ver scripts/sql/create-materialized-views.sql (Vista 3).
+  -- DuckDB sobre estos Parquet es el camino por defecto del mapa y la API es
+  -- solo el respaldo, así que arreglar las vistas sin arreglar esto no se
+  -- vería en producción.
   WHERE hd.es_agregado = false
+    AND f.tipo = 'OFICIAL'
     AND u.provincia IS NOT NULL
   ORDER BY hd.anio, u.provincia
 ) TO 'public/data/hechos_sat.parquet'
