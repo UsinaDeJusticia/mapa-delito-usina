@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requerirAdmin } from '@/lib/auth/admin'
 import { prisma } from '@/lib/mapa/queries'
+import { efectoDeClasificacion } from '@/lib/mapa/clasificacion-humana'
 
 export async function GET(req: NextRequest) {
   const session = await requerirAdmin()
@@ -213,33 +214,11 @@ export async function POST(req: NextRequest) {
 
   const revisadoPor = session.user.email ?? session.user.name ?? 'desconocido'
 
-  /**
-   * Código SNIC oficial de cada clasificación humana.
-   *
-   * Femicidio pasa de 4 a 1. El código 4 del catálogo oficial es
-   * "Homicidios culposos por otros hechos" — negligencia médica, accidentes
-   * laborales — así que un femicidio marcado por el equipo quedaba guardado como
-   * muerte accidental, y el mapa público mostraba literalmente ese texto en el
-   * globo del caso. Un femicidio es un homicidio doloso: código 1.
-   *
-   * La condición de femicidio no se pierde: se guarda aparte, en la columna
-   * hechos_delictivos.femicidio, que es la misma que usa la ingesta oficial del
-   * SAT y la que cuentan las vistas materializadas.
-   */
-  const CLASIFICACION_SNIC: Record<string, number | null> = {
-    'homicidio_doloso':                    1,
-    'homicidio_en_ocasion_de_robo':        1,
-    'femicidio':                           1,
-    'homicidio_vinculado_al_narcotrafico':  1,
-    'no_es_homicidio':                     null,
-  }
-
-  /** Clasificaciones que además marcan la condición de femicidio. */
-  const CLASIFICACIONES_FEMICIDIO = new Set(['femicidio'])
-
-  const snicCodigo = CLASIFICACION_SNIC[clasificacion_humana] ?? null
+  // Efecto de la clasificación (código SNIC + condición de femicidio) — ver
+  // src/lib/mapa/clasificacion-humana.ts para el mapeo completo y por qué está
+  // compartido con el circuito de aprendizaje del pipeline (few-shot).
+  const { snicCodigo, esFemicidio } = efectoDeClasificacion(clasificacion_humana)
   const esHomicidio = snicCodigo !== null
-  const esFemicidio = CLASIFICACIONES_FEMICIDIO.has(clasificacion_humana)
 
   try {
     // url_fuente es NOT NULL en revisiones_pipeline. La poblamos con la URL de
@@ -277,11 +256,21 @@ export async function POST(req: NextRequest) {
         WHERE id = ${hecho_id}
       `
     } else {
+      // esHomicidio=false (hoy solo 'no_es_homicidio'): femicidio es un
+      // subtipo de homicidio, así que si un humano dice "esto no es un
+      // homicidio" la condición de femicidio queda descartada sin ambigüedad.
+      // ANTES este UPDATE no tocaba femicidio ni tipo_delito_id: un caso que
+      // una persona ya confirmó como "no es homicidio" podía quedar guardado
+      // con femicidio='Si' de una clasificación anterior. tipo_delito_id NO
+      // se toca acá — es NOT NULL en el esquema y el catálogo SNIC no tiene
+      // un código para "no es un hecho delictivo"; queda como decisión aparte
+      // (agregar un código sentinela, o volver la columna nullable).
       await prisma.$executeRaw`
         UPDATE hechos_delictivos
         SET
           confianza = CASE WHEN confianza = 'VERIFICADO' THEN 'PRELIMINAR' ELSE confianza END,
-          requiere_revision = false
+          requiere_revision = false,
+          femicidio = null
         WHERE id = ${hecho_id}
       `
     }

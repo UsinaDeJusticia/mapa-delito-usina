@@ -14,11 +14,45 @@ import {
   type ExtraccionValidada,
 } from '@/lib/pipeline/schemas-llm'
 import { prisma } from '@/lib/mapa/queries'
+import { efectoDeClasificacion } from '@/lib/mapa/clasificacion-humana'
 
 // Caché de ejemplos few-shot: se invalida cada 5 minutos
 let fewShotCache: { ejemplos: Array<{ resumen: string; clasificacion: string }>; ts: number } | null = null
 const FEW_SHOT_TTL_MS = 5 * 60 * 1000
 
+/**
+ * Últimos casos revisados por humanos, para usar como ejemplos few-shot.
+ *
+ * Tres problemas que tenía la query anterior, todos en la misma consulta:
+ *
+ * 1. STALENESS: revisiones_pipeline permite varias filas por hecho_id
+ *    (correcciones sucesivas — ver /admin/revisiones, "Corregir"). Sin
+ *    agrupar por hecho, una clasificación ya superada podía colarse en el
+ *    resultado junto con su corrección, o incluso en su lugar. El
+ *    DISTINCT ON (hd.id) + ORDER BY hd.id, revisado_at DESC se queda con la
+ *    ÚLTIMA clasificación de cada hecho, nunca una vieja.
+ *
+ * 2. FANOUT: el JOIN contra coberturas_mediaticas sin acotar traía una fila
+ *    por cada cobertura del hecho. Un hecho con varias notas podía ocupar
+ *    varios de los 3 lugares del LIMIT, dejando afuera a otros hechos por
+ *    completo. El JOIN LATERAL elige una sola cobertura por hecho (la más
+ *    reciente que tenga resumen usable), igual que hace route.ts para
+ *    "pendientes".
+ *
+ * 3. SIN EJEMPLOS NEGATIVOS: se excluía 'no_es_homicidio' del todo, así que
+ *    el modelo nunca veía un caso real de "esto parecía un homicidio pero no
+ *    lo era". Ahora se incluye — construirEjemplosFewShot() lo traduce al
+ *    esHechoDelictivo:false que espera el prompt.
+ *
+ * Además prioriza usar_como_ejemplo=true (columna que existía en el schema
+ * desde el principio pero que hasta ahora nada leía ni escribía): un
+ * revisor puede curar a mano cuáles casos son los ejemplos más claros,
+ * aunque no sean los más recientes. No hay UI todavía para marcarla —
+ * se setea a mano en la base mientras tanto.
+ *
+ * Verificado contra Postgres real con datos sintéticos que reproducen los
+ * tres problemas (no solo por inspección del SQL).
+ */
 async function getFewShotEjemplos() {
   const ahora = Date.now()
   if (fewShotCache && ahora - fewShotCache.ts < FEW_SHOT_TTL_MS) {
@@ -28,20 +62,65 @@ async function getFewShotEjemplos() {
     resumen: string
     clasificacion: string
   }>>`
-    SELECT
-      cm.resumen,
-      rp.clasificacion_humana AS clasificacion
-    FROM revisiones_pipeline rp
-    JOIN hechos_delictivos hd ON rp.hecho_id = hd.id
-    JOIN coberturas_mediaticas cm ON cm.hecho_delictivo_id = hd.id
-    WHERE rp.clasificacion_humana != 'no_es_homicidio'
-      AND cm.resumen IS NOT NULL
-      AND LENGTH(cm.resumen) > 30
-    ORDER BY rp.revisado_at DESC
+    SELECT resumen, clasificacion FROM (
+      SELECT DISTINCT ON (hd.id)
+        cm.resumen,
+        rp.clasificacion_humana AS clasificacion,
+        rp.revisado_at,
+        rp.usar_como_ejemplo
+      FROM revisiones_pipeline rp
+      JOIN hechos_delictivos hd ON rp.hecho_id = hd.id
+      JOIN LATERAL (
+        SELECT resumen
+        FROM coberturas_mediaticas
+        WHERE hecho_delictivo_id = hd.id
+          AND resumen IS NOT NULL
+          AND LENGTH(resumen) > 30
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) cm ON true
+      ORDER BY hd.id, rp.revisado_at DESC
+    ) ultimas
+    ORDER BY usar_como_ejemplo DESC, revisado_at DESC
     LIMIT 3
   `.catch(() => [])
   fewShotCache = { ejemplos, ts: ahora }
   return ejemplos
+}
+
+/**
+ * Traduce los casos revisados a los pares user/assistant que se inyectan
+ * antes de la noticia real.
+ *
+ * ANTES el mensaje 'assistant' era un JSON fijo — {esHechoDelictivo: true,
+ * confianzaExtraccion: 90} — igual para los 3 ejemplos sin importar qué
+ * clasificación hubiera elegido el humano. El campo `clasificacion` se leía
+ * de la base y no se usaba para nada: el modelo nunca veía la diferencia
+ * entre un femicidio, un homicidio narco o un caso descartado. Esta función
+ * es pura y separada de extraerDatosNoticia() para poder testearla sin
+ * tocar la base ni el cliente LLM.
+ */
+export function construirEjemplosFewShot(
+  ejemplos: Array<{ resumen: string; clasificacion: string }>
+): Array<{ role: 'user' | 'assistant'; content: string }> {
+  const mensajes: Array<{ role: 'user' | 'assistant'; content: string }> = []
+  for (const ej of ejemplos) {
+    const efecto = efectoDeClasificacion(ej.clasificacion)
+    mensajes.push({
+      role: 'user',
+      content: `Extraé los datos del siguiente texto:\n---\n${ej.resumen}\n---`,
+    })
+    mensajes.push({
+      role: 'assistant',
+      content: JSON.stringify({
+        esHechoDelictivo: efecto.snicCodigo !== null,
+        snic_codigo: efecto.snicCodigo,
+        es_femicidio: efecto.esFemicidio,
+        confianzaExtraccion: 90,
+      }),
+    })
+  }
+  return mensajes
 }
 
 // ════════════════════════════════════════════
@@ -221,18 +300,7 @@ export async function extraerDatosNoticia(
   const { cliente, config } = crearClienteLLM('Mapa Nacional del Delito - Usina de Justicia')
 
   const ejemplos = await getFewShotEjemplos()
-
-  const fewShotMessages: Array<{ role: 'user' | 'assistant'; content: string }> = []
-  for (const ej of ejemplos) {
-    fewShotMessages.push({
-      role: 'user',
-      content: `Extraé los datos del siguiente texto:\n---\n${ej.resumen}\n---`,
-    })
-    fewShotMessages.push({
-      role: 'assistant',
-      content: JSON.stringify({ esHechoDelictivo: true, confianzaExtraccion: 90 }),
-    })
-  }
+  const fewShotMessages = construirEjemplosFewShot(ejemplos)
 
   try {
     const respuesta = await cliente.chat.completions.create({
