@@ -203,7 +203,14 @@ describe('el POST de revisiones es transaccional', () => {
   test('las escrituras usan el cliente de la transacción, no el global', () => {
     // Un `prisma.$executeRaw` dentro del bloque correría fuera de la
     // transacción y anularía la garantía.
-    const post = codigo.slice(codigo.indexOf('export async function POST'))
+    //
+    // El slice se acota al SIGUIENTE export, no al final del archivo: cuando se
+    // agregó el PATCH después del POST, la versión sin tope se comía esa función
+    // y marcaba su `prisma.$executeRaw` —que es correcto, porque el PATCH hace un
+    // solo UPDATE y no necesita transacción— como si fuera una regresión del POST.
+    const desde = codigo.indexOf('export async function POST')
+    const siguiente = codigo.indexOf('export async function', desde + 1)
+    const post = codigo.slice(desde, siguiente === -1 ? undefined : siguiente)
     assert.ok(
       !/prisma\.\$executeRaw/.test(post),
       'hay un executeRaw sobre el cliente global dentro del POST: queda fuera de la transacción'
