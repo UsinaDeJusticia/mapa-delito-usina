@@ -303,6 +303,7 @@ class TestEjecucionCompleta(unittest.TestCase):
             self.assertIn("No editar a mano", doc)
             self.assertIn("Homicidios dolosos", doc)
             self.assertIn("99", doc, "el código desconocido debe figurar")
+            self.assertIn("### Problemas", doc)
         finally:
             os.unlink(salida.name)
 
@@ -320,11 +321,81 @@ class TestEjecucionCompleta(unittest.TestCase):
                 doc = f.read()
             self.assertIn("CSV oficial no estaba disponible", doc)
             self.assertIn("prisma/seed.ts", doc)
-            # El hallazgo del código 0 vive acá, con sus opciones desplegables.
-            self.assertIn("Cómo resolverlo", doc)
-            self.assertIn("Crear la categoría", doc)
+            # Antes acá se afirmaba la presencia de "Cómo resolverlo" y "Crear la
+            # categoría", porque el código 0 estaba desalineado: el prompt lo
+            # ofrecía pero seed.ts no lo tenía, así que el auditor emitía ese
+            # hallazgo en cada corrida. O sea que el test fijaba la existencia
+            # del bug.
+            #
+            # Ya se resolvió (el 0 es una categoría real del catálogo), así que
+            # sin CSV y con todo alineado no debe haber hallazgos. La cobertura
+            # de la sección de remediación se movió al test de la fixture, que
+            # sí tiene discrepancias de verdad.
+            self.assertIn("| 0 | Muerte violenta en investigación |", doc)
+            self.assertNotIn(
+                "Cómo resolverlo", doc,
+                "sin CSV y con el catálogo alineado no debería haber hallazgos"
+            )
         finally:
             os.unlink(salida.name)
+
+
+class TestRenderDelRemedio(unittest.TestCase):
+    """
+    El bloque <details>Cómo resolverlo</details> solo se emite para hallazgos que
+    traen un `remedio`.
+
+    Hasta ahora su única cobertura era indirecta: el hallazgo del código 0
+    —prompt lo ofrecía, seed.ts no lo tenía— llevaba remedio, así que aparecía
+    en cada corrida y un test lo daba por sentado. Al resolver ese desajuste, el
+    camino de render quedó sin probar. Este test lo cubre directo, sin depender
+    de que exista una discrepancia real en el catálogo.
+    """
+
+    def _documento(self, hallazgos):
+        salida = tempfile.NamedTemporaryFile("w", suffix=".md", delete=False)
+        salida.close()
+        try:
+            auditar_mod.escribir_documento(
+                salida.name,
+                catalogo_csv={}, catalogo_seed={}, prompt={}, descripcion={},
+                whitelist=[], hallazgos=hallazgos,
+            )
+            with open(salida.name, encoding="utf-8") as f:
+                return f.read()
+        finally:
+            os.unlink(salida.name)
+
+    def test_un_hallazgo_con_remedio_emite_el_desplegable(self):
+        doc = self._documento([
+            auditar_mod.Hallazgo(
+                "Título de prueba", "Detalle del problema.",
+                bloqueante=True, remedio="Opción A: hacer esto.",
+            )
+        ])
+        self.assertIn("Cómo resolverlo", doc)
+        self.assertIn("Opción A: hacer esto.", doc)
+        self.assertIn("<details>", doc)
+
+    def test_un_hallazgo_sin_remedio_no_lo_emite(self):
+        doc = self._documento([
+            auditar_mod.Hallazgo("Sin remedio", "Detalle.", bloqueante=True)
+        ])
+        self.assertIn("Sin remedio", doc)
+        self.assertNotIn("Cómo resolverlo", doc)
+
+    def test_tambien_aplica_a_las_observaciones(self):
+        # La rama de avisos tiene su propio bloque de render, duplicado del de
+        # problemas: si uno se toca y el otro no, esto lo detecta.
+        doc = self._documento([
+            auditar_mod.Hallazgo(
+                "Aviso con remedio", "Detalle.",
+                bloqueante=False, remedio="Revisar tal cosa.",
+            )
+        ])
+        self.assertIn("### Observaciones", doc)
+        self.assertIn("Cómo resolverlo", doc)
+        self.assertIn("Revisar tal cosa.", doc)
 
 
 if __name__ == "__main__":

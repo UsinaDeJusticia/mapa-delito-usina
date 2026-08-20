@@ -16,30 +16,13 @@ contra la fuente oficial quedó pendiente; lo que sigue compara únicamente
 
 Para completarla, conseguí el CSV en `data/snic/snic-departamentos-anual.csv` y volvé a correr el script.
 
-## Hallazgos
-
-### Problemas
-
-- **El prompt ofrece el código 0, que no existe en el catálogo**
-  El prompt lo llama 'Muerte violenta de causa dudosa / En investigación'. Cuando el LLM lo devuelve, el pipeline no encuentra el TipoDelito y descarta el hecho.
-
-  <details><summary>Cómo resolverlo</summary>
-
-  Hay dos salidas y la elección es de negocio, no técnica:
-    - **Sacar el código 0 del prompt** y de la whitelist del pipeline, y mapear esos casos a un código que sí exista. Es lo conservador: no agrega nada al catálogo oficial.
-    - **Crear la categoría** en `prisma/seed.ts`. Pero ojo: si el código 0 no está en el catálogo del SNIC, se estaría guardando un valor no oficial en un campo llamado `codigo_snic`, y se pierde la comparabilidad con la estadística del Ministerio. El mismo problema que tuvo femicidio.
-
-  Verificá primero contra el CSV oficial si el código existe o no.
-  Aparte, en `scripts/pipeline/scrapear-medios.ts` la búsqueda del tipo es `datos.codigoSnicEstimado ? ...`, y en JavaScript el 0 es falsy: si el código en cuestión es 0, ni siquiera se intenta la búsqueda. Eso hay que corregirlo igual, cualquiera sea la decisión anterior.
-
-  </details>
-
 ## Catálogo cargado en la base (`prisma/seed.ts`)
 
-32 tipos de delito.
+33 tipos de delito.
 
 | Código | Nombre |
 |---|---|
+| 0 | Muerte violenta en investigación |
 | 1 | Homicidios dolosos |
 | 2 | Homicidios dolosos en grado de tentativa |
 | 3 | Muertes en siniestros viales |
@@ -79,7 +62,7 @@ Solo un subconjunto: el pipeline busca homicidios, no todo el catálogo.
 
 | Código | En el prompt | En SNIC_DESCRIPCION | En el catálogo |
 |---|---|---|---|
-| 0 | Muerte violenta de causa dudosa / En investigación | Muerte violenta en investigación | **no existe** |
+| 0 | Muerte violenta en investigación | Muerte violenta en investigación | Muerte violenta en investigación |
 | 1 | Homicidios dolosos | Homicidios dolosos | Homicidios dolosos |
 | 2 | Homicidios dolosos en grado de tentativa | Homicidios dolosos en grado de tentativa | Homicidios dolosos en grado de tentativa |
 | 3 | Muertes en siniestros viales | Muertes en siniestros viales | Muertes en siniestros viales |

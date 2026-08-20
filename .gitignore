@@ -50,3 +50,9 @@ public/duckdb/
 # Python (los scripts de ingesta y sus tests)
 __pycache__/
 *.py[cod]
+
+# Copias temporales del export con la URL de Neon inline. El wrapper
+# (scripts/export/export-parquet.ts) pasa la credencial por stdin y no
+# necesita ninguna, pero esto evita que una improvisación termine commiteada.
+export_temp.sql
+scripts/export/*.tmp.sql

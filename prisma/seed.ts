@@ -6,7 +6,20 @@ async function main() {
   console.log('🌱 Seeding catálogos base...')
 
   // ── Tipos de delito SNIC (códigos oficiales 1-29, 30, 31, 32) ──
+  //
+  // El código 0 NO es del catálogo oficial del SNIC: es propio de este
+  // proyecto. Existe porque el prompt del pipeline lo ofrece para los casos de
+  // "cuerpo hallado sin causa determinada", que son muchos y le importan a
+  // Usina —varios se confirman después como femicidios—.
+  //
+  // Antes el 0 estaba en el prompt y en el validador pero NO acá, y encima el
+  // lookup del pipeline usaba la verdad del valor (`datos.codigoSnicEstimado ?
+  // ... : null`), donde 0 es falsy. Resultado: cada caso de causa dudosa se
+  // descartaba en silencio. Se agrega como categoría real para dejar de
+  // perderlos; van con requiereRevision y quedan fuera del mapa público hasta
+  // que una persona los confirme (ver /api/mapa/hechos-medios).
   const tiposDelito = [
+    { codigoSnic: '0',  nombre: 'Muerte violenta en investigación', categoria: CategoriaDelito.CONTRA_PERSONAS },
     { codigoSnic: '1',  nombre: 'Homicidios dolosos', categoria: CategoriaDelito.CONTRA_PERSONAS },
     { codigoSnic: '2',  nombre: 'Homicidios dolosos en grado de tentativa', categoria: CategoriaDelito.CONTRA_PERSONAS },
     { codigoSnic: '3',  nombre: 'Muertes en siniestros viales', categoria: CategoriaDelito.VIAL },

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requerirAdmin } from '@/lib/auth/admin'
 import { prisma } from '@/lib/mapa/queries'
+import { efectoDeClasificacion } from '@/lib/mapa/clasificacion-humana'
 
 export async function GET(req: NextRequest) {
   const session = await requerirAdmin()
@@ -109,6 +110,7 @@ export async function GET(req: NextRequest) {
     clasificacion_humana: string
     revisado_por: string
     revisado_at: Date
+    usar_como_ejemplo: boolean
     coberturas_json: unknown
     coberturas_total: number
   }>>`
@@ -121,6 +123,7 @@ export async function GET(req: NextRequest) {
       rp.clasificacion_humana,
       rp.revisado_por,
       rp.revisado_at,
+      COALESCE(rp.usar_como_ejemplo, false) AS usar_como_ejemplo,
       COALESCE(
         (
           SELECT json_agg(
@@ -181,6 +184,7 @@ export async function GET(req: NextRequest) {
       ...r,
       hecho_id: String(r.hecho_id),
       revisado_at: r.revisado_at?.toISOString() ?? null,
+      usar_como_ejemplo: Boolean(r.usar_como_ejemplo),
       coberturas: (r.coberturas_json as Array<{ url: string; medio: string | null }> | null) ?? [],
       coberturas_total: Number(r.coberturas_total ?? 0),
       coberturas_json: undefined,
@@ -202,9 +206,14 @@ export async function POST(req: NextRequest) {
     hecho_id: string
     clasificacion_humana: string
     notas?: string
-    es_correccion?: boolean
   }
 
+  // `es_correccion` se quitó del contrato. El front lo mandaba y el backend lo
+  // declaraba en el tipo pero nunca lo leía: era una promesa falsa en la API.
+  // Y no hace falta: revisiones_pipeline guarda historial, así que si ya existe
+  // una fila para ese hecho, esta revisión ES una corrección — se deduce del
+  // dato en vez de confiar en lo que diga el cliente. Se sigue aceptando en el
+  // body sin romper nada (queda ignorado explícitamente).
   const { hecho_id, clasificacion_humana, notas } = body
 
   if (!hecho_id || !clasificacion_humana) {
@@ -213,39 +222,24 @@ export async function POST(req: NextRequest) {
 
   const revisadoPor = session.user.email ?? session.user.name ?? 'desconocido'
 
-  /**
-   * Código SNIC oficial de cada clasificación humana.
-   *
-   * Femicidio pasa de 4 a 1. El código 4 del catálogo oficial es
-   * "Homicidios culposos por otros hechos" — negligencia médica, accidentes
-   * laborales — así que un femicidio marcado por el equipo quedaba guardado como
-   * muerte accidental, y el mapa público mostraba literalmente ese texto en el
-   * globo del caso. Un femicidio es un homicidio doloso: código 1.
-   *
-   * La condición de femicidio no se pierde: se guarda aparte, en la columna
-   * hechos_delictivos.femicidio, que es la misma que usa la ingesta oficial del
-   * SAT y la que cuentan las vistas materializadas.
-   */
-  const CLASIFICACION_SNIC: Record<string, number | null> = {
-    'homicidio_doloso':                    1,
-    'homicidio_en_ocasion_de_robo':        1,
-    'femicidio':                           1,
-    'homicidio_vinculado_al_narcotrafico':  1,
-    'no_es_homicidio':                     null,
-  }
-
-  /** Clasificaciones que además marcan la condición de femicidio. */
-  const CLASIFICACIONES_FEMICIDIO = new Set(['femicidio'])
-
-  const snicCodigo = CLASIFICACION_SNIC[clasificacion_humana] ?? null
+  // Efecto de la clasificación (código SNIC + condición de femicidio) — ver
+  // src/lib/mapa/clasificacion-humana.ts para el mapeo completo y por qué está
+  // compartido con el circuito de aprendizaje del pipeline (few-shot).
+  const { snicCodigo, esFemicidio } = efectoDeClasificacion(clasificacion_humana)
   const esHomicidio = snicCodigo !== null
-  const esFemicidio = CLASIFICACIONES_FEMICIDIO.has(clasificacion_humana)
 
   try {
+    // Los dos statements van en una transacción: si el UPDATE falla, la
+    // revisión no queda registrada. Antes iban sueltos, así que un fallo del
+    // segundo dejaba una fila en revisiones_pipeline sin efecto sobre el hecho
+    // — y como el resto del sistema deriva el estado de la ÚLTIMA revisión, el
+    // caso quedaba contado como revisado sin haber cambiado nada. El pipeline
+    // ya usaba $transaction para esto mismo.
+    await prisma.$transaction(async tx => {
     // url_fuente es NOT NULL en revisiones_pipeline. La poblamos con la URL de
     // la cobertura más reciente del hecho (o la url_fuente del hecho), con
     // fallback a 'revision-manual' para no violar el constraint nunca.
-    await prisma.$executeRaw`
+    await tx.$executeRaw`
       INSERT INTO revisiones_pipeline
         (hecho_id, url_fuente, clasificacion_humana, revisado_por, revisado_at, notas)
       SELECT
@@ -264,7 +258,7 @@ export async function POST(req: NextRequest) {
       // femicidio se escribe con el mismo formato que la ingesta del SAT ('Si' o
       // NULL) para que las vistas que cuentan femicidio = 'Si' incluyan también
       // los casos revisados a mano.
-      await prisma.$executeRaw`
+      await tx.$executeRaw`
         UPDATE hechos_delictivos
         SET
           confianza = 'VERIFICADO',
@@ -277,18 +271,97 @@ export async function POST(req: NextRequest) {
         WHERE id = ${hecho_id}
       `
     } else {
-      await prisma.$executeRaw`
+      // esHomicidio=false (hoy solo 'no_es_homicidio'): femicidio es un
+      // subtipo de homicidio, así que si un humano dice "esto no es un
+      // homicidio" la condición de femicidio queda descartada sin ambigüedad.
+      // ANTES este UPDATE no tocaba femicidio ni tipo_delito_id: un caso que
+      // una persona ya confirmó como "no es homicidio" podía quedar guardado
+      // con femicidio='Si' de una clasificación anterior. tipo_delito_id NO
+      // se toca acá — es NOT NULL en el esquema y el catálogo SNIC no tiene
+      // un código para "no es un hecho delictivo"; queda como decisión aparte
+      // (agregar un código sentinela, o volver la columna nullable).
+      await tx.$executeRaw`
         UPDATE hechos_delictivos
         SET
           confianza = CASE WHEN confianza = 'VERIFICADO' THEN 'PRELIMINAR' ELSE confianza END,
-          requiere_revision = false
+          requiere_revision = false,
+          femicidio = null
         WHERE id = ${hecho_id}
       `
     }
+    })
   } catch (err) {
     console.error('Error en POST /api/admin/revisiones:', err)
     return NextResponse.json({ error: 'Error al guardar la revisión' }, { status: 500 })
   }
 
   return NextResponse.json({ ok: true, verificado: esHomicidio })
+}
+
+/**
+ * PATCH — marca o desmarca una revisión como ejemplo curado para el few-shot.
+ *
+ * `usar_como_ejemplo` existía en el schema desde el principio y **nada la
+ * escribía**: getFewShotEjemplos() ya la lee y prioriza (openrouter.ts), pero
+ * el único modo de setearla era a mano en la base. Esto cierra el circuito.
+ *
+ * Actualiza la fila MÁS RECIENTE del hecho, no todas: la marca es por revisión,
+ * no por hecho. Si alguien marca un caso como buen ejemplo y después otro
+ * corrige la clasificación, la fila nueva nace en false y el ejemplo curado se
+ * pierde — y eso es lo correcto, porque si la clasificación estaba mal ese caso
+ * no era un buen ejemplo. No se propaga a propósito.
+ */
+export async function PATCH(req: NextRequest) {
+  const session = await requerirAdmin()
+  if (!session?.user) {
+    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  }
+
+  const body = await req.json() as {
+    hecho_id?: string
+    usar_como_ejemplo?: boolean
+  }
+
+  const { hecho_id, usar_como_ejemplo } = body
+
+  if (!hecho_id || typeof usar_como_ejemplo !== 'boolean') {
+    return NextResponse.json(
+      { error: 'Se requieren hecho_id y usar_como_ejemplo (boolean)' },
+      { status: 400 }
+    )
+  }
+
+  try {
+    // La subconsulta acota a la última revisión por revisado_at. Sin ella se
+    // marcarían también las clasificaciones ya superadas de ese hecho, que es
+    // justo lo que el few-shot no debe resucitar.
+    const filas = await prisma.$executeRaw`
+      UPDATE revisiones_pipeline
+      SET usar_como_ejemplo = ${usar_como_ejemplo}
+      WHERE id = (
+        SELECT id FROM revisiones_pipeline
+        WHERE hecho_id = ${hecho_id}
+        ORDER BY revisado_at DESC
+        LIMIT 1
+      )
+    `
+
+    if (filas === 0) {
+      return NextResponse.json(
+        { error: 'No hay ninguna revisión para ese hecho' },
+        { status: 404, headers: { 'Cache-Control': 'no-store' } }
+      )
+    }
+
+    return NextResponse.json(
+      { ok: true, usar_como_ejemplo },
+      { headers: { 'Cache-Control': 'no-store' } }
+    )
+  } catch (err) {
+    console.error('Error en PATCH /api/admin/revisiones:', err)
+    return NextResponse.json(
+      { error: 'Error al actualizar el ejemplo' },
+      { status: 500, headers: { 'Cache-Control': 'no-store' } }
+    )
+  }
 }

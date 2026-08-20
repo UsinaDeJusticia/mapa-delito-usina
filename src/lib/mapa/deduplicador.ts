@@ -19,6 +19,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/mapa/queries'
 import { crearClienteLLM } from '@/lib/mapa/cliente-llm'
 import { parsearJsonLLM, validarDeduplicacion } from '@/lib/pipeline/schemas-llm'
+import { obtenerContenidoLLM } from '@/lib/pipeline/llamada-llm'
 
 // ════════════════════════════════════════════
 // TIPOS
@@ -266,16 +267,27 @@ o
   try {
     const { cliente, config } = crearClienteLLM('Mapa del Delito - Deduplicador')
 
-    const respuesta = await cliente.chat.completions.create({
-      model: config.modelo,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.1,
-      max_tokens: 300,
+    const resultado = await obtenerContenidoLLM({
+      etiqueta: 'deduplicación',
+      aceptar: contenido => parsearJsonLLM(contenido).ok,
+      ejecutar: () => cliente.chat.completions.create({
+        model: config.modelo,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.1,
+        max_tokens: 300,
+      }),
     })
 
-    const contenido = respuesta.choices[0]?.message?.content?.trim() || ''
+    if (!resultado.ok) {
+      // FALLBACK_DEDUP asume "es nuevo" y marca requiereRevision: ante la duda,
+      // que lo mire una persona en vez de vincular o descartar a ciegas.
+      console.error(
+        `⚠️ Deduplicación sin respuesta usable tras ${resultado.intentos} intentos (${resultado.motivo})`
+      )
+      return FALLBACK_DEDUP
+    }
 
-    const parseado = parsearJsonLLM(contenido)
+    const parseado = parsearJsonLLM(resultado.contenido)
     if (!parseado.ok) {
       console.error(`⚠️ Deduplicación: respuesta no parseable — ${parseado.errores.join('; ')}`)
       return FALLBACK_DEDUP

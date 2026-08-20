@@ -14,11 +14,46 @@ import {
   type ExtraccionValidada,
 } from '@/lib/pipeline/schemas-llm'
 import { prisma } from '@/lib/mapa/queries'
+import { efectoDeClasificacion } from '@/lib/mapa/clasificacion-humana'
+import { obtenerContenidoLLM } from '@/lib/pipeline/llamada-llm'
 
 // Caché de ejemplos few-shot: se invalida cada 5 minutos
 let fewShotCache: { ejemplos: Array<{ resumen: string; clasificacion: string }>; ts: number } | null = null
 const FEW_SHOT_TTL_MS = 5 * 60 * 1000
 
+/**
+ * Últimos casos revisados por humanos, para usar como ejemplos few-shot.
+ *
+ * Tres problemas que tenía la query anterior, todos en la misma consulta:
+ *
+ * 1. STALENESS: revisiones_pipeline permite varias filas por hecho_id
+ *    (correcciones sucesivas — ver /admin/revisiones, "Corregir"). Sin
+ *    agrupar por hecho, una clasificación ya superada podía colarse en el
+ *    resultado junto con su corrección, o incluso en su lugar. El
+ *    DISTINCT ON (hd.id) + ORDER BY hd.id, revisado_at DESC se queda con la
+ *    ÚLTIMA clasificación de cada hecho, nunca una vieja.
+ *
+ * 2. FANOUT: el JOIN contra coberturas_mediaticas sin acotar traía una fila
+ *    por cada cobertura del hecho. Un hecho con varias notas podía ocupar
+ *    varios de los 3 lugares del LIMIT, dejando afuera a otros hechos por
+ *    completo. El JOIN LATERAL elige una sola cobertura por hecho (la más
+ *    reciente que tenga resumen usable), igual que hace route.ts para
+ *    "pendientes".
+ *
+ * 3. SIN EJEMPLOS NEGATIVOS: se excluía 'no_es_homicidio' del todo, así que
+ *    el modelo nunca veía un caso real de "esto parecía un homicidio pero no
+ *    lo era". Ahora se incluye — construirEjemplosFewShot() lo traduce al
+ *    esHechoDelictivo:false que espera el prompt.
+ *
+ * Además prioriza usar_como_ejemplo=true (columna que existía en el schema
+ * desde el principio pero que hasta ahora nada leía ni escribía): un
+ * revisor puede curar a mano cuáles casos son los ejemplos más claros,
+ * aunque no sean los más recientes. No hay UI todavía para marcarla —
+ * se setea a mano en la base mientras tanto.
+ *
+ * Verificado contra Postgres real con datos sintéticos que reproducen los
+ * tres problemas (no solo por inspección del SQL).
+ */
 async function getFewShotEjemplos() {
   const ahora = Date.now()
   if (fewShotCache && ahora - fewShotCache.ts < FEW_SHOT_TTL_MS) {
@@ -28,20 +63,76 @@ async function getFewShotEjemplos() {
     resumen: string
     clasificacion: string
   }>>`
-    SELECT
-      cm.resumen,
-      rp.clasificacion_humana AS clasificacion
-    FROM revisiones_pipeline rp
-    JOIN hechos_delictivos hd ON rp.hecho_id = hd.id
-    JOIN coberturas_mediaticas cm ON cm.hecho_delictivo_id = hd.id
-    WHERE rp.clasificacion_humana != 'no_es_homicidio'
-      AND cm.resumen IS NOT NULL
-      AND LENGTH(cm.resumen) > 30
-    ORDER BY rp.revisado_at DESC
+    SELECT resumen, clasificacion FROM (
+      SELECT DISTINCT ON (hd.id)
+        cm.resumen,
+        rp.clasificacion_humana AS clasificacion,
+        rp.revisado_at,
+        rp.usar_como_ejemplo
+      FROM revisiones_pipeline rp
+      JOIN hechos_delictivos hd ON rp.hecho_id = hd.id
+      JOIN LATERAL (
+        SELECT resumen
+        FROM coberturas_mediaticas
+        WHERE hecho_delictivo_id = hd.id
+          AND resumen IS NOT NULL
+          AND LENGTH(resumen) > 30
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) cm ON true
+      ORDER BY hd.id, rp.revisado_at DESC
+    ) ultimas
+    ORDER BY usar_como_ejemplo DESC, revisado_at DESC
     LIMIT 3
   `.catch(() => [])
   fewShotCache = { ejemplos, ts: ahora }
   return ejemplos
+}
+
+/**
+ * Traduce los casos revisados a los pares user/assistant que se inyectan
+ * antes de la noticia real.
+ *
+ * ANTES el mensaje 'assistant' era un JSON fijo — {esHechoDelictivo: true,
+ * confianzaExtraccion: 90} — igual para los 3 ejemplos sin importar qué
+ * clasificación hubiera elegido el humano. El campo `clasificacion` se leía
+ * de la base y no se usaba para nada: el modelo nunca veía la diferencia
+ * entre un femicidio, un homicidio narco o un caso descartado. Esta función
+ * es pura y separada de extraerDatosNoticia() para poder testearla sin
+ * tocar la base ni el cliente LLM.
+ */
+/**
+ * Cuánto de cada resumen se inyecta como ejemplo.
+ *
+ * Sin tope, tres ejemplos podían aportar ~4000 tokens de contexto —el validador
+ * tolera resúmenes de hasta 4000 chars cada uno— y diluir la instrucción de
+ * formato ("respondé solo JSON") que compite con ellos. Un ejemplo sirve para
+ * mostrar la forma del caso, no para reproducir la nota completa.
+ */
+export const MAX_CHARS_EJEMPLO = 500
+
+export function construirEjemplosFewShot(
+  ejemplos: Array<{ resumen: string; clasificacion: string }>
+): Array<{ role: 'user' | 'assistant'; content: string }> {
+  const mensajes: Array<{ role: 'user' | 'assistant'; content: string }> = []
+  for (const ej of ejemplos) {
+    const efecto = efectoDeClasificacion(ej.clasificacion)
+    const resumen = ej.resumen.slice(0, MAX_CHARS_EJEMPLO)
+    mensajes.push({
+      role: 'user',
+      content: `Extraé los datos del siguiente texto:\n---\n${resumen}\n---`,
+    })
+    mensajes.push({
+      role: 'assistant',
+      content: JSON.stringify({
+        esHechoDelictivo: efecto.snicCodigo !== null,
+        snic_codigo: efecto.snicCodigo,
+        es_femicidio: efecto.esFemicidio,
+        confianzaExtraccion: 90,
+      }),
+    })
+  }
+  return mensajes
 }
 
 // ════════════════════════════════════════════
@@ -90,7 +181,14 @@ nombres son los del catálogo oficial:
 - 2 = Homicidios dolosos en grado de tentativa (heridos graves por ataques letales).
 - 3 = Muertes en siniestros viales (SOLO tránsito: choques, atropellamientos).
 - 4 = Homicidios culposos por otros hechos (negligencia médica, accidentes laborales, imprudencia no vial).
-- 0 = Muerte violenta de causa dudosa / En investigación (cuerpos hallados sin causa clara aún).
+- 0 = Muerte violenta en investigación (cuerpos hallados sin causa clara aún, muerte de causa dudosa).
+
+CÓDIGO 0 — SIEMPRE CON requiereRevision:
+Si usás snic_codigo 0, poné también "requiereRevision": true. Un caso sin causa
+determinada tiene que pasar por una persona antes de contarse como homicidio: no
+se publica en el mapa hasta que alguien lo confirme. Preferí el 0 con revisión
+antes que adivinar entre el 1 y el 4 — una muerte de causa dudosa clasificada
+como homicidio doloso infla las cifras, y como culposa las oculta.
 
 FEMICIDIO — SE MARCA APARTE, NO ES UN CÓDIGO:
 Un femicidio o transfemicidio es un homicidio doloso, así que va con snic_codigo 1
@@ -221,43 +319,45 @@ export async function extraerDatosNoticia(
   const { cliente, config } = crearClienteLLM('Mapa Nacional del Delito - Usina de Justicia')
 
   const ejemplos = await getFewShotEjemplos()
-
-  const fewShotMessages: Array<{ role: 'user' | 'assistant'; content: string }> = []
-  for (const ej of ejemplos) {
-    fewShotMessages.push({
-      role: 'user',
-      content: `Extraé los datos del siguiente texto:\n---\n${ej.resumen}\n---`,
-    })
-    fewShotMessages.push({
-      role: 'assistant',
-      content: JSON.stringify({ esHechoDelictivo: true, confianzaExtraccion: 90 }),
-    })
-  }
+  const fewShotMessages = construirEjemplosFewShot(ejemplos)
 
   try {
-    const respuesta = await cliente.chat.completions.create({
-      model: config.modelo,
-      messages: [
-        { role: 'system', content: PROMPT_SISTEMA },
-        ...fewShotMessages,
-        {
-          role: 'user',
-          content: `Fecha actual de procesamiento: ${new Date().toISOString().slice(0, 10)}\nURL fuente: ${urlFuente}\n\nExtraé los datos del siguiente texto de noticia policial argentina siguiendo el formato JSON requerido:\n---\n${textoNoticia.slice(0, 3000)}\n---`,
-        },
-      ],
-      temperature: 0.1,
-      max_tokens: 500,
+    // max_tokens 1500 y no 500: el JSON pedido incluye resumen_hecho ("un
+    // párrafo") y el validador tolera hasta 4000 chars ahí, así que la salida
+    // esperada son 300-500 tokens. 500 dejaba el límite justo en el borde. No
+    // es la causa de los cortes en la posición 207 —eso pasa muy por debajo del
+    // límite—, pero era un segundo problema real esperando su turno.
+    const resultado = await obtenerContenidoLLM({
+      etiqueta: urlFuente,
+      // Un JSON cortado es justo el caso que un segundo intento suele resolver.
+      aceptar: contenido => parsearJsonLLM(contenido).ok,
+      ejecutar: () =>
+        cliente.chat.completions.create({
+          model: config.modelo,
+          messages: [
+            { role: 'system', content: PROMPT_SISTEMA },
+            ...fewShotMessages,
+            {
+              role: 'user',
+              content: `Fecha actual de procesamiento: ${new Date().toISOString().slice(0, 10)}\nURL fuente: ${urlFuente}\n\nExtraé los datos del siguiente texto de noticia policial argentina siguiendo el formato JSON requerido:\n---\n${textoNoticia.slice(0, 3000)}\n---`,
+            },
+          ],
+          temperature: 0.1,
+          max_tokens: 1500,
+        }),
     })
 
-    const contenido = respuesta.choices[0]?.message?.content?.trim() || ''
-
-    if (!contenido) {
-      console.error('⚠️ Modelo devolvió respuesta vacía')
+    if (!resultado.ok) {
+      console.error(
+        `⚠️ Sin respuesta usable tras ${resultado.intentos} intentos (${resultado.motivo}): ${urlFuente}`
+      )
       return RESPUESTA_FALLBACK
     }
 
-    const parseado = parsearJsonLLM(contenido)
+    const parseado = parsearJsonLLM(resultado.contenido)
     if (!parseado.ok) {
+      // No debería pasar: `aceptar` ya verificó que parsea. Queda por si la
+      // condición de aceptación y el parseo se desincronizan.
       console.error(`⚠️ Respuesta del modelo no parseable (${urlFuente}): ${parseado.errores.join('; ')}`)
       return RESPUESTA_FALLBACK
     }

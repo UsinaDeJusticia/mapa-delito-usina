@@ -52,7 +52,7 @@ Esta es la tarea más importante. El sistema detecta automáticamente noticias s
 
 2. Leé el título y el resumen. Si necesitás más contexto, abrí la noticia original.
 
-3. Elegí una de las cinco opciones:
+3. Elegí una de las seis opciones:
 
 | Opción | Cuándo usarla |
 |--------|---------------|
@@ -60,6 +60,7 @@ Esta es la tarea más importante. El sistema detecta automáticamente noticias s
 | **Homicidio en ocasión de robo** | La víctima murió durante un robo |
 | **Femicidio** | Muerte de una mujer o persona travesti/trans por violencia de género: pareja o ex pareja, violencia familiar, violencia sexual, o que la noticia lo nombre explícitamente como femicidio, transfemicidio o crimen de odio por identidad de género. No se infiere solo por el sexo de la víctima — una mujer víctima de un robo violento no es automáticamente un femicidio. |
 | **Vinculado al narcotráfico** | El homicidio está relacionado con drogas/narco |
+| **Violencia policial** | La muerte fue causada por fuerzas de seguridad: gatillo fácil, muerte en persecución, muerte bajo custodia o en dependencia policial. Cuenta como homicidio, igual que las opciones de arriba — la diferencia queda registrada en el historial de la revisión. Si hay dudas sobre si intervino una fuerza de seguridad, usá la opción que mejor describa el hecho y dejalo anotado. |
 | **No es homicidio** | La noticia no es un homicidio (accidente, suicidio, pelea sin muerte, noticia repetida, etc.) |
 
 4. Al tocar una opción, la tarjeta desaparece y pasa a "Revisados recientes" abajo.

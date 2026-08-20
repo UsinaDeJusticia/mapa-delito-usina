@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 import AdminNav from '@/components/admin/AdminNav'
+import { esHomicidioSegunClasificacion } from '@/lib/mapa/clasificacion-humana'
 // useSession requires SessionProvider — provided by src/app/admin/layout.tsx
 
 interface Cobertura {
@@ -36,6 +37,7 @@ interface HechoRevisado {
   clasificacion_humana: string
   revisado_por: string
   revisado_at: string | null
+  usar_como_ejemplo?: boolean
   coberturas: Cobertura[]
   // Total real de coberturas del hecho. Puede superar coberturas.length,
   // que viene topeado a 12 desde la API.
@@ -47,6 +49,7 @@ const CLASIFICACIONES = [
   { valor: 'homicidio_en_ocasion_de_robo',      etiqueta: 'Homicidio en ocasión de robo',   emoji: '🔪' },
   { valor: 'femicidio',                         etiqueta: 'Femicidio',                      emoji: '👩' },
   { valor: 'homicidio_vinculado_al_narcotrafico', etiqueta: 'Vinculado al narcotráfico',    emoji: '💊' },
+  { valor: 'violencia_policial',                etiqueta: 'Violencia policial',             emoji: '🚨' },
   { valor: 'no_es_homicidio',                   etiqueta: 'No es homicidio',                emoji: '❌' },
 ]
 
@@ -55,6 +58,7 @@ const ETIQUETA_CLASIFICACION: Record<string, string> = {
   homicidio_en_ocasion_de_robo: 'Homicidio en ocasión de robo',
   femicidio: 'Femicidio',
   homicidio_vinculado_al_narcotrafico: 'Vinculado al narcotráfico',
+  violencia_policial: 'Violencia policial',
   no_es_homicidio: 'No es homicidio',
 }
 
@@ -77,11 +81,42 @@ function tiempoRelativo(isoString: string | null) {
 function CardRevisado({
   hecho,
   onCorregir,
+  onMarcarEjemplo,
 }: {
   hecho: HechoRevisado
   onCorregir: (hecho: HechoRevisado) => void
+  onMarcarEjemplo: (hechoId: string, marcado: boolean) => void
 }) {
-  const esHomicidio = hecho.clasificacion_humana !== 'no_es_homicidio'
+  const [ejemplo, setEjemplo] = useState(Boolean(hecho.usar_como_ejemplo))
+  const [guardandoEjemplo, setGuardandoEjemplo] = useState(false)
+
+  async function alternarEjemplo() {
+    const nuevo = !ejemplo
+    setEjemplo(nuevo)          // optimista
+    setGuardandoEjemplo(true)
+    try {
+      const res = await fetch('/api/admin/revisiones', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hecho_id: hecho.hecho_id, usar_como_ejemplo: nuevo }),
+      })
+      if (!res.ok) {
+        setEjemplo(!nuevo)     // revertir si falló
+      } else {
+        onMarcarEjemplo(hecho.hecho_id, nuevo)
+      }
+    } catch {
+      setEjemplo(!nuevo)
+    } finally {
+      setGuardandoEjemplo(false)
+    }
+  }
+
+  // esHomicidioSegunClasificacion y no `!== 'no_es_homicidio'`: esa heurística
+  // negativa daba "es homicidio" para cualquier valor nuevo, incluso cuando el
+  // backend lo interpretaba al revés. Con violencia_policial daba el mismo
+  // resultado por casualidad; con la próxima clasificación no necesariamente.
+  const esHomicidio = esHomicidioSegunClasificacion(hecho.clasificacion_humana)
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-3 sm:p-4 flex items-start gap-3">
       <div className="flex-1 min-w-0">
@@ -102,12 +137,34 @@ function CardRevisado({
           </span>
         </div>
       </div>
-      <button
-        onClick={() => onCorregir(hecho)}
-        className="shrink-0 text-[10px] text-gray-400 hover:text-[#1E427C] border border-gray-200 hover:border-[#1E427C] rounded-lg px-2 py-1 transition-colors"
-      >
-        Corregir
-      </button>
+      <div className="shrink-0 flex items-center gap-1.5">
+        {/* Marcar como ejemplo curado para el few-shot del pipeline. La demora
+            de hasta 5 minutos es la caché en memoria del pipeline
+            (FEW_SHOT_TTL_MS); no se invalida entre procesos. */}
+        <button
+          onClick={alternarEjemplo}
+          disabled={guardandoEjemplo}
+          aria-pressed={ejemplo}
+          title={
+            ejemplo
+              ? 'Es un ejemplo de referencia para el pipeline. Tarda hasta 5 min en aplicarse.'
+              : 'Marcar como ejemplo de referencia para el pipeline (tarda hasta 5 min)'
+          }
+          className={`text-[13px] leading-none rounded-lg px-1.5 py-1 border transition-colors disabled:opacity-50 ${
+            ejemplo
+              ? 'border-amber-300 bg-amber-50 text-amber-600'
+              : 'border-gray-200 text-gray-300 hover:text-amber-500 hover:border-amber-300'
+          }`}
+        >
+          {ejemplo ? '★' : '☆'}
+        </button>
+        <button
+          onClick={() => onCorregir(hecho)}
+          className="text-[10px] text-gray-400 hover:text-[#1E427C] border border-gray-200 hover:border-[#1E427C] rounded-lg px-2 py-1 transition-colors"
+        >
+          Corregir
+        </button>
+      </div>
     </div>
   )
 }
@@ -138,10 +195,13 @@ function CardRevision({
       const res = await fetch('/api/admin/revisiones', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        // es_correccion ya no se manda: el backend nunca lo leía, y si esta
+        // revisión es una corrección se deduce de que ya haya una fila previa
+        // en revisiones_pipeline. `esCorreccion` sigue usándose acá para la UI
+        // del modal, nada más.
         body: JSON.stringify({
           hecho_id: id,
           clasificacion_humana: clasificacion,
-          es_correccion: esCorreccion,
         }),
       })
 
@@ -419,7 +479,7 @@ export default function RevisionesPage() {
         titulo: hechoOriginal?.titulo ?? null,
         medio: hechoOriginal?.medio ?? null,
         provincia: hechoOriginal?.provincia ?? null,
-        confianza_hecho: clasificacion !== 'no_es_homicidio' ? 'VERIFICADO' : 'PRELIMINAR',
+        confianza_hecho: esHomicidioSegunClasificacion(clasificacion) ? 'VERIFICADO' : 'PRELIMINAR',
         coberturas: hechoOriginal?.coberturas ?? [],
         clasificacion_humana: clasificacion,
         revisado_por: revisadoPor,
@@ -437,6 +497,14 @@ export default function RevisionesPage() {
     ))
     // Si volvió a ser homicidio, ya no reaparece en pendientes (queda en revisados como VERIFICADO)
     // Si se marcó como no_es_homicidio, tampoco reaparece (el polling de 30s lo resuelve si cambia)
+  }
+
+  function handleMarcarEjemplo(hechoId: string, marcado: boolean) {
+    // Mantiene el estado local en sincronía para que un recargado por SSE o por
+    // el polling de 30s no pise la marca que se acaba de poner.
+    setRevisados(prev =>
+      prev.map(r => (r.hecho_id === hechoId ? { ...r, usar_como_ejemplo: marcado } : r))
+    )
   }
 
   const corrigiendoHecho = revisados.find(r => r.hecho_id === corrigiendoId)
@@ -526,6 +594,7 @@ export default function RevisionesPage() {
                   key={r.hecho_id}
                   hecho={r}
                   onCorregir={(h) => setCorrigiendoId(h.hecho_id)}
+                  onMarcarEjemplo={handleMarcarEjemplo}
                 />
               ))}
             </div>

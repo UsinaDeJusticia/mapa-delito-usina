@@ -80,30 +80,45 @@ describe('el catálogo sembrado no tiene un código para femicidio', () => {
   })
 })
 
-describe('el panel de revisión mapea femicidio al código correcto', () => {
+describe('el mapeo de clasificación humana usa el código correcto', () => {
+  // Este mapeo vivía duplicado inline en route.ts. Se extrajo a
+  // src/lib/mapa/clasificacion-humana.ts para que route.ts (escritura) y
+  // openrouter.ts (few-shot) no puedan divergir — ver
+  // tests/mapa/clasificacion-humana.test.ts para el contrato completo de esa
+  // función. Estos tests siguen viviendo acá porque el defecto original
+  // (femicidio → código 4) era específicamente sobre esta clasificación.
+  const mapeo = leer('src/lib/mapa/clasificacion-humana.ts')
   const route = leer('src/app/api/admin/revisiones/route.ts')
 
   test('femicidio va al código 1, no al 4', () => {
-    const mapeo = route.match(/'femicidio':\s*(\d+|null)/)
-    assert.ok(mapeo, 'debería existir la entrada femicidio en CLASIFICACION_SNIC')
+    const m = mapeo.match(/femicidio:\s*\{\s*snicCodigo:\s*(\d+|null)/)
+    assert.ok(m, 'debería existir la entrada femicidio en el mapeo de efectos')
     assert.equal(
-      mapeo![1],
+      m![1],
       '1',
-      `femicidio quedó mapeado al código ${mapeo![1]}, que es "${CATALOGO_OFICIAL[mapeo![1]] ?? 'desconocido'}"`
+      `femicidio quedó mapeado al código ${m![1]}, que es "${CATALOGO_OFICIAL[m![1]] ?? 'desconocido'}"`
     )
   })
 
   test('ninguna clasificación de homicidio usa el código 4', () => {
     // El 4 es culposo por otros hechos. Ninguna de las cinco clasificaciones del
     // panel corresponde a eso: todas son dolosas o "no es homicidio".
-    const bloque = route.slice(
-      route.indexOf('const CLASIFICACION_SNIC'),
-      route.indexOf('CLASIFICACIONES_FEMICIDIO')
-    )
+    const bloque = mapeo.slice(mapeo.indexOf('const EFECTOS'), mapeo.indexOf('const FALLBACK'))
     assert.ok(
-      !/:\s*4,/.test(bloque),
+      !/snicCodigo:\s*4/.test(bloque),
       'alguna clasificación volvió a apuntar al código 4 (homicidios culposos)'
     )
+  })
+
+  test('route.ts ya no declara su propia copia del mapeo', () => {
+    // Guarda contra la regresión que motivó extraer el módulo: si vuelve a
+    // aparecer una tabla inline acá, openrouter.ts puede terminar leyendo una
+    // versión distinta a la que realmente escribe la base.
+    assert.ok(
+      !/const CLASIFICACION_SNIC/.test(route) && !/const CLASIFICACIONES_FEMICIDIO/.test(route),
+      'route.ts volvió a declarar el mapeo inline en vez de usar efectoDeClasificacion()'
+    )
+    assert.match(route, /efectoDeClasificacion\(/, 'route.ts debe usar el mapeo compartido')
   })
 
   test('el UPDATE persiste la marca de femicidio', () => {
@@ -120,6 +135,22 @@ describe('el panel de revisión mapea femicidio al código correcto', () => {
     const vistas = leer('scripts/sql/create-materialized-views.sql')
     assert.match(vistas, /femicidio\s*=\s*'Si'/, 'la vista cuenta con Si')
     assert.match(route, /'Si'/, 'el UPDATE debe usar el mismo literal')
+  })
+
+  test('reclasificar a no_es_homicidio limpia femicidio', () => {
+    // El defecto que motivó esta ronda de cambios: un caso ya marcado
+    // femicidio por una clasificación anterior, corregido luego a "no es
+    // homicidio", seguía guardado con femicidio='Si'.
+    // route.ts tiene dos "} catch": GET y POST. Buscar el segundo a partir del
+    // "} else {" (que solo existe en POST) evita agarrar el de GET, que
+    // aparece antes en el archivo y daría un slice vacío.
+    const inicioElse = route.indexOf('} else {')
+    const bloqueElse = route.slice(inicioElse, route.indexOf('} catch', inicioElse))
+    assert.match(
+      bloqueElse,
+      /femicidio\s*=\s*null/,
+      'el UPDATE de "no es homicidio" tiene que limpiar femicidio explícitamente'
+    )
   })
 })
 
