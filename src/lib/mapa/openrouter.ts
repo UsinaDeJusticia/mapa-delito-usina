@@ -15,6 +15,7 @@ import {
 } from '@/lib/pipeline/schemas-llm'
 import { prisma } from '@/lib/mapa/queries'
 import { efectoDeClasificacion } from '@/lib/mapa/clasificacion-humana'
+import { obtenerContenidoLLM } from '@/lib/pipeline/llamada-llm'
 
 // Caché de ejemplos few-shot: se invalida cada 5 minutos
 let fewShotCache: { ejemplos: Array<{ resumen: string; clasificacion: string }>; ts: number } | null = null
@@ -100,15 +101,26 @@ async function getFewShotEjemplos() {
  * es pura y separada de extraerDatosNoticia() para poder testearla sin
  * tocar la base ni el cliente LLM.
  */
+/**
+ * Cuánto de cada resumen se inyecta como ejemplo.
+ *
+ * Sin tope, tres ejemplos podían aportar ~4000 tokens de contexto —el validador
+ * tolera resúmenes de hasta 4000 chars cada uno— y diluir la instrucción de
+ * formato ("respondé solo JSON") que compite con ellos. Un ejemplo sirve para
+ * mostrar la forma del caso, no para reproducir la nota completa.
+ */
+export const MAX_CHARS_EJEMPLO = 500
+
 export function construirEjemplosFewShot(
   ejemplos: Array<{ resumen: string; clasificacion: string }>
 ): Array<{ role: 'user' | 'assistant'; content: string }> {
   const mensajes: Array<{ role: 'user' | 'assistant'; content: string }> = []
   for (const ej of ejemplos) {
     const efecto = efectoDeClasificacion(ej.clasificacion)
+    const resumen = ej.resumen.slice(0, MAX_CHARS_EJEMPLO)
     mensajes.push({
       role: 'user',
-      content: `Extraé los datos del siguiente texto:\n---\n${ej.resumen}\n---`,
+      content: `Extraé los datos del siguiente texto:\n---\n${resumen}\n---`,
     })
     mensajes.push({
       role: 'assistant',
@@ -303,29 +315,42 @@ export async function extraerDatosNoticia(
   const fewShotMessages = construirEjemplosFewShot(ejemplos)
 
   try {
-    const respuesta = await cliente.chat.completions.create({
-      model: config.modelo,
-      messages: [
-        { role: 'system', content: PROMPT_SISTEMA },
-        ...fewShotMessages,
-        {
-          role: 'user',
-          content: `Fecha actual de procesamiento: ${new Date().toISOString().slice(0, 10)}\nURL fuente: ${urlFuente}\n\nExtraé los datos del siguiente texto de noticia policial argentina siguiendo el formato JSON requerido:\n---\n${textoNoticia.slice(0, 3000)}\n---`,
-        },
-      ],
-      temperature: 0.1,
-      max_tokens: 500,
+    // max_tokens 1500 y no 500: el JSON pedido incluye resumen_hecho ("un
+    // párrafo") y el validador tolera hasta 4000 chars ahí, así que la salida
+    // esperada son 300-500 tokens. 500 dejaba el límite justo en el borde. No
+    // es la causa de los cortes en la posición 207 —eso pasa muy por debajo del
+    // límite—, pero era un segundo problema real esperando su turno.
+    const resultado = await obtenerContenidoLLM({
+      etiqueta: urlFuente,
+      // Un JSON cortado es justo el caso que un segundo intento suele resolver.
+      aceptar: contenido => parsearJsonLLM(contenido).ok,
+      ejecutar: () =>
+        cliente.chat.completions.create({
+          model: config.modelo,
+          messages: [
+            { role: 'system', content: PROMPT_SISTEMA },
+            ...fewShotMessages,
+            {
+              role: 'user',
+              content: `Fecha actual de procesamiento: ${new Date().toISOString().slice(0, 10)}\nURL fuente: ${urlFuente}\n\nExtraé los datos del siguiente texto de noticia policial argentina siguiendo el formato JSON requerido:\n---\n${textoNoticia.slice(0, 3000)}\n---`,
+            },
+          ],
+          temperature: 0.1,
+          max_tokens: 1500,
+        }),
     })
 
-    const contenido = respuesta.choices[0]?.message?.content?.trim() || ''
-
-    if (!contenido) {
-      console.error('⚠️ Modelo devolvió respuesta vacía')
+    if (!resultado.ok) {
+      console.error(
+        `⚠️ Sin respuesta usable tras ${resultado.intentos} intentos (${resultado.motivo}): ${urlFuente}`
+      )
       return RESPUESTA_FALLBACK
     }
 
-    const parseado = parsearJsonLLM(contenido)
+    const parseado = parsearJsonLLM(resultado.contenido)
     if (!parseado.ok) {
+      // No debería pasar: `aceptar` ya verificó que parsea. Queda por si la
+      // condición de aceptación y el parseo se desincronizan.
       console.error(`⚠️ Respuesta del modelo no parseable (${urlFuente}): ${parseado.errores.join('; ')}`)
       return RESPUESTA_FALLBACK
     }

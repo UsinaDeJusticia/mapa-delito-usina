@@ -28,6 +28,7 @@ import {
   EjecutableNoEncontradoError,
 } from '../../src/lib/pipeline/browser-cmd'
 import { esDestinoPermitido } from '../../src/lib/pipeline/url-segura'
+import { obtenerContenidoLLM } from '../../src/lib/pipeline/llamada-llm'
 import {
   parsearJsonLLM,
   validarLinksIdentificados,
@@ -273,7 +274,14 @@ async function identificarNoticiasConIA(
   const modelo = config.modelo
 
   try {
-    const respuesta = await cliente.chat.completions.create({
+    const resultado = await obtenerContenidoLLM({
+      etiqueta: `identificación en ${medio}`,
+      // Tiene que ser un array JSON. Si vino cortado, reintentar.
+      aceptar: contenido => {
+        const p = parsearJsonLLM(contenido)
+        return p.ok && Array.isArray(p.valor)
+      },
+      ejecutar: () => cliente.chat.completions.create({
       model: modelo,
       messages: [
         {
@@ -319,11 +327,20 @@ Máximo 10 resultados, ordenados de más a menos relevante.`
       ],
       temperature: 0.1,
       max_tokens: 800,
+      }),
     })
 
-    const contenido = respuesta.choices[0]?.message?.content?.trim() || '[]'
+    // ANTES esto era `content?.trim() || '[]'`: una respuesta vacía del modelo
+    // se convertía en silencio en "este medio no tiene noticias", sin un solo
+    // log. Un medio entero se perdía sin dejar rastro, y en los logs quedaba
+    // indistinguible de "revisé y no había homicidios". Con ~45 medios
+    // devolviendo casi todos "0 noticias", esa confusión tapaba el problema.
+    if (!resultado.ok) {
+      log('⚠️', `Identificación en ${medio}: SIN RESPUESTA USABLE tras ${resultado.intentos} intentos (${resultado.motivo}) — NO es lo mismo que "no hay noticias"`)
+      return []
+    }
 
-    const parseado = parsearJsonLLM(contenido)
+    const parseado = parsearJsonLLM(resultado.contenido)
     if (!parseado.ok) {
       log('⚠️', `Identificación en ${medio}: respuesta no parseable — ${parseado.errores.join('; ')}`)
       return []
