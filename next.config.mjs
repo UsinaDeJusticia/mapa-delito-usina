@@ -2,9 +2,11 @@ import { CSP_ESTRICTA, CSP_OBSERVADA } from './src/config/csp.mjs'
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    serverComponentsExternalPackages: [],
-  },
+  // `experimental.serverComponentsExternalPackages` se removió: en Next 15 pasó
+  // a llamarse `serverExternalPackages`, y acá era una lista vacía —o sea, no
+  // hacía nada—. Se saca en vez de renombrarla para no dejar configuración
+  // muerta. Si algún día hay que excluir un paquete del bundle del servidor, la
+  // clave nueva es `serverExternalPackages`.
   compress: true,
   async headers() {
     return [
