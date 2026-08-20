@@ -58,28 +58,78 @@ describe('la lista MEDIOS no tiene entradas rotas', () => {
   })
 })
 
-describe('los medios de Buenos Aires agregados en esta ronda siguen sin activar', () => {
-  // No se pudo hacer fetch real a ninguno (el entorno donde se investigaron no
-  // tiene salida a internet), así que quedaron en activo:false esperando el
-  // health-check. Cuando corra `verificar-medios.yml` en Actions y confirme que
-  // cargan y no tienen paywall, se activan y este test se actualiza a mano.
-  const PENDIENTES = [
-    'mdp0223', 'elmarplatense', 'lanueva', 'ecosdiarios',
-    'elpopularolav', '0221laplata', 'elcomercioonline', 'vivieloeste', 'minutouno',
+describe('los medios de Buenos Aires quedaron según lo que dijo el health-check', () => {
+  // La corrida de verificar-medios.yml (run 32397123698) resolvió los 9
+  // candidatos que estaban esperando. Este test fija ese resultado: no es una
+  // decisión de diseño, es lo que devolvió la verificación real.
+  const ACTIVADOS = [
+    'mdp0223', 'elmarplatense', 'lanueva', '0221laplata',
+    'elcomercioonline', 'vivieloeste', 'minutouno',
   ]
+  const RECHAZADOS = {
+    // Dominio que no resuelve — el health-check evitó activar un medio muerto.
+    elpopularolav: 'DNS muerto',
+    // 403 más el indicio de paywall que ya venía marcado.
+    ecosdiarios: '403 + paywall',
+  }
 
   test('todos existen en la lista', () => {
     const ids = new Set(MEDIOS.map(m => m.id))
-    for (const id of PENDIENTES) {
+    for (const id of [...ACTIVADOS, ...Object.keys(RECHAZADOS)]) {
       assert.ok(ids.has(id), `falta el medio "${id}"`)
     }
   })
 
-  test('ninguno quedó activo antes de verificarlo', () => {
-    for (const id of PENDIENTES) {
-      const m = MEDIOS.find(x => x.id === id)
-      assert.equal(m?.activo, false, `${id} se activó sin la verificación del health-check`)
+  test('los 7 que respondieron OK quedaron activos', () => {
+    for (const id of ACTIVADOS) {
+      assert.notEqual(
+        MEDIOS.find(m => m.id === id)?.activo, false,
+        `${id} pasó el health-check pero sigue desactivado`
+      )
     }
+  })
+
+  test('los 2 que fallaron siguen desactivados', () => {
+    for (const [id, motivo] of Object.entries(RECHAZADOS)) {
+      assert.equal(
+        MEDIOS.find(m => m.id === id)?.activo, false,
+        `${id} se activó pese a fallar el health-check (${motivo})`
+      )
+    }
+  })
+})
+
+describe('los medios con fallo inequívoco están desactivados', () => {
+  // DNS que no resuelve y TLS inválido: no hay WAF de por medio, así que el
+  // veredicto es concluyente. Cada uno gastaba tiempo de la corrida diaria.
+  const MUERTOS = {
+    jornada: 'dominio no resuelve',
+    lamanana: 'dominio no resuelve',
+    cadenaargentina: 'certificado TLS inválido',
+  }
+
+  for (const [id, motivo] of Object.entries(MUERTOS)) {
+    test(`${id} está desactivado (${motivo})`, () => {
+      assert.equal(MEDIOS.find(m => m.id === id)?.activo, false)
+    })
+  }
+})
+
+describe('cobertura por provincia', () => {
+  test('Formosa quedó sin medios: hay que reemplazar lamanana', () => {
+    // Se documenta el hueco en vez de dejarlo pasar en silencio. Cuando se
+    // agregue un medio de Formosa, este test se invierte.
+    const formosa = MEDIOS.filter(m => m.provincia === 'Formosa' && m.activo !== false)
+    assert.equal(
+      formosa.length, 0,
+      'ya hay un medio de Formosa activo: actualizar este test y cerrar el hueco'
+    )
+  })
+
+  test('Buenos Aires tiene al menos 12 medios activos', () => {
+    // Es la provincia con más homicidios y la audiencia principal del mapa.
+    const ba = MEDIOS.filter(m => m.provincia === 'Buenos Aires' && m.activo !== false)
+    assert.ok(ba.length >= 12, `solo ${ba.length} medios activos en Buenos Aires`)
   })
 })
 

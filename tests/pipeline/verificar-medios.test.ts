@@ -137,10 +137,24 @@ describe('verificarMedio', () => {
     assert.match(r.detalle, /JS/)
   })
 
-  test('HTTP_ERROR con el código', async () => {
-    const r = await verificarMedio(medio, fetchFalso('', { status: 404 }))
+  test('un 403 se marca BLOQUEADO, no como fallo del medio', async () => {
+    // Lección de la primera corrida real: dio 403/404 en ~30 medios, y varios de
+    // esos —rosario3, infocielo, lavoz, eltribuno, norte— aparecen scrapeando
+    // bien en los logs del pipeline, que usa Chrome real. Era el WAF rechazando
+    // un fetch sin browser. Reportarlos como fallo llevaba a desactivar medios
+    // que funcionan: peor que no tener el reporte.
+    for (const status of [401, 403, 404, 429, 503]) {
+      const r = await verificarMedio(medio, fetchFalso('', { status }))
+      assert.equal(r.estado, 'BLOQUEADO', `HTTP ${status} debería ser inconcluyente`)
+      assert.match(r.detalle, /NO concluyente/)
+    }
+  })
+
+  test('un 500 sí es HTTP_ERROR', async () => {
+    // Un error del servidor no es un WAF filtrando: es el sitio fallando.
+    const r = await verificarMedio(medio, fetchFalso('', { status: 500 }))
     assert.equal(r.estado, 'HTTP_ERROR')
-    assert.match(r.detalle, /404/)
+    assert.match(r.detalle, /500/)
   })
 
   test('REDIRECT_EXTERNO cuando termina en otro dominio', async () => {
@@ -186,6 +200,17 @@ describe('el reporte prioriza lo accionable', () => {
   test('la tabla pone los fallos arriba', () => {
     const filas = tablaMarkdown(resultados).split('\n').slice(2)
     assert.match(filas[0], /muerto/, 'lo roto tiene que estar primero')
+  })
+
+  test('un BLOQUEADO activo NO aparece como candidato a desactivar', () => {
+    // La razón de existir del estado BLOQUEADO.
+    const conBloqueado: Resultado[] = [
+      { ...base, id: 'wafeado', nombre: 'Wafeado', activo: true, estado: 'BLOQUEADO' },
+    ]
+    const r = resumen(conBloqueado)
+    assert.ok(!/ACTIVO\(S\) con problemas/.test(r), 'un 403 no es motivo para desactivar')
+    assert.match(r, /sin veredicto/)
+    assert.match(r, /NO desactivar/)
   })
 
   test('el resumen separa "activo y roto" de "inactivo y sirve"', () => {

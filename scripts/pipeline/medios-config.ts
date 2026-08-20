@@ -61,15 +61,15 @@ export const MEDIOS: MedioConfig[] = [
   // de esta sesión para el detalle de qué se descartó y por qué (Diario Hoy
   // La Plata: cerrado desde 2018; varios "candidatos" no correspondían a
   // Buenos Aires o no existen con ese nombre).
-  { id: 'mdp0223',           nombre: '0223 (Mar del Plata)',         provincia: 'Buenos Aires',       urlBase: 'https://www.0223.com.ar',                 urlPoliciales: 'https://www.0223.com.ar/seguridad',                                 activo: false, tienePaywall: false }, // TODO verificar manualmente
-  { id: 'elmarplatense',     nombre: 'El Marplatense',               provincia: 'Buenos Aires',       urlBase: 'https://www.elmarplatense.com',           urlPoliciales: 'https://www.elmarplatense.com/seccion/policiales',                  activo: false, tienePaywall: false }, // TODO verificar manualmente
-  { id: 'lanueva',           nombre: 'La Nueva (Bahía Blanca)',      provincia: 'Buenos Aires',       urlBase: 'https://www.lanueva.com',                 urlPoliciales: 'https://www.lanueva.com/tag/policiales',                            activo: false, tienePaywall: false }, // TODO verificar manualmente
+  { id: 'mdp0223',           nombre: '0223 (Mar del Plata)',         provincia: 'Buenos Aires',       urlBase: 'https://www.0223.com.ar',                 urlPoliciales: 'https://www.0223.com.ar/seguridad',                                 activo: true , tienePaywall: false }, // TODO verificar manualmente
+  { id: 'elmarplatense',     nombre: 'El Marplatense',               provincia: 'Buenos Aires',       urlBase: 'https://www.elmarplatense.com',           urlPoliciales: 'https://www.elmarplatense.com/seccion/policiales',                  activo: true , tienePaywall: false }, // TODO verificar manualmente
+  { id: 'lanueva',           nombre: 'La Nueva (Bahía Blanca)',      provincia: 'Buenos Aires',       urlBase: 'https://www.lanueva.com',                 urlPoliciales: 'https://www.lanueva.com/tag/policiales',                            activo: true , tienePaywall: false }, // TODO verificar manualmente
   { id: 'ecosdiarios',       nombre: 'Ecos Diarios (Necochea)',      provincia: 'Buenos Aires',       urlBase: 'https://elecos.com.ar',                   urlPoliciales: 'https://elecos.com.ar/categoria/13',                                activo: false, tienePaywall: true  }, // sitio de suscripción digital detectado
   { id: 'elpopularolav',     nombre: 'El Popular (Olavarría)',       provincia: 'Buenos Aires',       urlBase: 'https://www.elpopular.com.ar',            urlPoliciales: 'https://www.elpopular.com.ar/Policiales',                           activo: false, tienePaywall: false }, // TODO verificar manualmente
-  { id: '0221laplata',       nombre: '0221 (La Plata)',              provincia: 'Buenos Aires',       urlBase: 'https://www.0221.com.ar',                 urlPoliciales: 'https://www.0221.com.ar/policiales',                                activo: false, tienePaywall: false }, // TODO verificar manualmente — tiene página de suscripción, no confirmado si bloquea notas
-  { id: 'elcomercioonline',  nombre: 'El Comercio Online (Zona Norte)', provincia: 'Buenos Aires',    urlBase: 'https://www.elcomercioonline.com.ar',     urlPoliciales: 'https://www.elcomercioonline.com.ar/secciones/policiales/',         activo: false, tienePaywall: false }, // TODO verificar manualmente
-  { id: 'vivieloeste',       nombre: 'Viví el Oeste',                provincia: 'Buenos Aires',       urlBase: 'https://www.vivieloeste.com.ar',          urlPoliciales: 'https://www.vivieloeste.com.ar/policiales',                         activo: false, tienePaywall: false }, // TODO verificar manualmente
-  { id: 'minutouno',         nombre: 'Minuto Uno',                   provincia: 'Nacional',           urlBase: 'https://www.minutouno.com',               urlPoliciales: 'https://www.minutouno.com/policiales-a249',                         activo: false, tienePaywall: false }, // TODO verificar manualmente — nacional, fuerte cobertura de GBA
+  { id: '0221laplata',       nombre: '0221 (La Plata)',              provincia: 'Buenos Aires',       urlBase: 'https://www.0221.com.ar',                 urlPoliciales: 'https://www.0221.com.ar/policiales',                                activo: true , tienePaywall: false }, // TODO verificar manualmente — tiene página de suscripción, no confirmado si bloquea notas
+  { id: 'elcomercioonline',  nombre: 'El Comercio Online (Zona Norte)', provincia: 'Buenos Aires',    urlBase: 'https://www.elcomercioonline.com.ar',     urlPoliciales: 'https://www.elcomercioonline.com.ar/secciones/policiales/',         activo: true , tienePaywall: false }, // TODO verificar manualmente
+  { id: 'vivieloeste',       nombre: 'Viví el Oeste',                provincia: 'Buenos Aires',       urlBase: 'https://www.vivieloeste.com.ar',          urlPoliciales: 'https://www.vivieloeste.com.ar/policiales',                         activo: true , tienePaywall: false }, // TODO verificar manualmente
+  { id: 'minutouno',         nombre: 'Minuto Uno',                   provincia: 'Nacional',           urlBase: 'https://www.minutouno.com',               urlPoliciales: 'https://www.minutouno.com/policiales-a249',                         activo: true , tienePaywall: false }, // TODO verificar manualmente — nacional, fuerte cobertura de GBA
 
   // ── Córdoba ──
   { id: 'cadena3',           nombre: 'Cadena 3',                     provincia: 'Córdoba',            urlBase: 'https://www.cadena3.com',                 urlPoliciales: 'https://www.cadena3.com/categoria/policiales/',                     activo: true,  tienePaywall: false },
@@ -93,7 +93,8 @@ export const MEDIOS: MedioConfig[] = [
   { id: 'rionegro',          nombre: 'Diario Río Negro',             provincia: 'Río Negro',          urlBase: 'https://www.rionegro.com.ar',             urlPoliciales: 'https://www.rionegro.com.ar/policiales/',                           activo: true,  tienePaywall: false },
 
   // ── Chubut ──
-  { id: 'jornada',           nombre: 'Jornada',                      provincia: 'Chubut',             urlBase: 'https://www.jornada.com.ar',              urlPoliciales: 'https://www.jornada.com.ar/policiales/',                            activo: true,  tienePaywall: false },
+  // Desactivado: dominio muerto (ERR_NAME_NOT_RESOLVED, confirmado por health-check y por los logs del pipeline)
+  { id: 'jornada',           nombre: 'Jornada',                      provincia: 'Chubut',             urlBase: 'https://www.jornada.com.ar',              urlPoliciales: 'https://www.jornada.com.ar/policiales/',                            activo: false,  tienePaywall: false },
 
   // ── San Juan ──
   { id: 'tiemposanjuan',     nombre: 'Tiempo de San Juan',           provincia: 'San Juan',           urlBase: 'https://www.tiempodesanjuan.com',         urlPoliciales: 'https://www.tiempodesanjuan.com/policiales/',                       activo: true,  tienePaywall: false },
@@ -124,7 +125,8 @@ export const MEDIOS: MedioConfig[] = [
   { id: 'tiemposur',         nombre: 'Tiempo Sur',                   provincia: 'Santa Cruz',         urlBase: 'https://www.tiemposur.com.ar',            urlPoliciales: 'https://www.tiemposur.com.ar/policiales/',                          activo: true,  tienePaywall: false },
 
   // ── Formosa ──
-  { id: 'lamanana',          nombre: 'La Mañana de Formosa',         provincia: 'Formosa',            urlBase: 'https://www.lamananaonline.com.ar',       urlPoliciales: 'https://www.lamananaonline.com.ar/categorias/16/policiales/',       activo: true,  tienePaywall: false },
+  // Desactivado: dominio muerto (ERR_NAME_NOT_RESOLVED). ⚠️ Formosa queda SIN cobertura hasta reemplazarlo.
+  { id: 'lamanana',          nombre: 'La Mañana de Formosa',         provincia: 'Formosa',            urlBase: 'https://www.lamananaonline.com.ar',       urlPoliciales: 'https://www.lamananaonline.com.ar/categorias/16/policiales/',       activo: false,  tienePaywall: false },
 
   // ── San Luis ──
   { id: 'eldiariorepublica', nombre: 'El Diario de la República',    provincia: 'San Luis',           urlBase: 'https://www.eldiariodelarepublica.com',   urlPoliciales: 'https://www.eldiariodelarepublica.com/seccion/policiales/',         activo: true,  tienePaywall: false },
@@ -166,7 +168,8 @@ export const MEDIOS: MedioConfig[] = [
 
   // ── La Rioja adicionales ──
   { id: 'elindependienterioja', nombre: 'El Independiente La Rioja',     provincia: 'La Rioja',           urlBase: 'https://www.elindependiente.com.ar',      urlPoliciales: 'https://www.elindependiente.com.ar/policiales/',                     activo: true,  tienePaywall: false },
-  { id: 'cadenaargentina',      nombre: 'Cadena Argentina',              provincia: 'La Rioja',           urlBase: 'https://www.cadenaargentina.com.ar',      urlPoliciales: 'https://www.cadenaargentina.com.ar/policiales/',                     activo: true,  tienePaywall: false },
+  // Desactivado: certificado TLS inválido (ERR_TLS_CERT_ALTNAME_INVALID)
+  { id: 'cadenaargentina',      nombre: 'Cadena Argentina',              provincia: 'La Rioja',           urlBase: 'https://www.cadenaargentina.com.ar',      urlPoliciales: 'https://www.cadenaargentina.com.ar/policiales/',                     activo: false,  tienePaywall: false },
 
   // ── San Juan adicional ──
   { id: 'diariodecuyo',         nombre: 'Diario de Cuyo',                provincia: 'San Juan',           urlBase: 'https://www.diariodecuyo.com.ar',         urlPoliciales: 'https://www.diariodecuyo.com.ar/policiales/',                        activo: true,  tienePaywall: false },
