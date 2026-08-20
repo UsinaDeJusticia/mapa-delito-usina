@@ -203,9 +203,14 @@ export async function POST(req: NextRequest) {
     hecho_id: string
     clasificacion_humana: string
     notas?: string
-    es_correccion?: boolean
   }
 
+  // `es_correccion` se quitó del contrato. El front lo mandaba y el backend lo
+  // declaraba en el tipo pero nunca lo leía: era una promesa falsa en la API.
+  // Y no hace falta: revisiones_pipeline guarda historial, así que si ya existe
+  // una fila para ese hecho, esta revisión ES una corrección — se deduce del
+  // dato en vez de confiar en lo que diga el cliente. Se sigue aceptando en el
+  // body sin romper nada (queda ignorado explícitamente).
   const { hecho_id, clasificacion_humana, notas } = body
 
   if (!hecho_id || !clasificacion_humana) {
@@ -221,10 +226,17 @@ export async function POST(req: NextRequest) {
   const esHomicidio = snicCodigo !== null
 
   try {
+    // Los dos statements van en una transacción: si el UPDATE falla, la
+    // revisión no queda registrada. Antes iban sueltos, así que un fallo del
+    // segundo dejaba una fila en revisiones_pipeline sin efecto sobre el hecho
+    // — y como el resto del sistema deriva el estado de la ÚLTIMA revisión, el
+    // caso quedaba contado como revisado sin haber cambiado nada. El pipeline
+    // ya usaba $transaction para esto mismo.
+    await prisma.$transaction(async tx => {
     // url_fuente es NOT NULL en revisiones_pipeline. La poblamos con la URL de
     // la cobertura más reciente del hecho (o la url_fuente del hecho), con
     // fallback a 'revision-manual' para no violar el constraint nunca.
-    await prisma.$executeRaw`
+    await tx.$executeRaw`
       INSERT INTO revisiones_pipeline
         (hecho_id, url_fuente, clasificacion_humana, revisado_por, revisado_at, notas)
       SELECT
@@ -243,7 +255,7 @@ export async function POST(req: NextRequest) {
       // femicidio se escribe con el mismo formato que la ingesta del SAT ('Si' o
       // NULL) para que las vistas que cuentan femicidio = 'Si' incluyan también
       // los casos revisados a mano.
-      await prisma.$executeRaw`
+      await tx.$executeRaw`
         UPDATE hechos_delictivos
         SET
           confianza = 'VERIFICADO',
@@ -265,7 +277,7 @@ export async function POST(req: NextRequest) {
       // se toca acá — es NOT NULL en el esquema y el catálogo SNIC no tiene
       // un código para "no es un hecho delictivo"; queda como decisión aparte
       // (agregar un código sentinela, o volver la columna nullable).
-      await prisma.$executeRaw`
+      await tx.$executeRaw`
         UPDATE hechos_delictivos
         SET
           confianza = CASE WHEN confianza = 'VERIFICADO' THEN 'PRELIMINAR' ELSE confianza END,
@@ -274,6 +286,7 @@ export async function POST(req: NextRequest) {
         WHERE id = ${hecho_id}
       `
     }
+    })
   } catch (err) {
     console.error('Error en POST /api/admin/revisiones:', err)
     return NextResponse.json({ error: 'Error al guardar la revisión' }, { status: 500 })

@@ -138,10 +138,13 @@ function CardRevision({
       const res = await fetch('/api/admin/revisiones', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        // es_correccion ya no se manda: el backend nunca lo leía, y si esta
+        // revisión es una corrección se deduce de que ya haya una fila previa
+        // en revisiones_pipeline. `esCorreccion` sigue usándose acá para la UI
+        // del modal, nada más.
         body: JSON.stringify({
           hecho_id: id,
           clasificacion_humana: clasificacion,
-          es_correccion: esCorreccion,
         }),
       })
 
