@@ -110,6 +110,7 @@ export async function GET(req: NextRequest) {
     clasificacion_humana: string
     revisado_por: string
     revisado_at: Date
+    usar_como_ejemplo: boolean
     coberturas_json: unknown
     coberturas_total: number
   }>>`
@@ -122,6 +123,7 @@ export async function GET(req: NextRequest) {
       rp.clasificacion_humana,
       rp.revisado_por,
       rp.revisado_at,
+      COALESCE(rp.usar_como_ejemplo, false) AS usar_como_ejemplo,
       COALESCE(
         (
           SELECT json_agg(
@@ -182,6 +184,7 @@ export async function GET(req: NextRequest) {
       ...r,
       hecho_id: String(r.hecho_id),
       revisado_at: r.revisado_at?.toISOString() ?? null,
+      usar_como_ejemplo: Boolean(r.usar_como_ejemplo),
       coberturas: (r.coberturas_json as Array<{ url: string; medio: string | null }> | null) ?? [],
       coberturas_total: Number(r.coberturas_total ?? 0),
       coberturas_json: undefined,
@@ -293,4 +296,72 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, verificado: esHomicidio })
+}
+
+/**
+ * PATCH — marca o desmarca una revisión como ejemplo curado para el few-shot.
+ *
+ * `usar_como_ejemplo` existía en el schema desde el principio y **nada la
+ * escribía**: getFewShotEjemplos() ya la lee y prioriza (openrouter.ts), pero
+ * el único modo de setearla era a mano en la base. Esto cierra el circuito.
+ *
+ * Actualiza la fila MÁS RECIENTE del hecho, no todas: la marca es por revisión,
+ * no por hecho. Si alguien marca un caso como buen ejemplo y después otro
+ * corrige la clasificación, la fila nueva nace en false y el ejemplo curado se
+ * pierde — y eso es lo correcto, porque si la clasificación estaba mal ese caso
+ * no era un buen ejemplo. No se propaga a propósito.
+ */
+export async function PATCH(req: NextRequest) {
+  const session = await requerirAdmin()
+  if (!session?.user) {
+    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  }
+
+  const body = await req.json() as {
+    hecho_id?: string
+    usar_como_ejemplo?: boolean
+  }
+
+  const { hecho_id, usar_como_ejemplo } = body
+
+  if (!hecho_id || typeof usar_como_ejemplo !== 'boolean') {
+    return NextResponse.json(
+      { error: 'Se requieren hecho_id y usar_como_ejemplo (boolean)' },
+      { status: 400 }
+    )
+  }
+
+  try {
+    // La subconsulta acota a la última revisión por revisado_at. Sin ella se
+    // marcarían también las clasificaciones ya superadas de ese hecho, que es
+    // justo lo que el few-shot no debe resucitar.
+    const filas = await prisma.$executeRaw`
+      UPDATE revisiones_pipeline
+      SET usar_como_ejemplo = ${usar_como_ejemplo}
+      WHERE id = (
+        SELECT id FROM revisiones_pipeline
+        WHERE hecho_id = ${hecho_id}
+        ORDER BY revisado_at DESC
+        LIMIT 1
+      )
+    `
+
+    if (filas === 0) {
+      return NextResponse.json(
+        { error: 'No hay ninguna revisión para ese hecho' },
+        { status: 404, headers: { 'Cache-Control': 'no-store' } }
+      )
+    }
+
+    return NextResponse.json(
+      { ok: true, usar_como_ejemplo },
+      { headers: { 'Cache-Control': 'no-store' } }
+    )
+  } catch (err) {
+    console.error('Error en PATCH /api/admin/revisiones:', err)
+    return NextResponse.json(
+      { error: 'Error al actualizar el ejemplo' },
+      { status: 500, headers: { 'Cache-Control': 'no-store' } }
+    )
+  }
 }
