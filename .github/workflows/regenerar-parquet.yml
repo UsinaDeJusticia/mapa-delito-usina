@@ -1,0 +1,182 @@
+name: Regenerar Parquet desde Neon
+
+# Regenera los 5 Parquet de public/data/ y abre un PR con el resultado.
+#
+# POR QUÉ EXISTE
+# El mapa público lee los Parquet con DuckDB en el browser; la API de Next es
+# solo el respaldo. Así que un cambio en la base no se ve en producción hasta
+# que estos archivos se regeneran y se deployan.
+#
+# Hasta ahora eso dependía de que alguien tuviera el CLI de DuckDB instalado,
+# tuviera red, y se acordara de hacerlo. Los tres fallaron a la vez y el fix del
+# hallazgo #10 se quedó una semana sin llegar a producción. Además, hacerlo a
+# mano expuso la URL de producción: pasó por un .env que `neon checkout` había
+# reescrito para apuntar a un branch (casi se exportaron datos de desarrollo
+# como cifras oficiales) y se copió a un archivo temporal que no estaba
+# gitignoreado.
+#
+# Acá nada de eso aplica: DATABASE_URL viene de un secret fijo, no hay .env ni
+# branch ambiguo, la credencial no toca la máquina de nadie, y la versión de
+# DuckDB queda pinneada.
+#
+# DECISIONES DELIBERADAS
+# 1. Solo `workflow_dispatch`. Sin `schedule`: nada que cambie cifras públicas
+#    sobre víctimas debería dispararse por un timer.
+# 2. Abre un PR, NO pushea a master. La revisión humana de las cifras es lo que
+#    aportó valor la última vez (ver que 260 → 257 femicidios era lo esperado).
+# 3. Si no hay cambios, sale limpio sin abrir PR.
+
+on:
+  workflow_dispatch:
+
+# Mínimos necesarios: crear la rama y abrir el PR. Nada más.
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: regenerar-parquet
+  cancel-in-progress: false
+
+env:
+  # Pinneada a propósito: con la 1.5.3 se verificó el comportamiento del parser
+  # de ATTACH (ver scripts/export/export-parquet.ts). Un "latest" flotante
+  # reintroduce el problema de "andaba en mi máquina".
+  DUCKDB_VERSION: '1.5.3'
+
+jobs:
+  regenerar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Instalar CLI de DuckDB
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/duckdb.zip \
+            "https://github.com/duckdb/duckdb/releases/download/v${DUCKDB_VERSION}/duckdb_cli-linux-amd64.zip"
+          unzip -q -o /tmp/duckdb.zip -d /tmp/duckdb-bin
+          sudo install -m 0755 /tmp/duckdb-bin/duckdb /usr/local/bin/duckdb
+          duckdb --version
+
+      # Las cifras de los Parquet que están hoy en master, para poder comparar.
+      # Se leen de los archivos locales, sin tocar la base.
+      - name: Leer cifras actuales
+        id: antes
+        run: |
+          set -euo pipefail
+          bash .github/scripts/cifras-parquet.sh >> "$GITHUB_OUTPUT"
+
+      # Único paso que ve la credencial. `set -x` está prohibido acá: Actions
+      # enmascara los secrets registrados, pero no hace falta tentar la suerte.
+      - name: Regenerar Parquet
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run export:parquet
+
+      - name: ¿Cambió algo?
+        id: cambios
+        run: |
+          set -euo pipefail
+          if [ -z "$(git status --porcelain public/data)" ]; then
+            echo "hay_cambios=false" >> "$GITHUB_OUTPUT"
+            echo "✅ Los Parquet ya estaban al día: nada que commitear."
+          else
+            echo "hay_cambios=true" >> "$GITHUB_OUTPUT"
+            echo "📦 Cambiaron:"
+            git status --porcelain public/data
+          fi
+
+      - name: Leer cifras nuevas
+        if: steps.cambios.outputs.hay_cambios == 'true'
+        id: despues
+        run: |
+          set -euo pipefail
+          bash .github/scripts/cifras-parquet.sh >> "$GITHUB_OUTPUT"
+
+      - name: Abrir PR
+        if: steps.cambios.outputs.hay_cambios == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTES_HECHOS: ${{ steps.antes.outputs.hechos }}
+          ANTES_VICTIMAS: ${{ steps.antes.outputs.victimas }}
+          ANTES_FEMICIDIOS: ${{ steps.antes.outputs.femicidios }}
+          ANTES_ANIOS: ${{ steps.antes.outputs.anios }}
+          DESPUES_HECHOS: ${{ steps.despues.outputs.hechos }}
+          DESPUES_VICTIMAS: ${{ steps.despues.outputs.victimas }}
+          DESPUES_FEMICIDIOS: ${{ steps.despues.outputs.femicidios }}
+          DESPUES_ANIOS: ${{ steps.despues.outputs.anios }}
+        run: |
+          set -euo pipefail
+          RAMA="datos/regenerar-parquet-$(date -u +%Y%m%d-%H%M%S)"
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$RAMA"
+          git add public/data
+          git commit -m "chore(datos): regenerar Parquet desde Neon
+
+          Generado por el workflow regenerar-parquet.yml (corrida ${{ github.run_number }}).
+          Revisar la tabla de cifras del PR antes de mergear: estos archivos son
+          los que el mapa público lee directamente."
+          git push -u origin "$RAMA"
+
+          cat > /tmp/pr-body.md <<EOF
+          Regeneración de los Parquet que el mapa público lee con DuckDB en el
+          browser. Generado por \`regenerar-parquet.yml\`, corrida
+          [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+
+          ## Cifras: antes → después
+
+          | Métrica | Antes | Después |
+          |---|---|---|
+          | hechos_sat | ${ANTES_HECHOS} | **${DESPUES_HECHOS}** |
+          | victimas_sat | ${ANTES_VICTIMAS} | **${DESPUES_VICTIMAS}** |
+          | femicidios_sat | ${ANTES_FEMICIDIOS} | **${DESPUES_FEMICIDIOS}** |
+          | anios_sat | ${ANTES_ANIOS} | **${DESPUES_ANIOS}** |
+
+          "Antes" son los Parquet que están hoy en \`master\`; "después", los
+          recién exportados de Neon. Los números se leen de los propios Parquet,
+          no de la base.
+
+          ## Antes de mergear
+
+          Estas son cifras públicas sobre víctimas. Conviene poder explicar cada
+          diferencia de la tabla antes de aprobar — si algo no cuadra con una
+          ingesta o una corrección conocida, no mergear.
+          EOF
+
+          gh pr create \
+            --title "chore(datos): regenerar Parquet desde Neon (corrida ${{ github.run_number }})" \
+            --body-file /tmp/pr-body.md \
+            --base master \
+            --head "$RAMA"
+
+      - name: Resumen
+        if: always()
+        run: |
+          if [ "${{ steps.cambios.outputs.hay_cambios }}" = "true" ]; then
+            echo "### 📦 Parquet regenerados — PR abierto" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Métrica | Antes | Después |" >> "$GITHUB_STEP_SUMMARY"
+            echo "|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
+            echo "| hechos_sat | ${{ steps.antes.outputs.hechos }} | ${{ steps.despues.outputs.hechos }} |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| victimas_sat | ${{ steps.antes.outputs.victimas }} | ${{ steps.despues.outputs.victimas }} |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| femicidios_sat | ${{ steps.antes.outputs.femicidios }} | ${{ steps.despues.outputs.femicidios }} |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| anios_sat | ${{ steps.antes.outputs.anios }} | ${{ steps.despues.outputs.anios }} |" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### ✅ Sin cambios" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "Los Parquet de \`master\` ya coinciden con lo que hay en Neon. No se abrió PR." >> "$GITHUB_STEP_SUMMARY"
+          fi

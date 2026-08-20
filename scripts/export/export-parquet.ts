@@ -72,9 +72,18 @@ export class FaltaDatabaseUrlError extends Error {
     super(
       'Falta la variable de entorno DATABASE_URL.\n' +
         '  Uso: DATABASE_URL="postgres://…" npm run export:parquet\n' +
-        '  Ojo: si usás la CLI de Neon, verificá contra qué branch apunta ' +
-        '(NEON_BRANCH en .env) antes de exportar — un branch de desarrollo ' +
-        'generaría Parquet con datos que no son los de producción.'
+        '\n' +
+        '  Lo más seguro es no correr esto a mano: el workflow\n' +
+        '  "Regenerar Parquet desde Neon" (Actions → workflow_dispatch) usa el\n' +
+        '  secret del repo, tiene la versión de DuckDB pinneada, y abre un PR\n' +
+        '  con las cifras antes/después para revisar.\n' +
+        '\n' +
+        '  Este script NO lee .env a propósito, igual que el resto de los\n' +
+        '  scripts del repo. Si querés usarlo igual, hacelo explícito:\n' +
+        '    npx dotenv -e .env -- npm run export:parquet\n' +
+        '  Pero antes verificá contra qué branch apunta ese .env (NEON_BRANCH):\n' +
+        '  la CLI de Neon lo reescribe, y exportar de un branch de desarrollo\n' +
+        '  publicaría cifras que no son las de producción.'
     )
     this.name = 'FaltaDatabaseUrlError'
   }
