@@ -738,7 +738,8 @@ async function main() {
       // ── Deduplicación inteligente ──
       const dedup = await deduplicar({
         tipoHecho: datos.tipoHecho || '',
-        codigoSnicEstimado: datos.codigoSnicEstimado ? String(datos.codigoSnicEstimado) : '',
+        // != null y no la verdad del valor: el código SNIC 0 es válido y falsy.
+        codigoSnicEstimado: datos.codigoSnicEstimado != null ? String(datos.codigoSnicEstimado) : '',
         ubicacion: datos.ubicacion,
         fecha: datos.fecha,
         titulo: noticia.titulo,
@@ -766,7 +767,12 @@ async function main() {
       }
 
       // Mapear tipo de delito — sin default, el LLM debe asignar código
-      const tipoDelito = datos.codigoSnicEstimado
+      // != null, NO la verdad del valor. El código SNIC 0 ("muerte violenta en
+      // investigación") es válido y es falsy en JS, así que con `? :` el lookup
+      // nunca corría: caía en el `if (!tipoDelito)` de abajo y descartaba la
+      // noticia. La línea 713 ya usaba `!== null` para validar el rango; acá
+      // había quedado la comparación laxa.
+      const tipoDelito = datos.codigoSnicEstimado != null
         ? tipoPorCodigo.get(String(datos.codigoSnicEstimado))
         : null
 

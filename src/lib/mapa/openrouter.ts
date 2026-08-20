@@ -181,7 +181,14 @@ nombres son los del catálogo oficial:
 - 2 = Homicidios dolosos en grado de tentativa (heridos graves por ataques letales).
 - 3 = Muertes en siniestros viales (SOLO tránsito: choques, atropellamientos).
 - 4 = Homicidios culposos por otros hechos (negligencia médica, accidentes laborales, imprudencia no vial).
-- 0 = Muerte violenta de causa dudosa / En investigación (cuerpos hallados sin causa clara aún).
+- 0 = Muerte violenta en investigación (cuerpos hallados sin causa clara aún, muerte de causa dudosa).
+
+CÓDIGO 0 — SIEMPRE CON requiereRevision:
+Si usás snic_codigo 0, poné también "requiereRevision": true. Un caso sin causa
+determinada tiene que pasar por una persona antes de contarse como homicidio: no
+se publica en el mapa hasta que alguien lo confirme. Preferí el 0 con revisión
+antes que adivinar entre el 1 y el 4 — una muerte de causa dudosa clasificada
+como homicidio doloso infla las cifras, y como culposa las oculta.
 
 FEMICIDIO — SE MARCA APARTE, NO ES UN CÓDIGO:
 Un femicidio o transfemicidio es un homicidio doloso, así que va con snic_codigo 1
