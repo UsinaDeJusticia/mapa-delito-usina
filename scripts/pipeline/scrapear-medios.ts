@@ -101,6 +101,25 @@ const MEDIOS: MedioConfig[] = [
   { id: 'infocielo',         nombre: 'InfoCielo',                    provincia: 'Buenos Aires',       urlBase: 'https://infocielo.com',                   urlPoliciales: 'https://infocielo.com/policiales/',                                 activo: true,  tienePaywall: false },
   { id: 'lacapital',         nombre: 'La Capital Mar del Plata',     provincia: 'Buenos Aires',       urlBase: 'https://www.lacapitalmdp.com',            urlPoliciales: 'https://www.lacapitalmdp.com/policiales/',                          activo: true,  tienePaywall: false },
 
+  // Ampliación de cobertura de Buenos Aires (ago. 2026). Investigados por
+  // agente con WebSearch, sin poder hacer fetch real a las páginas — el
+  // egress de este entorno bloquea todos los dominios externos, confirmado
+  // con curl directo (403) además del WebFetch. Por eso quedan `activo:
+  // false`: alguien del equipo tiene que abrir cada URL una vez (2 minutos
+  // por sitio alcanza) antes de sumarlos a la corrida diaria. Ver el mensaje
+  // de esta sesión para el detalle de qué se descartó y por qué (Diario Hoy
+  // La Plata: cerrado desde 2018; varios "candidatos" no correspondían a
+  // Buenos Aires o no existen con ese nombre).
+  { id: 'mdp0223',           nombre: '0223 (Mar del Plata)',         provincia: 'Buenos Aires',       urlBase: 'https://www.0223.com.ar',                 urlPoliciales: 'https://www.0223.com.ar/seguridad',                                 activo: false, tienePaywall: false }, // TODO verificar manualmente
+  { id: 'elmarplatense',     nombre: 'El Marplatense',               provincia: 'Buenos Aires',       urlBase: 'https://www.elmarplatense.com',           urlPoliciales: 'https://www.elmarplatense.com/seccion/policiales',                  activo: false, tienePaywall: false }, // TODO verificar manualmente
+  { id: 'lanueva',           nombre: 'La Nueva (Bahía Blanca)',      provincia: 'Buenos Aires',       urlBase: 'https://www.lanueva.com',                 urlPoliciales: 'https://www.lanueva.com/tag/policiales',                            activo: false, tienePaywall: false }, // TODO verificar manualmente
+  { id: 'ecosdiarios',       nombre: 'Ecos Diarios (Necochea)',      provincia: 'Buenos Aires',       urlBase: 'https://elecos.com.ar',                   urlPoliciales: 'https://elecos.com.ar/categoria/13',                                activo: false, tienePaywall: true  }, // sitio de suscripción digital detectado
+  { id: 'elpopularolav',     nombre: 'El Popular (Olavarría)',       provincia: 'Buenos Aires',       urlBase: 'https://www.elpopular.com.ar',            urlPoliciales: 'https://www.elpopular.com.ar/Policiales',                           activo: false, tienePaywall: false }, // TODO verificar manualmente
+  { id: '0221laplata',       nombre: '0221 (La Plata)',              provincia: 'Buenos Aires',       urlBase: 'https://www.0221.com.ar',                 urlPoliciales: 'https://www.0221.com.ar/policiales',                                activo: false, tienePaywall: false }, // TODO verificar manualmente — tiene página de suscripción, no confirmado si bloquea notas
+  { id: 'elcomercioonline',  nombre: 'El Comercio Online (Zona Norte)', provincia: 'Buenos Aires',    urlBase: 'https://www.elcomercioonline.com.ar',     urlPoliciales: 'https://www.elcomercioonline.com.ar/secciones/policiales/',         activo: false, tienePaywall: false }, // TODO verificar manualmente
+  { id: 'vivieloeste',       nombre: 'Viví el Oeste',                provincia: 'Buenos Aires',       urlBase: 'https://www.vivieloeste.com.ar',          urlPoliciales: 'https://www.vivieloeste.com.ar/policiales',                         activo: false, tienePaywall: false }, // TODO verificar manualmente
+  { id: 'minutouno',         nombre: 'Minuto Uno',                   provincia: 'Nacional',           urlBase: 'https://www.minutouno.com',               urlPoliciales: 'https://www.minutouno.com/policiales-a249',                         activo: false, tienePaywall: false }, // TODO verificar manualmente — nacional, fuerte cobertura de GBA
+
   // ── Córdoba ──
   { id: 'cadena3',           nombre: 'Cadena 3',                     provincia: 'Córdoba',            urlBase: 'https://www.cadena3.com',                 urlPoliciales: 'https://www.cadena3.com/categoria/policiales/',                     activo: true,  tienePaywall: false },
 
