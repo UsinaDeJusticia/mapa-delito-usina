@@ -49,10 +49,13 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
 
-      # La salida va al job summary, que es donde se lee cómodo. stderr lleva el
-      # progreso para poder seguir la corrida en vivo.
+      # `tee` y no `>>`: la tabla va al job summary —que es donde se lee cómodo—
+      # Y TAMBIÉN al log del step. Con solo la redirección, el reporte existía
+      # únicamente en el summary: no quedaba en los logs, que son los que se
+      # pueden grepear, descargar y consultar por API. stderr lleva el progreso
+      # para poder seguir la corrida en vivo.
       - name: Verificar medios
         run: |
           npx tsx scripts/pipeline/verificar-medios.ts \
             ${{ inputs.solo_activos && '--solo-activos' || '' }} \
-            >> "$GITHUB_STEP_SUMMARY"
+            | tee -a "$GITHUB_STEP_SUMMARY"
