@@ -1,12 +1,25 @@
 -- ============================================================
--- Exportar datos desde Neon como Parquet (via DuckDB CLI)
+-- Exportar datos desde Neon como Parquet
 --
 -- Requisitos:
 --   1. DuckDB CLI instalado (brew install duckdb / https://duckdb.org/docs/installation)
 --   2. Variable de entorno DATABASE_URL con la URL de Neon
 --
 -- Uso:
---   DATABASE_URL="postgres://..." duckdb < scripts/export/export_parquet.sql
+--   DATABASE_URL="postgres://..." npm run export:parquet
+--
+-- ⚠️ NO correr este archivo directo con `duckdb < …`: no incluye el ATTACH, así
+-- que fallaría con "Catalog neon does not exist". El preámbulo de conexión
+-- (INSTALL / LOAD / ATTACH) lo agrega scripts/export/export-parquet.ts y se lo
+-- pasa a DuckDB por stdin.
+--
+-- Antes este archivo abría con `ATTACH getenv('DATABASE_URL') AS neon (...)`.
+-- Eso NO funciona: el parser de ATTACH exige un literal de string y rechaza
+-- cualquier llamada a función. Verificado en DuckDB 1.5.3 — falla igual con
+-- getenv() y con getvariable(). No lo "arregles" volviendo a poner el ATTACH
+-- acá: la razón por la que vive en el wrapper es que lleva la credencial, y así
+-- no queda ni en disco ni en la lista de procesos. Ver el comentario de cabecera
+-- de export-parquet.ts.
 --
 -- Archivos generados en public/data/:
 --   snic_provincia.parquet          (~pocos KB)
@@ -15,12 +28,6 @@
 --   anios_disponibles.parquet       (~1 KB)
 --   hechos_sat.parquet              (~1-5 MB)
 -- ============================================================
-
-INSTALL postgres;
-LOAD postgres;
-
--- Conectar a Neon como lector
-ATTACH getenv('DATABASE_URL') AS neon (TYPE postgres, READ_ONLY);
 
 -- ─── Vista 1: SNIC por provincia ────────────────────────
 COPY (
