@@ -179,4 +179,71 @@ export const MEDIOS: MedioConfig[] = [
 
   // ── Salta adicional ──
   { id: 'informatesalta',       nombre: 'InformateSalta',                provincia: 'Salta',              urlBase: 'https://www.informatesalta.com.ar',       urlPoliciales: 'https://www.informatesalta.com.ar/policiales/',                      activo: true,  tienePaywall: false },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // TANDA PENDIENTE DE VERIFICACIÓN — agregada el 20/8
+  //
+  // Todos en activo:false. El ciclo es: se agregan acá desactivados, corre
+  // verificar-medios.yml en Actions, y se activan solo los que responden bien.
+  // No se verificaron con fetch real al investigarlos (este entorno no tiene
+  // salida a internet), y ya se vio que eso importa: de la tanda anterior,
+  // elpopularolav tenía el dominio muerto y se iba a activar a ciegas.
+  //
+  // Los huecos que cubre: Formosa quedó en CERO al caer lamanana, CABA no tenía
+  // ningún medio propio, y Chubut y La Rioja perdieron uno cada una.
+  // ══════════════════════════════════════════════════════════════════════════
+  // ── Formosa (reemplazo de lamanana, que quedó con el dominio muerto) ──
+  { id: 'diariopinion', nombre: 'Diario Opinión', provincia: 'Formosa', urlBase: 'https://www.diariopinion.com.ar', urlPoliciales: 'https://www.diariopinion.com.ar/seccion/policiales/', activo: false, tienePaywall: false },
+  { id: 'prensalibreformosa', nombre: 'Prensa Libre Formosa', provincia: 'Formosa', urlBase: 'https://www.prensalibreformosa.com', urlPoliciales: 'https://www.prensalibreformosa.com/notas/policiales/', activo: false, tienePaywall: false },
+  { id: 'diarioformosa', nombre: 'Diario Formosa', provincia: 'Formosa', urlBase: 'https://www.diarioformosa.net', urlPoliciales: 'https://www.diarioformosa.net/category/policiales', activo: false, tienePaywall: false },
+  { id: 'agenfor', nombre: 'Agenfor (Formosa)', provincia: 'Formosa', urlBase: 'https://agenfor.com.ar', urlPoliciales: 'https://agenfor.com.ar/category/policiales/', activo: false, tienePaywall: false },
+  // ── CABA / Nacional (CABA no tenía ningún medio propio) ──
+  { id: 'noticiasurbanas', nombre: 'Noticias Urbanas', provincia: 'CABA', urlBase: 'https://www.noticiasurbanas.com.ar', urlPoliciales: 'https://www.noticiasurbanas.com.ar/policiales/', activo: false, tienePaywall: false },
+  { id: 'tn', nombre: 'TN', provincia: 'Nacional', urlBase: 'https://tn.com.ar', urlPoliciales: 'https://tn.com.ar/policiales/', activo: false, tienePaywall: false },
+  { id: 'c5n', nombre: 'C5N', provincia: 'Nacional', urlBase: 'https://www.c5n.com', urlPoliciales: 'https://www.c5n.com/policiales', activo: false, tienePaywall: false },
+  { id: 'perfil', nombre: 'Perfil', provincia: 'Nacional', urlBase: 'https://www.perfil.com', urlPoliciales: 'https://www.perfil.com/seccion/policia', activo: false, tienePaywall: false },
+  // ── Chubut (se cayó jornada.com.ar; diariojornada.com.ar puede ser el mismo medio mudado) ──
+  { id: 'diariojornada', nombre: 'Diario Jornada', provincia: 'Chubut', urlBase: 'https://www.diariojornada.com.ar', urlPoliciales: 'https://www.diariojornada.com.ar/policiales', activo: false, tienePaywall: false },
+  { id: 'elchubut', nombre: 'El Chubut', provincia: 'Chubut', urlBase: 'https://www.elchubut.com.ar', urlPoliciales: 'https://www.elchubut.com.ar/seccion/policiales', activo: false, tienePaywall: false },
+  { id: 'canal12web', nombre: 'Canal 12 Web (Puerto Madryn)', provincia: 'Chubut', urlBase: 'https://canal12web.com', urlPoliciales: 'https://canal12web.com/policiales/', activo: false, tienePaywall: false },
+  { id: 'politicachubut', nombre: 'Política Chubut', provincia: 'Chubut', urlBase: 'https://politicachubut.com.ar', urlPoliciales: 'https://politicachubut.com.ar/noticias/161/policiales', activo: false, tienePaywall: false },
+  // ── La Rioja (se cayó cadenaargentina por TLS) ──
+  { id: 'fenix951', nombre: 'Fénix (La Rioja)', provincia: 'La Rioja', urlBase: 'https://www.fenix951.com.ar', urlPoliciales: 'https://www.fenix951.com.ar/policiales/', activo: false, tienePaywall: false },
+  { id: 'rioja24', nombre: 'Rioja24', provincia: 'La Rioja', urlBase: 'https://www.rioja24.com.ar', urlPoliciales: 'https://www.rioja24.com.ar/policiales/', activo: false, tienePaywall: false },
+  { id: 'eldiariodelarioja', nombre: 'El Diario de La Rioja', provincia: 'La Rioja', urlBase: 'https://www.eldiariodelarioja.com.ar', urlPoliciales: 'https://www.eldiariodelarioja.com.ar/policiales/', activo: false, tienePaywall: false },
+  // ── Neuquén ──
+  { id: 'noticiasnqn', nombre: 'NoticiasNQN', provincia: 'Neuquén', urlBase: 'https://www.noticiasnqn.com.ar', urlPoliciales: 'https://www.noticiasnqn.com.ar/policiales', activo: false, tienePaywall: false },
+  { id: 'neuquenalinstante', nombre: 'Neuquén Al Instante', provincia: 'Neuquén', urlBase: 'https://www.neuquenalinstante.com.ar', urlPoliciales: 'https://www.neuquenalinstante.com.ar/policiales/', activo: false, tienePaywall: false },
+  { id: 'nqn3', nombre: 'NQN3', provincia: 'Neuquén', urlBase: 'https://nqn3.com', urlPoliciales: 'https://nqn3.com/policiales', activo: false, tienePaywall: false },
+  // ── San Luis ──
+  { id: 'elchorrillero', nombre: 'El Chorrillero', provincia: 'San Luis', urlBase: 'https://elchorrillero.com', urlPoliciales: 'https://elchorrillero.com/policiales/', activo: false, tienePaywall: false },
+  { id: 'eldiariodesanluis', nombre: 'El Diario de San Luis', provincia: 'San Luis', urlBase: 'https://www.eldiariodesanluis.com', urlPoliciales: 'https://www.eldiariodesanluis.com/policiales', activo: false, tienePaywall: false },
+  // ── Santa Cruz ──
+  { id: 'laopinionaustral', nombre: 'La Opinión Austral', provincia: 'Santa Cruz', urlBase: 'https://laopinionaustral.com.ar', urlPoliciales: 'https://laopinionaustral.com.ar/policiales/', activo: false, tienePaywall: false },
+  { id: 'nuevodia', nombre: 'Diario Nuevo Día', provincia: 'Santa Cruz', urlBase: 'https://www.eldiarionuevodia.com.ar', urlPoliciales: 'https://www.eldiarionuevodia.com.ar/policiales/', activo: false, tienePaywall: false },
+  { id: 'santacruzenelmundo', nombre: 'Santa Cruz en el Mundo', provincia: 'Santa Cruz', urlBase: 'https://www.santacruzenelmundo.com', urlPoliciales: 'https://www.santacruzenelmundo.com/policial', activo: false, tienePaywall: false },
+  // ── Buenos Aires — zonas que no estaban cubiertas ──
+  { id: 'eldiariosur', nombre: 'El Diario Sur (Conurbano)', provincia: 'Buenos Aires', urlBase: 'https://www.eldiariosur.com', urlPoliciales: 'https://www.eldiariosur.com/policiales', activo: false, tienePaywall: false },
+  { id: 'diario5dias', nombre: 'Diario 5 Días (Quilmes/Berazategui)', provincia: 'Buenos Aires', urlBase: 'https://www.diario5dias.com.ar', urlPoliciales: 'https://www.diario5dias.com.ar/noticias/policiales', activo: false, tienePaywall: false },
+  { id: 'elmegafonoquilmes', nombre: 'El Megáfono de Quilmes', provincia: 'Buenos Aires', urlBase: 'https://elmegafonodequilmes.com.ar', urlPoliciales: 'https://elmegafonodequilmes.com.ar/categorias/policiales/', activo: false, tienePaywall: false },
+  { id: 'smnoticias', nombre: 'SM Noticias (San Martín)', provincia: 'Buenos Aires', urlBase: 'https://www.smnoticias.com', urlPoliciales: 'https://www.smnoticias.com/policiales', activo: false, tienePaywall: false },
+  { id: 'sanmartinadiario', nombre: 'San Martín a Diario', provincia: 'Buenos Aires', urlBase: 'https://sanmartinadiario.com.ar', urlPoliciales: 'https://sanmartinadiario.com.ar/policiales/', activo: false, tienePaywall: false },
+  { id: 'zonanortediario', nombre: 'Zona Norte Diario', provincia: 'Buenos Aires', urlBase: 'https://www.zonanortediario.com.ar', urlPoliciales: 'https://www.zonanortediario.com.ar/policiales/', activo: false, tienePaywall: false },
+  { id: 'lanoticiaweb', nombre: 'La Noticia Web (Zona Norte)', provincia: 'Buenos Aires', urlBase: 'https://www.lanoticiaweb.com.ar', urlPoliciales: 'https://www.lanoticiaweb.com.ar/policiales/', activo: false, tienePaywall: false },
+  { id: 'pilaradiario', nombre: 'Pilar a Diario', provincia: 'Buenos Aires', urlBase: 'https://www.pilaradiario.com', urlPoliciales: 'https://www.pilaradiario.com/contenidos/policiales.html', activo: false, tienePaywall: false },
+  { id: 'el1digital', nombre: 'El1 Digital (La Matanza)', provincia: 'Buenos Aires', urlBase: 'https://www.el1digital.com.ar', urlPoliciales: 'https://www.el1digital.com.ar/policiales/', activo: false, tienePaywall: false },
+  { id: 'labrujula24', nombre: 'La Brújula 24 (Bahía Blanca)', provincia: 'Buenos Aires', urlBase: 'https://www.labrujula24.com', urlPoliciales: 'https://www.labrujula24.com/notas/tag/policiales/', activo: false, tienePaywall: false },
+  { id: 'frenteacano', nombre: 'Frente a Cano (Bahía Blanca)', provincia: 'Buenos Aires', urlBase: 'https://frenteacano.com.ar', urlPoliciales: 'https://frenteacano.com.ar/category/policiales/', activo: false, tienePaywall: false },
+  { id: 'eleco', nombre: 'El Eco de Tandil', provincia: 'Buenos Aires', urlBase: 'https://www.eleco.com.ar', urlPoliciales: 'https://www.eleco.com.ar/policiales/', activo: false, tienePaywall: false },
+  { id: 'lavozdetandil', nombre: 'La Voz de Tandil', provincia: 'Buenos Aires', urlBase: 'https://www.lavozdetandil.com.ar', urlPoliciales: 'https://www.lavozdetandil.com.ar/policiales.html', activo: false, tienePaywall: false },
+  { id: 'eldiariodetandil', nombre: 'El Diario de Tandil', provincia: 'Buenos Aires', urlBase: 'https://www.eldiariodetandil.com', urlPoliciales: 'https://www.eldiariodetandil.com/policiales.html', activo: false, tienePaywall: false },
+  { id: 'diariodemocracia', nombre: 'Diario Democracia (Junín)', provincia: 'Buenos Aires', urlBase: 'https://www.diariodemocracia.com', urlPoliciales: 'https://www.diariodemocracia.com/policiales/', activo: false, tienePaywall: false },
+  { id: 'junindigital', nombre: 'Junín Digital', provincia: 'Buenos Aires', urlBase: 'https://www.junindigital.com', urlPoliciales: 'https://www.junindigital.com/policiales/', activo: false, tienePaywall: false },
+  { id: 'diarionucleo', nombre: 'Diario Núcleo (Pergamino)', provincia: 'Buenos Aires', urlBase: 'https://diarionucleo.com', urlPoliciales: 'https://diarionucleo.com/policiales/', activo: false, tienePaywall: false },
+  { id: 'primeraplana', nombre: 'Primera Plana (Pergamino)', provincia: 'Buenos Aires', urlBase: 'https://primeraplana.com.ar', urlPoliciales: 'https://primeraplana.com.ar/policiales', activo: false, tienePaywall: false },
+  { id: 'pergaminoverdad', nombre: 'Pergamino Verdad', provincia: 'Buenos Aires', urlBase: 'https://www.pergaminoverdad.com.ar', urlPoliciales: 'https://www.pergaminoverdad.com.ar/archivos/category/policiales', activo: false, tienePaywall: false },
+  { id: 'labuenainfo', nombre: 'La Buena Info (La Plata)', provincia: 'Buenos Aires', urlBase: 'https://www.labuenainfo.com', urlPoliciales: 'https://www.labuenainfo.com/seccion/policiales', activo: false, tienePaywall: false },
+  { id: 'eleditorplatense', nombre: 'El Editor Platense', provincia: 'Buenos Aires', urlBase: 'https://eleditorplatense.com', urlPoliciales: 'https://eleditorplatense.com/policiales', activo: false, tienePaywall: false },
+  { id: 'infoberisso', nombre: 'InfoBerisso', provincia: 'Buenos Aires', urlBase: 'https://infoberisso.com.ar', urlPoliciales: 'https://infoberisso.com.ar/category/policiales/', activo: false, tienePaywall: false },
+  { id: 'eltiempoazul', nombre: 'El Tiempo (Azul)', provincia: 'Buenos Aires', urlBase: 'https://www.diarioeltiempo.com.ar', urlPoliciales: 'https://www.diarioeltiempo.com.ar/policiales.html', activo: false, tienePaywall: false },
 ]
