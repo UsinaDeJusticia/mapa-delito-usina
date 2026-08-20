@@ -1,0 +1,58 @@
+name: Verificar medios
+
+# Health-check de los ~74 medios que scrapea el pipeline.
+#
+# POR QUÉ EN ACTIONS Y NO A MANO
+# El contenedor de desarrollo no tiene salida a internet, así que no hay forma
+# de verificar los medios desde ahí. Actions sí la tiene.
+#
+# PARA QUÉ SIRVE
+# 1. Encontrar los medios muertos que gastan tiempo de la corrida diaria: el log
+#    del 19/8 ya delataba dominios que no resuelven (jornada, lamanana), un
+#    certificado inválido (cadenaargentina) y varios timeouts.
+# 2. Decidir con datos si activar los 9 medios de Buenos Aires que están en
+#    `activo: false` esperando exactamente esta verificación.
+#
+# No modifica nada: solo reporta. Qué activar o desactivar lo decide una persona
+# leyendo la tabla — activar un medio con paywall duro o desactivar uno que solo
+# tuvo un mal día son decisiones que este script no puede tomar solo.
+
+on:
+  workflow_dispatch:
+    inputs:
+      solo_activos:
+        description: 'Verificar solo los medios activos (más rápido)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verificar-medios
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      # La salida va al job summary, que es donde se lee cómodo. stderr lleva el
+      # progreso para poder seguir la corrida en vivo.
+      - name: Verificar medios
+        run: |
+          npx tsx scripts/pipeline/verificar-medios.ts \
+            ${{ inputs.solo_activos && '--solo-activos' || '' }} \
+            >> "$GITHUB_STEP_SUMMARY"
