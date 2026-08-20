@@ -55,19 +55,31 @@ describe('efectoDeClasificacion', () => {
     assert.deepEqual(efectoDeClasificacion('no_es_homicidio'), { snicCodigo: null, esFemicidio: false })
   })
 
-  test('un valor desconocido cae al mismo fallback que "no es homicidio"', () => {
-    // Cubre 'violencia_policial' (válido en el CHECK de revisiones_pipeline
-    // pero sin botón ni entrada todavía — gap real y separado, documentado en
-    // el módulo) y cualquier valor futuro no contemplado. Falla cerrado: un
-    // valor que no se reconoce nunca marca femicidio ni asigna un código.
-    assert.deepEqual(efectoDeClasificacion('violencia_policial'), { snicCodigo: null, esFemicidio: false })
-    assert.deepEqual(efectoDeClasificacion(''), { snicCodigo: null, esFemicidio: false })
+  test('violencia_policial → código 1, no femicidio', () => {
+    // Antes caía al FALLBACK y se trataba como "no es homicidio": el caso se
+    // degradaba a PRELIMINAR y se le limpiaba la marca de femicidio. Una muerte
+    // por violencia institucional es un homicidio.
+    assert.deepEqual(
+      efectoDeClasificacion('violencia_policial'),
+      { snicCodigo: 1, esFemicidio: false }
+    )
+  })
+
+  test('un valor desconocido cae al fallback y falla cerrado', () => {
+    // Un valor no contemplado nunca marca femicidio ni asigna código.
+    for (const raro of ['', 'algo_inventado', 'HOMICIDIO_DOLOSO']) {
+      assert.deepEqual(
+        efectoDeClasificacion(raro),
+        { snicCodigo: null, esFemicidio: false },
+        raro
+      )
+    }
   })
 
   test('nunca devuelve esFemicidio=true sin snicCodigo (femicidio implica homicidio)', () => {
     const clasificaciones = [
       'homicidio_doloso', 'homicidio_en_ocasion_de_robo', 'femicidio',
-      'homicidio_vinculado_al_narcotrafico', 'no_es_homicidio', 'violencia_policial', 'algo_inventado',
+      'homicidio_vinculado_al_narcotrafico', 'violencia_policial', 'no_es_homicidio', 'algo_inventado',
     ]
     for (const c of clasificaciones) {
       const efecto = efectoDeClasificacion(c)
@@ -77,9 +89,10 @@ describe('efectoDeClasificacion', () => {
 })
 
 describe('esHomicidioSegunClasificacion', () => {
-  test('true para las cuatro clasificaciones de homicidio', () => {
+  test('true para las cinco clasificaciones de homicidio', () => {
     for (const c of [
-      'homicidio_doloso', 'homicidio_en_ocasion_de_robo', 'femicidio', 'homicidio_vinculado_al_narcotrafico',
+      'homicidio_doloso', 'homicidio_en_ocasion_de_robo', 'femicidio',
+      'homicidio_vinculado_al_narcotrafico', 'violencia_policial',
     ]) {
       assert.equal(esHomicidioSegunClasificacion(c), true, c)
     }
@@ -87,7 +100,7 @@ describe('esHomicidioSegunClasificacion', () => {
 
   test('false para no_es_homicidio y para valores desconocidos', () => {
     assert.equal(esHomicidioSegunClasificacion('no_es_homicidio'), false)
-    assert.equal(esHomicidioSegunClasificacion('violencia_policial'), false)
+    assert.equal(esHomicidioSegunClasificacion('algo_inventado'), false)
   })
 })
 

@@ -20,6 +20,7 @@ export type ClasificacionHumana =
   | 'homicidio_en_ocasion_de_robo'
   | 'femicidio'
   | 'homicidio_vinculado_al_narcotrafico'
+  | 'violencia_policial'
   | 'no_es_homicidio'
 
 export interface EfectoClasificacion {
@@ -30,19 +31,26 @@ export interface EfectoClasificacion {
 }
 
 /**
- * NOTA — 'violencia_policial' existe como valor válido en el CHECK constraint
- * de revisiones_pipeline (ver scripts/sql/create-revisiones-pipeline.sql) pero
- * no tiene botón en /admin/revisiones ni entrada acá: es un gap real y
- * separado, no alcanzado por este cambio. Si llegara ese valor (solo posible
- * escribiendo directo en la base), cae en el fallback de abajo y se trata
- * como "no es homicidio" — mismo comportamiento que tenía route.ts antes de
- * este archivo, así que no se está cambiando nada para ese caso.
+ * 'violencia_policial' va con código 1 (homicidio doloso). Una muerte por
+ * violencia institucional es un homicidio, y el prompt del scraper ya la lista
+ * como criterio de inclusión ("gatillo fácil").
+ *
+ * No hace falta una columna nueva en hechos_delictivos para no perder el matiz
+ * de que fue institucional: `revisiones_pipeline.clasificacion_humana` guarda
+ * el valor exacto para siempre y es consultable. Agregar una columna sería
+ * duplicar un dato que ya existe.
+ *
+ * Antes esta clasificación no estaba acá y caía en el FALLBACK, o sea que se
+ * trataba como "no es homicidio": el caso se degradaba a PRELIMINAR y se le
+ * limpiaba la marca de femicidio. El valor ya era válido en el CHECK de
+ * revisiones_pipeline, así que se podía guardar y quedaba mal interpretado.
  */
 const EFECTOS: Record<string, EfectoClasificacion> = {
   homicidio_doloso:                     { snicCodigo: 1, esFemicidio: false },
   homicidio_en_ocasion_de_robo:         { snicCodigo: 1, esFemicidio: false },
   femicidio:                            { snicCodigo: 1, esFemicidio: true },
   homicidio_vinculado_al_narcotrafico:  { snicCodigo: 1, esFemicidio: false },
+  violencia_policial:                   { snicCodigo: 1, esFemicidio: false },
   no_es_homicidio:                      { snicCodigo: null, esFemicidio: false },
 }
 

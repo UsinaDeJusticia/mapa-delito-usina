@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 import AdminNav from '@/components/admin/AdminNav'
+import { esHomicidioSegunClasificacion } from '@/lib/mapa/clasificacion-humana'
 // useSession requires SessionProvider — provided by src/app/admin/layout.tsx
 
 interface Cobertura {
@@ -47,6 +48,7 @@ const CLASIFICACIONES = [
   { valor: 'homicidio_en_ocasion_de_robo',      etiqueta: 'Homicidio en ocasión de robo',   emoji: '🔪' },
   { valor: 'femicidio',                         etiqueta: 'Femicidio',                      emoji: '👩' },
   { valor: 'homicidio_vinculado_al_narcotrafico', etiqueta: 'Vinculado al narcotráfico',    emoji: '💊' },
+  { valor: 'violencia_policial',                etiqueta: 'Violencia policial',             emoji: '🚨' },
   { valor: 'no_es_homicidio',                   etiqueta: 'No es homicidio',                emoji: '❌' },
 ]
 
@@ -55,6 +57,7 @@ const ETIQUETA_CLASIFICACION: Record<string, string> = {
   homicidio_en_ocasion_de_robo: 'Homicidio en ocasión de robo',
   femicidio: 'Femicidio',
   homicidio_vinculado_al_narcotrafico: 'Vinculado al narcotráfico',
+  violencia_policial: 'Violencia policial',
   no_es_homicidio: 'No es homicidio',
 }
 
@@ -81,7 +84,11 @@ function CardRevisado({
   hecho: HechoRevisado
   onCorregir: (hecho: HechoRevisado) => void
 }) {
-  const esHomicidio = hecho.clasificacion_humana !== 'no_es_homicidio'
+  // esHomicidioSegunClasificacion y no `!== 'no_es_homicidio'`: esa heurística
+  // negativa daba "es homicidio" para cualquier valor nuevo, incluso cuando el
+  // backend lo interpretaba al revés. Con violencia_policial daba el mismo
+  // resultado por casualidad; con la próxima clasificación no necesariamente.
+  const esHomicidio = esHomicidioSegunClasificacion(hecho.clasificacion_humana)
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-3 sm:p-4 flex items-start gap-3">
       <div className="flex-1 min-w-0">
@@ -422,7 +429,7 @@ export default function RevisionesPage() {
         titulo: hechoOriginal?.titulo ?? null,
         medio: hechoOriginal?.medio ?? null,
         provincia: hechoOriginal?.provincia ?? null,
-        confianza_hecho: clasificacion !== 'no_es_homicidio' ? 'VERIFICADO' : 'PRELIMINAR',
+        confianza_hecho: esHomicidioSegunClasificacion(clasificacion) ? 'VERIFICADO' : 'PRELIMINAR',
         coberturas: hechoOriginal?.coberturas ?? [],
         clasificacion_humana: clasificacion,
         revisado_por: revisadoPor,
