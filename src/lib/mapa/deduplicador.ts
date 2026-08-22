@@ -19,7 +19,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/mapa/queries'
 import { crearClienteLLM } from '@/lib/mapa/cliente-llm'
 import { parsearJsonLLM, validarDeduplicacion } from '@/lib/pipeline/schemas-llm'
-import { obtenerContenidoLLM } from '@/lib/pipeline/llamada-llm'
+import { obtenerContenidoLLM, formatearUso } from '@/lib/pipeline/llamada-llm'
 
 // ════════════════════════════════════════════
 // TIPOS
@@ -270,11 +270,19 @@ o
     const resultado = await obtenerContenidoLLM({
       etiqueta: 'deduplicación',
       aceptar: contenido => parsearJsonLLM(contenido).ok,
+      registrarUso: d => {
+        const linea = formatearUso(d, 'deduplicación')
+        if (linea) console.log(linea)
+      },
       ejecutar: () => cliente.chat.completions.create({
         model: config.modelo,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.1,
-        max_tokens: 300,
+        // 600 y no 300: la salida es JSON con un campo `razon` en prosa, y 300
+        // dejaba el corte al alcance de una explicación un poco larga. Un corte
+        // acá no es cosmético — el fallback asume "es un hecho nuevo", así que
+        // duplica el caso en el mapa.
+        max_tokens: 600,
       }),
     })
 

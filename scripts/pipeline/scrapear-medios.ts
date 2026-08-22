@@ -29,7 +29,7 @@ import {
 } from '../../src/lib/pipeline/browser-cmd'
 import { esDestinoPermitido } from '../../src/lib/pipeline/url-segura'
 import { MEDIOS, type MedioConfig } from './medios-config'
-import { obtenerContenidoLLM } from '../../src/lib/pipeline/llamada-llm'
+import { obtenerContenidoLLM, formatearUso } from '../../src/lib/pipeline/llamada-llm'
 import {
   parsearJsonLLM,
   validarLinksIdentificados,
@@ -114,6 +114,10 @@ async function identificarNoticiasConIA(
   try {
     const resultado = await obtenerContenidoLLM({
       etiqueta: `identificación en ${medio}`,
+      registrarUso: d => {
+        const linea = formatearUso(d, `identificación en ${medio}`)
+        if (linea) log('📊', linea)
+      },
       // Tiene que ser un array JSON. Si vino cortado, reintentar.
       aceptar: contenido => {
         const p = parsearJsonLLM(contenido)
@@ -154,13 +158,30 @@ Si no encontrás noticias que cumplan los criterios, devolvé exactamente un arr
 
 Formato requerido:
 [
-  {"ref": "ID_O_URL_DEL_LINK", "titulo": "Texto del link o titular exacto"}
+  {"ref": "e42", "titulo": "Texto del link o titular exacto"}
 ]
+
+SOBRE EL CAMPO "ref" (crítico):
+- Es el identificador que el snapshot muestra junto a cada enlace, con la forma "e" seguida de números: e7, e42, e310.
+- Copialo TEXTUAL del snapshot. No lo inventes, no lo renumeres, no lo completes.
+- NUNCA pongas una URL, una ruta, un titular ni ningún otro texto en "ref".
+- Si un enlace te interesa pero no ves su ref en el snapshot, omitilo: una entrada con un ref que no aparezca textual en el snapshot se descarta y la noticia se pierde.
+
 Máximo 10 resultados, ordenados de más a menos relevante.`
         },
         {
           role: 'user',
-          content: `Snapshot del sitio ${medio}:\n\n${snapshot.slice(0, 3000)}`
+          // 30000 y no 3000. Los refs SOLO existen dentro del snapshot, así
+          // que el modelo no puede nombrar ningún enlace que caiga después del
+          // corte: con 3000 chars de una portada de diario se veía el logo, el
+          // menú y las primeras notas, y el techo de 10 resultados nunca se
+          // alcanzaba porque el material para alcanzarlo no llegaba. Además, un
+          // snapshot cortado a la mitad de un ref es justo la situación en la
+          // que el modelo improvisa un ref inválido y se descarta la entrada.
+          // Costo: ~6750 tokens de entrada extra por medio, del orden de USD
+          // 0,06 al mes al perfil económico. No bajarlo sin medir los
+          // prompt_tokens reales que ahora quedan en los logs.
+          content: `Snapshot del sitio ${medio}:\n\n${snapshot.slice(0, 30000)}`
         }
       ],
       temperature: 0.1,
@@ -188,7 +209,15 @@ Máximo 10 resultados, ordenados de más a menos relevante.`
     // array crudo. Antes un ref con metacaracteres pasaba directo al comando.
     const { links, descartados } = validarLinksIdentificados(parseado.valor)
     if (descartados.length > 0) {
-      log('⚠️', `Identificación en ${medio}: ${descartados.length} entrada(s) descartada(s)`)
+      // Se distingue "descarté algunas" de "descarté TODAS": lo segundo es un
+      // medio entero perdido, y en el resumen de la corrida quedaba
+      // indistinguible de "no había homicidios". Fue exactamente el caso de El
+      // Independiente La Rioja: 10 identificadas, 10 descartadas, cero rastro.
+      if (links.length === 0) {
+        log('🚨', `Identificación en ${medio}: SE DESCARTARON LAS ${descartados.length} ENTRADAS — el medio se pierde completo, NO es lo mismo que "no hay noticias"`)
+      } else {
+        log('⚠️', `Identificación en ${medio}: ${descartados.length} entrada(s) descartada(s) de ${descartados.length + links.length}`)
+      }
       for (const d of descartados.slice(0, 5)) log('  ', d)
     }
     return links
@@ -353,7 +382,7 @@ async function scrapearMedio(medio: MedioConfig, yaPrewarmed: boolean): Promise<
         if (!texto || texto.length < 100) {
           const snapMain = ab(comandos.snapshotSelector('main'), 5000)
           if (snapMain && snapMain.length > 100) {
-            texto = snapMain.slice(0, 5000)
+            texto = snapMain.slice(0, 8000)
           }
         }
 
@@ -366,7 +395,10 @@ async function scrapearMedio(medio: MedioConfig, yaPrewarmed: boolean): Promise<
         if (titulo && texto && texto.length > 80) {
           noticias.push({
             titulo: titulo.trim(),
-            texto: texto.trim().slice(0, 5000),
+            // 8000 para dejar margen sobre los 6000 que openrouter.ts manda
+            // al modelo. Antes eran 5000 acá y 3000 allá: se guardaban 2000
+            // chars que nunca llegaban a leerse.
+            texto: texto.trim().slice(0, 8000),
             url: urlArticulo || '',
             medio: medio.nombre,
             medioTipo: medio.tipo ?? (medio.provincia && medio.provincia !== 'Nacional' ? 'provincial' : 'nacional'),

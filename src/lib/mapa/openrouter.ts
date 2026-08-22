@@ -15,7 +15,7 @@ import {
 } from '@/lib/pipeline/schemas-llm'
 import { prisma } from '@/lib/mapa/queries'
 import { efectoDeClasificacion } from '@/lib/mapa/clasificacion-humana'
-import { obtenerContenidoLLM } from '@/lib/pipeline/llamada-llm'
+import { obtenerContenidoLLM, formatearUso } from '@/lib/pipeline/llamada-llm'
 
 // Caché de ejemplos few-shot: se invalida cada 5 minutos
 let fewShotCache: { ejemplos: Array<{ resumen: string; clasificacion: string }>; ts: number } | null = null
@@ -110,6 +110,29 @@ async function getFewShotEjemplos() {
  * mostrar la forma del caso, no para reproducir la nota completa.
  */
 export const MAX_CHARS_EJEMPLO = 500
+
+/**
+ * Cuánto del cuerpo de la nota se le manda al modelo.
+ *
+ * POR QUÉ 6000 Y NO 3000
+ * 3000 venía del commit original del pipeline, sin decisión documentada: un
+ * default conservador que nunca se revisó. No es un límite del proveedor —los
+ * `max_tokens` son techos de ESCRITURA— sino nuestro, y era el más caro de los
+ * tres recortes en términos de calidad: una nota policial argentina abre con lo
+ * genérico y deja para el final lo que define el caso (que el agresor era la
+ * pareja, que había denuncia previa, que intervino un policía). El marcador de
+ * femicidio, la clasificación más importante del proyecto, es justo el que caía
+ * en los párrafos cortados.
+ *
+ * 6000 es lo que el scraper ya guarda: hasta ahora se almacenaban 5000 chars y
+ * se enviaban 3000, o sea que se tiraban 2000 que ya estaban en la base.
+ *
+ * Antes de subirlo más, leer los `prompt_tokens` que ahora quedan en los logs
+ * (ver `registrarUso`). Más contexto no es monótonamente mejor: una nota larga
+ * con mucho ruido puede empeorar el seguimiento del formato, que es el problema
+ * que se viene peleando.
+ */
+export const MAX_CHARS_NOTICIA = 6000
 
 export function construirEjemplosFewShot(
   ejemplos: Array<{ resumen: string; clasificacion: string }>
@@ -329,6 +352,10 @@ export async function extraerDatosNoticia(
     // límite—, pero era un segundo problema real esperando su turno.
     const resultado = await obtenerContenidoLLM({
       etiqueta: urlFuente,
+      registrarUso: d => {
+        const linea = formatearUso(d, urlFuente)
+        if (linea) console.log(linea)
+      },
       // Un JSON cortado es justo el caso que un segundo intento suele resolver.
       aceptar: contenido => parsearJsonLLM(contenido).ok,
       ejecutar: () =>
@@ -339,7 +366,7 @@ export async function extraerDatosNoticia(
             ...fewShotMessages,
             {
               role: 'user',
-              content: `Fecha actual de procesamiento: ${new Date().toISOString().slice(0, 10)}\nURL fuente: ${urlFuente}\n\nExtraé los datos del siguiente texto de noticia policial argentina siguiendo el formato JSON requerido:\n---\n${textoNoticia.slice(0, 3000)}\n---`,
+              content: `Fecha actual de procesamiento: ${new Date().toISOString().slice(0, 10)}\nURL fuente: ${urlFuente}\n\nExtraé los datos del siguiente texto de noticia policial argentina siguiendo el formato JSON requerido:\n---\n${textoNoticia.slice(0, MAX_CHARS_NOTICIA)}\n---`,
             },
           ],
           temperature: 0.1,
