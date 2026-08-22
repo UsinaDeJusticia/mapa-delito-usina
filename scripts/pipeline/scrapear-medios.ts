@@ -46,6 +46,15 @@ const MAX_NOTICIAS = parseInt(process.env.PIPELINE_MAX_NOTICIAS || '20')
 const MEDIO_ESPECIFICO = process.argv.find(a => a.startsWith('--medio='))?.split('=')[1]
 const CONFIANZA_MINIMA = 75
 
+/**
+ * Override para medir con datos cuánto snapshot conviene mandar. Default 30000
+ * (ver el comentario donde se usa, en identificarNoticiasConIA). No pensado
+ * para producción: existe para poder correr `--medio=X` con distintos tamaños
+ * desde workflow_dispatch y comparar latencia/completion_tokens sin editar el
+ * código entre corridas.
+ */
+const SNAPSHOT_MAX_CHARS = Number(process.env.PIPELINE_SNAPSHOT_MAX_CHARS) || 30000
+
 // ════════════════════════════════════════════
 // TIPOS
 // ════════════════════════════════════════════
@@ -181,7 +190,7 @@ Máximo 10 resultados, ordenados de más a menos relevante.`
           // Costo: ~6750 tokens de entrada extra por medio, del orden de USD
           // 0,06 al mes al perfil económico. No bajarlo sin medir los
           // prompt_tokens reales que ahora quedan en los logs.
-          content: `Snapshot del sitio ${medio}:\n\n${snapshot.slice(0, 30000)}`
+          content: `Snapshot del sitio ${medio}:\n\n${snapshot.slice(0, SNAPSHOT_MAX_CHARS)}`
         }
       ],
       temperature: 0.1,

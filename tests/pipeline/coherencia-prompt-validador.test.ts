@@ -111,11 +111,22 @@ describe('el validador sigue siendo estrecho: es una defensa, no un detalle', ()
 describe('los recortes de entrada tienen el motivo escrito al lado', () => {
   // No son constantes cosméticas: bajarlas vuelve a perder noticias. La guarda
   // es contra un "optimicemos el costo" sin leer los prompt_tokens reales.
-  test('el snapshot del sitio se manda completo hasta 30000 chars', () => {
+  test('el snapshot se manda con SNAPSHOT_MAX_CHARS, no un literal', () => {
+    // Tiene que ser una constante nombrada y overrideable por env var: el 20/8
+    // se necesitó variar este valor por medio desde workflow_dispatch para
+    // medir latencia/completion_tokens sin editar código entre corridas.
     assert.match(
       SCRAPER,
-      /snapshot\.slice\(0,\s*30000\)/,
-      'bajó el recorte del snapshot: los refs solo existen ahí, cortarlo pierde enlaces'
+      /snapshot\.slice\(0,\s*SNAPSHOT_MAX_CHARS\)/,
+      'el snapshot volvió a mandarse con un número hardcodeado en vez de la constante'
+    )
+  })
+
+  test('SNAPSHOT_MAX_CHARS default 30000, overrideable por PIPELINE_SNAPSHOT_MAX_CHARS', () => {
+    assert.match(
+      SCRAPER,
+      /const SNAPSHOT_MAX_CHARS = Number\(process\.env\.PIPELINE_SNAPSHOT_MAX_CHARS\) \|\| 30000/,
+      'bajó el default o dejó de ser overrideable: los refs solo existen en el snapshot, cortarlo pierde enlaces'
     )
   })
 
@@ -142,5 +153,37 @@ describe('un medio perdido completo se distingue de un medio sin noticias', () =
       /SE DESCARTARON LAS \$\{descartados\.length\} ENTRADAS/,
       'volvió a perderse la distinción entre "descarté algunas" y "descarté todas"'
     )
+  })
+})
+
+describe('workflow_dispatch de pipeline.yml permite experimentar sin tocar producción', () => {
+  // El 20/8 subir el snapshot a 30000 disparó una corrida de ~5h estimadas
+  // (deepseek-v4-flash gasta el presupuesto de salida en tokens de reasoning
+  // cuando el contexto es grande) y quedó casi 2h colgada sin que nada la
+  // cortara. Estos tests fijan las dos salvaguardas que se agregaron: poder
+  // medir un solo medio sin escribir a la base, y un timeout que corte un job
+  // realmente colgado en vez de dejarlo horas en silencio.
+  const YML = readFileSync(path.join(RAIZ, '.github/workflows/pipeline.yml'), 'utf-8')
+
+  test('tiene timeout-minutes en el job', () => {
+    assert.match(YML, /timeout-minutes:\s*\d+/, 'sin esto un job colgado corre hasta las 6h de default')
+  })
+
+  test('el cron programado no manda inputs: sigue corriendo igual que siempre', () => {
+    // Los inputs de workflow_dispatch no existen en un trigger schedule, así
+    // que el guard github.event_name == 'workflow_dispatch' es lo que
+    // garantiza que la corrida diaria no cambia de comportamiento.
+    assert.match(YML, /github\.event_name == 'workflow_dispatch'/)
+  })
+
+  test('acepta medio, snapshot_max_chars y dry_run como inputs', () => {
+    for (const input of ['medio:', 'snapshot_max_chars:', 'dry_run:']) {
+      assert.ok(YML.includes(input), `falta el input ${input}`)
+    }
+  })
+
+  test('dry_run default true: un experimento no escribe a producción por accidente', () => {
+    const bloque = YML.slice(YML.indexOf('dry_run:'), YML.indexOf('jobs:'))
+    assert.match(bloque, /default:\s*true/)
   })
 })

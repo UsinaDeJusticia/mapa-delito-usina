@@ -5,10 +5,29 @@ on:
     # Corre todos los días a las 7am hora Argentina (UTC-3)
     - cron: '0 10 * * *'
   workflow_dispatch:  # permite correrlo manualmente desde GitHub
+    inputs:
+      medio:
+        description: 'Id de un solo medio a correr (vacío = todos). Para experimentar sin recorrer los ~66.'
+        type: string
+        default: ''
+      snapshot_max_chars:
+        description: 'Override de PIPELINE_SNAPSHOT_MAX_CHARS (vacío = default del código, hoy 30000)'
+        type: string
+        default: ''
+      dry_run:
+        description: 'No escribir a la base — usar para medir sin contaminar producción'
+        type: boolean
+        default: true
 
 jobs:
   pipeline:
     runs-on: ubuntu-latest
+    # Salvavidas: el 20/8 esta corrida quedó casi 2h colgada dentro del propio
+    # paso, sin que nada la cortara — GitHub la habría dejado seguir hasta las
+    # 6h de default. 90 min es generoso para los ~66 medios corriendo secuencial
+    # con LLM real; si algún día se pasa de eso, algo está genuinamente mal y
+    # conviene que el job falle visible en vez de gastar horas en silencio.
+    timeout-minutes: 90
 
     steps:
       - name: Checkout código
@@ -61,8 +80,14 @@ jobs:
           echo "OPENCODE_API_KEY set: ${{ secrets.OPENCODE_API_KEY != '' }}"
           echo "OPENROUTER_API_KEY set (respaldo): ${{ secrets.OPENROUTER_API_KEY != '' }}"
 
+      # El cron diario NUNCA manda inputs (no existen fuera de workflow_dispatch),
+      # así que esta rama no cambia nada de la corrida programada: sigue en
+      # PIPELINE_DRY_RUN=false sobre todos los medios. Los tres inputs son para
+      # cuando se dispara a mano — típicamente para medir un solo medio.
       - name: Correr pipeline
-        run: npm run pipeline:run
+        run: >
+          npx tsx scripts/pipeline/scrapear-medios.ts
+          ${{ github.event_name == 'workflow_dispatch' && inputs.medio != '' && format('--medio={0}', inputs.medio) || '' }}
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           # Proveedor activo: OpenCode Go
@@ -73,9 +98,10 @@ jobs:
           # Respaldo: con PIPELINE_PERFIL_MODELO=openrouter se vuelve al anterior
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_MODEL: ${{ secrets.OPENROUTER_MODEL }}
-          PIPELINE_DRY_RUN: 'false'
+          PIPELINE_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
           PIPELINE_MAX_NOTICIAS: '10'
           PIPELINE_PERFIL_MODELO: 'economico'
+          PIPELINE_SNAPSHOT_MAX_CHARS: ${{ inputs.snapshot_max_chars }}
 
       - name: Notificar resultado
         if: always()
