@@ -46,6 +46,7 @@ const SENALES_PAYWALL = [
 export type Estado =
   | 'OK'
   | 'SIN_ENLACES'
+  | 'BLOQUEADO'
   | 'HTTP_ERROR'
   | 'DNS_MUERTO'
   | 'TLS_INVALIDO'
@@ -141,7 +142,26 @@ export async function verificarMedio(
     })
 
     if (!res.ok) {
-      return { ...base, estado: 'HTTP_ERROR', detalle: `HTTP ${res.status}`, enlaces: 0, indicioPaywall: false }
+      // 403/401/429 NO son "el medio está caído": son un WAF rechazando un
+      // cliente que no parece un browser. La primera corrida de este script dio
+      // 403/404 en ~30 medios, y varios de esos —rosario3, infocielo, lavoz,
+      // eltribuno, norte— aparecen scrapeando bien en los logs del pipeline, que
+      // usa Chrome real. Reportarlos como fallo llevaba a desactivar medios que
+      // funcionan, que es peor que no tener el reporte.
+      //
+      // 404 también entra acá: puede ser que la sección exista solo para
+      // clientes con JS, o que el WAF devuelva 404 en vez de 403 para no
+      // confirmar la existencia del recurso.
+      const bloqueo = [401, 403, 404, 429, 503].includes(res.status)
+      return {
+        ...base,
+        estado: bloqueo ? 'BLOQUEADO' : 'HTTP_ERROR',
+        detalle: bloqueo
+          ? `HTTP ${res.status} — probable WAF, NO concluyente: verificar con browser`
+          : `HTTP ${res.status}`,
+        enlaces: 0,
+        indicioPaywall: false,
+      }
     }
 
     const destino = new URL(res.url)
@@ -182,7 +202,7 @@ export async function verificarMedio(
 /** Orden de la tabla: primero lo que hay que mirar. */
 const PRIORIDAD: Record<Estado, number> = {
   DNS_MUERTO: 0, TLS_INVALIDO: 1, HTTP_ERROR: 2, TIMEOUT: 3, REDIRECT_EXTERNO: 4,
-  SIN_URL: 5, ERROR: 6, SIN_ENLACES: 7, OK: 8,
+  SIN_URL: 5, ERROR: 6, BLOQUEADO: 7, SIN_ENLACES: 8, OK: 9,
 }
 
 export function tablaMarkdown(resultados: Resultado[]): string {
@@ -205,8 +225,15 @@ export function resumen(resultados: Resultado[]): string {
   const porEstado = new Map<Estado, number>()
   for (const r of resultados) porEstado.set(r.estado, (porEstado.get(r.estado) ?? 0) + 1)
 
+  // Solo lo INEQUÍVOCO cuenta como roto: DNS que no resuelve, TLS inválido,
+  // timeout, redirect a otro dominio, sin URL. BLOQUEADO y SIN_ENLACES quedan
+  // afuera a propósito — los dos significan "este chequeo no puede decidir",
+  // no "el medio no sirve".
   const roto = resultados.filter(
-    r => r.activo && !['OK', 'SIN_ENLACES'].includes(r.estado)
+    r => r.activo && !['OK', 'SIN_ENLACES', 'BLOQUEADO'].includes(r.estado)
+  )
+  const inconcluyentes = resultados.filter(
+    r => r.activo && ['BLOQUEADO', 'SIN_ENLACES'].includes(r.estado)
   )
   const listosParaActivar = resultados.filter(r => !r.activo && r.estado === 'OK')
 
@@ -225,6 +252,17 @@ export function resumen(resultados: Resultado[]): string {
       'Cada uno gasta tiempo de la corrida diaria para nada. Candidatos a desactivar:',
       '',
       ...roto.map(r => `- \`${r.id}\` (${r.nombre}) — ${r.estado}: ${r.detalle}`)
+    )
+  }
+  if (inconcluyentes.length > 0) {
+    lineas.push(
+      '',
+      `### ❓ ${inconcluyentes.length} medio(s) activo(s) sin veredicto`,
+      'NO desactivar por esto. Un 403 casi siempre es el WAF rechazando un fetch ' +
+        'sin browser, y el pipeline usa Chrome real: varios de estos scrapean bien. ' +
+        'Si alguno se quiere revisar, abrirlo a mano.',
+      '',
+      ...inconcluyentes.map(r => `- \`${r.id}\` (${r.nombre}) — ${r.estado}: ${r.detalle}`)
     )
   }
   if (listosParaActivar.length > 0) {
