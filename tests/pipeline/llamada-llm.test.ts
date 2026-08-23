@@ -254,4 +254,89 @@ describe('obtenerContenidoLLM', () => {
     assert.equal(llamadas, 1)
     assert.deepEqual(e.esperas, [])
   })
+
+  describe('escalada entre motores', () => {
+    // EL DEFECTO REAL: el 20/8 Diario Popular se perdió entero porque los
+    // tres intentos pegaron contra el mismo OpenCode Go y los tres dieron
+    // 500. Sin `motores`, un reintento nunca puede evitar un proveedor caído
+    // — vuelve a pegarle exactamente al mismo. Con `motores`, el intento que
+    // sigue a un fallo tiene que salir por el SIGUIENTE de la lista.
+
+    test('tras un fallo, el siguiente intento sale por el motor siguiente, no por el mismo', async () => {
+      const e = espias()
+      const motoresUsados: Array<string | undefined> = []
+      const r = await obtenerContenidoLLM({
+        motores: [{ id: 'motor-a' }, { id: 'motor-b' }],
+        ejecutar: async motor => {
+          motoresUsados.push(motor?.id)
+          if (motor?.id === 'motor-a') throw new Error('500 de motor-a')
+          return respuesta({ content: 'ok' })
+        },
+        etiqueta: 'x', ...e,
+      })
+      assert.equal(r.ok, true)
+      assert.deepEqual(motoresUsados, ['motor-a', 'motor-b'], 'el segundo intento tiene que haber salido por motor-b, no por motor-a otra vez')
+    })
+
+    test('sin `motores`, ejecutar() recibe undefined y el comportamiento es idéntico al de antes', async () => {
+      // Los tres consumidores que todavía no migraron (scrapear-medios.ts
+      // entre ellos) pasan una función de cero argumentos. Este test es la
+      // garantía de que agregar el parámetro no les cambió nada.
+      const e = espias()
+      const argumentosRecibidos: unknown[] = []
+      let llamadas = 0
+      const r = await obtenerContenidoLLM({
+        ejecutar: async (motor) => {
+          argumentosRecibidos.push(motor)
+          llamadas++
+          return respuesta({ content: 'ok' })
+        },
+        etiqueta: 'x', ...e,
+      })
+      assert.equal(r.ok, true)
+      assert.equal(llamadas, 1)
+      assert.deepEqual(argumentosRecibidos, [undefined])
+    })
+
+    test('el log de cada intento fallido incluye a qué motor le tocó', async () => {
+      const e = espias()
+      await obtenerContenidoLLM({
+        motores: [{ id: 'motor-a' }, { id: 'motor-b' }],
+        ejecutar: async () => respuesta({ content: '' }),
+        etiqueta: 'x', ...e,
+      })
+      const log = e.logs.join('\n')
+      assert.match(log, /motor=motor-a/)
+      assert.match(log, /motor=motor-b/)
+    })
+
+    test('con más intentos que motores, el ciclo vuelve a empezar desde el primero', async () => {
+      const e = espias()
+      const motoresUsados: Array<string | undefined> = []
+      await obtenerContenidoLLM({
+        motores: [{ id: 'motor-a' }, { id: 'motor-b' }],
+        intentos: 4,
+        ejecutar: async motor => {
+          motoresUsados.push(motor?.id)
+          return respuesta({ content: '' })
+        },
+        etiqueta: 'x', ...e,
+      })
+      assert.deepEqual(motoresUsados, ['motor-a', 'motor-b', 'motor-a', 'motor-b'])
+    })
+
+    test('el default de `intentos` es la cantidad de motores, no 3', async () => {
+      const e = espias()
+      let llamadas = 0
+      const r = await obtenerContenidoLLM({
+        motores: [{ id: 'a' }, { id: 'b' }],
+        ejecutar: async () => { llamadas++; return respuesta({ content: '' }) },
+        etiqueta: 'x', ...e,
+      })
+      assert.equal(r.ok, false)
+      if (r.ok) return
+      assert.equal(r.intentos, 2)
+      assert.equal(llamadas, 2)
+    })
+  })
 })

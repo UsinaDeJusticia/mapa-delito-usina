@@ -1,0 +1,29 @@
+[
+  {
+    "id": "go-flash",
+    "protocolo": "openai",
+    "baseUrl": "https://opencode.ai/zen/go/v1",
+    "apiKeyEnv": "OPENCODE_API_KEY",
+    "modelo": "deepseek-v4-flash",
+    "costoEntradaPorMil": 0.00014,
+    "concurrencia": 6
+  },
+  {
+    "id": "go-preciso",
+    "protocolo": "openai",
+    "baseUrl": "https://opencode.ai/zen/go/v1",
+    "apiKeyEnv": "OPENCODE_API_KEY",
+    "modelo": "deepseek-v4-pro",
+    "costoEntradaPorMil": 0.000435,
+    "concurrencia": 4
+  },
+  {
+    "id": "openrouter-respaldo",
+    "protocolo": "openai",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "apiKeyEnv": "OPENROUTER_API_KEY",
+    "modelo": "deepseek/deepseek-chat-v3-0324",
+    "costoEntradaPorMil": 0.00014,
+    "concurrencia": 4
+  }
+]

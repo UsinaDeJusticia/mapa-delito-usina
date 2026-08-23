@@ -17,7 +17,8 @@
 
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/mapa/queries'
-import { crearClienteLLM } from '@/lib/mapa/cliente-llm'
+import { completarConMotor } from '@/lib/mapa/cliente-llm'
+import { resolverPoliticaDisponible } from '@/config/motores-llm'
 import { parsearJsonLLM, validarDeduplicacion } from '@/lib/pipeline/schemas-llm'
 import { obtenerContenidoLLM } from '@/lib/pipeline/llamada-llm'
 
@@ -265,14 +266,22 @@ o
 {"esNuevo": false, "candidatoId": "ID-del-candidato", "confianza": 85, "razon": "explicación breve"}`
 
   try {
-    const { cliente, config } = crearClienteLLM('Mapa del Delito - Deduplicador')
+    // La dedup es la tarea más barata (un JSON chico, sin pretensión de
+    // calidad literaria) así que su política prioriza el motor más económico
+    // disponible por sobre precisión — ver POLITICAS en config/motores-llm.ts.
+    const motores = resolverPoliticaDisponible('dedup')
+    if (motores.length === 0) {
+      console.error('⚠️ Deduplicación: sin ningún motor LLM disponible')
+      return FALLBACK_DEDUP
+    }
 
     const resultado = await obtenerContenidoLLM({
       etiqueta: 'deduplicación',
+      motores,
       aceptar: contenido => parsearJsonLLM(contenido).ok,
-      ejecutar: () => cliente.chat.completions.create({
-        model: config.modelo,
-        messages: [{ role: 'user', content: prompt }],
+      ejecutar: motor => completarConMotor(motor!, {
+        system: 'Respondé exclusivamente con el JSON pedido, sin texto adicional.',
+        mensajes: [{ role: 'user', content: prompt }],
         temperature: 0.1,
         max_tokens: 300,
       }),
