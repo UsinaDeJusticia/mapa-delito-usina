@@ -1,0 +1,64 @@
+name: Probar feeds
+
+# Probe de RSS/sitemap para los ~120 medios del pipeline (Etapa 3 del plan de
+# rediseño: "Probe de feeds — el dato que falta").
+#
+# POR QUÉ EN ACTIONS Y NO A MANO
+# El contenedor de desarrollo no tiene salida a los sitios de medios (el proxy
+# devuelve 403), así que no hay forma de correr este probe desde ahí. Actions
+# sí la tiene.
+#
+# PARA QUÉ SIRVE
+# El rediseño del pipeline propone reemplazar "browser + LLM para descubrir
+# noticias" por "leer el feed estructurado del medio" — de 60-105s a 1-2s por
+# medio, y de ~12k tokens a cero. Pero esa propuesta asume que los medios
+# publican RSS o sitemap-news.xml, y eso no se pudo verificar todavía. Este
+# workflow corre el probe una vez y produce la tabla de cobertura que decide
+# si el plan sigue como está o hay que replantear las etapas de descubrimiento.
+#
+# Es una herramienta de diagnóstico de una sola corrida, no el scrapeo de
+# producción — por eso es legítimo correrla en Actions bajo las Políticas de
+# Uso Aceptable de GitHub, a diferencia de un scrapeo diario.
+
+on:
+  workflow_dispatch:
+    inputs:
+      solo_activos:
+        description: 'Probar solo los medios activos (más rápido)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: probar-feeds
+  cancel-in-progress: true
+
+jobs:
+  probar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      # `tee` y no `>>`: el reporte tiene que quedar en el job summary (para
+      # leerlo cómodo) Y en el log del step (para poder grepearlo, bajarlo o
+      # consultarlo por API). Redirigir con `>>` deja el reporte solo en el
+      # summary — ya nos pasó una vez con verificar-medios. stderr lleva el
+      # progreso para poder seguir la corrida en vivo.
+      - name: Probar feeds
+        run: |
+          npx tsx scripts/pipeline/probar-feeds.ts \
+            ${{ inputs.solo_activos && '--solo-activos' || '' }} \
+            | tee -a "$GITHUB_STEP_SUMMARY"
