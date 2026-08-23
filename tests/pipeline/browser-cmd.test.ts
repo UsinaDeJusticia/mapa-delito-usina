@@ -158,6 +158,18 @@ describe('comandos — construcción como array, nunca string', () => {
     }
     assert.deepEqual(comandos.tab(1), ['tab', '1'])
   })
+
+  test('esperarCarga espera domcontentloaded, no networkidle', () => {
+    // networkidle casi nunca se cumple en un sitio de noticias real: la
+    // publicidad y el tracking siguen pidiendo recursos indefinidamente, así
+    // que la espera agota siempre el timeout completo. En la corrida de
+    // producción del 22/8 eso fueron 37 timeouts de `wait` (~30s cada uno,
+    // ~18-20 de los 79 minutos totales). `--load domcontentloaded` SÍ está
+    // soportado por agent-browser (confirmado con `wait --help`: acepta
+    // load|domcontentloaded|networkidle) y se cumple apenas el DOM está
+    // armado, que es lo único que necesitan los pasos siguientes.
+    assert.deepEqual(comandos.esperarCarga(), ['wait', '--load', 'domcontentloaded'])
+  })
 })
 
 describe('validarUrlNavegable', () => {

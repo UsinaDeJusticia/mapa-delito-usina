@@ -122,11 +122,17 @@ describe('los recortes de entrada tienen el motivo escrito al lado', () => {
     )
   })
 
-  test('SNAPSHOT_MAX_CHARS default 30000, overrideable por PIPELINE_SNAPSHOT_MAX_CHARS', () => {
+  test('SNAPSHOT_MAX_CHARS default 3000, overrideable por PIPELINE_SNAPSHOT_MAX_CHARS', () => {
+    // 30000 es el valor de mejor calidad (medido: El Día 1→7, Zona Oeste 2→6,
+    // Infobae 1→10) pero hoy es inaceptable en costo — llevaría la corrida
+    // diaria a ~4-5h (79 min con 66 medios y snapshot mucho más chico). Baja a
+    // 3000 hasta que el descubrimiento migre a feeds RSS (Etapa 4 del plan). El
+    // override por env var tiene que sobrevivir: es lo que permite seguir
+    // experimentando con --medio=X sin editar código entre corridas.
     assert.match(
       SCRAPER,
-      /const SNAPSHOT_MAX_CHARS = Number\(process\.env\.PIPELINE_SNAPSHOT_MAX_CHARS\) \|\| 30000/,
-      'bajó el default o dejó de ser overrideable: los refs solo existen en el snapshot, cortarlo pierde enlaces'
+      /const SNAPSHOT_MAX_CHARS = Number\(process\.env\.PIPELINE_SNAPSHOT_MAX_CHARS\) \|\| 3000(?!\d)/,
+      'cambió el default o dejó de ser overrideable por PIPELINE_SNAPSHOT_MAX_CHARS'
     )
   })
 

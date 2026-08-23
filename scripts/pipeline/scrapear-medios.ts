@@ -17,7 +17,7 @@
 
 import { PrismaClient } from '@prisma/client'
 import { extraerDatosNoticia } from '../../src/lib/mapa/openrouter'
-import { deduplicar, clasificarCobertura } from '../../src/lib/mapa/deduplicador'
+import { deduplicar, clasificarCobertura, urlYaRegistrada } from '../../src/lib/mapa/deduplicador'
 import { crearClienteLLM } from '../../src/lib/mapa/cliente-llm'
 import {
   comandos,
@@ -47,13 +47,45 @@ const MEDIO_ESPECIFICO = process.argv.find(a => a.startsWith('--medio='))?.split
 const CONFIANZA_MINIMA = 75
 
 /**
- * Override para medir con datos cuánto snapshot conviene mandar. Default 30000
- * (ver el comentario donde se usa, en identificarNoticiasConIA). No pensado
- * para producción: existe para poder correr `--medio=X` con distintos tamaños
- * desde workflow_dispatch y comparar latencia/completion_tokens sin editar el
- * código entre corridas.
+ * Override para medir con datos cuánto snapshot conviene mandar.
+ *
+ * El valor bueno para calidad de captura es 30000: un experimento medido
+ * mostró El Día 1→7 noticias, Zona Oeste 2→6, Infobae 1→10 al subir de 3000 a
+ * 30000. Pero 30000 en producción hoy es inaceptable en costo: la corrida del
+ * 22/8 (66 medios, 79 min) ya mostraba 44% de extracciones tiradas por URL
+ * duplicada y 37 timeouts de browser, y subir el snapshot llevaría la corrida
+ * diaria a ~4-5 horas (ver plan bright-rolling-raccoon.md, Etapa 1).
+ *
+ * Por eso el default baja a 3000 hasta que el descubrimiento migre a feeds
+ * RSS/sitemap (Etapa 4 del plan), momento en el que el LLM deja de tener que
+ * "ver" el snapshot completo para encontrar links. El override por env var se
+ * mantiene: es lo que permite seguir midiendo `--medio=X` con distintos
+ * tamaños desde workflow_dispatch sin editar código entre corridas.
  */
-const SNAPSHOT_MAX_CHARS = Number(process.env.PIPELINE_SNAPSHOT_MAX_CHARS) || 30000
+const SNAPSHOT_MAX_CHARS = Number(process.env.PIPELINE_SNAPSHOT_MAX_CHARS) || 3000
+
+/**
+ * Métricas por fase de la corrida, acumuladas a lo largo de todo el
+ * pipeline y volcadas al resumen final.
+ *
+ * Sin esto no se puede comparar contra la línea de base: el diagnóstico del
+ * 22/8 (79 min, 66 medios) se armó reconstruyendo tiempos a mano a partir del
+ * espaciado de timestamps en los logs. Con estos acumuladores, la próxima
+ * corrida deja el desglose ya calculado.
+ *
+ * Deliberadamente vive solo en este archivo (no en llamada-llm.ts): otro
+ * agente está trabajando en paralelo sobre ese módulo.
+ */
+const metricas = {
+  tiempoBrowserMs: 0,
+  tiempoIdentificacionLLMMs: 0,
+  tiempoExtraccionLLMMs: 0,
+  tiempoDedupMs: 0,
+  llamadasLLM: {
+    identificacion: 0,
+    extraccion: 0,
+  },
+}
 
 // ════════════════════════════════════════════
 // TIPOS
@@ -96,9 +128,15 @@ function log(emoji: string, msg: string, data?: unknown) {
  *
  * Devuelve stdout o cadena vacía si falló, igual que antes, para no cambiar el
  * manejo de errores de los llamadores.
+ *
+ * Todas las operaciones de browser del pipeline pasan por acá, así que es el
+ * único punto donde hay que medir para tener el tiempo de fase "browser"
+ * completo (navegación, snapshots, clicks, waits, getUrl/getTexto...).
  */
 function ab(args: readonly string[], timeoutMs: number = 30000): string {
+  const inicio = Date.now()
   const r = ejecutarBrowser(args, { timeoutMs })
+  metricas.tiempoBrowserMs += Date.now() - inicio
   if (!r.ok && r.error) {
     log('⚠️', `agent-browser ${args[0]}: ${r.error.slice(0, 150)}`)
   }
@@ -274,10 +312,14 @@ function prewarmDaemon(): boolean {
  *    - tab 0 (volver al listado, refs intactos)
  * 5. Cerrar browser
  */
-async function scrapearMedio(medio: MedioConfig, yaPrewarmed: boolean): Promise<NoticiaScrapeada[]> {
+async function scrapearMedio(
+  medio: MedioConfig,
+  yaPrewarmed: boolean
+): Promise<{ noticias: NoticiaScrapeada[]; duplicadasTempranas: number }> {
   const urlTarget = medio.urlPoliciales || medio.url || ''
   log('📰', `Scrapeando ${medio.nombre} (${urlTarget})`)
   const noticias: NoticiaScrapeada[] = []
+  let duplicadasTempranas = 0
 
   try {
     // 1. Navegar a la sección policial
@@ -289,18 +331,21 @@ async function scrapearMedio(medio: MedioConfig, yaPrewarmed: boolean): Promise<
 
     if (!snapshot) {
       log('⚠️', `No se pudo obtener snapshot de ${medio.nombre}`)
-      return []
+      return { noticias: [], duplicadasTempranas }
     }
 
     // 3. Identificar noticias policiales con IA (funciona en cualquier sitio)
     log('🤖', `Identificando noticias policiales con IA en ${medio.nombre}...`)
+    const inicioIdentificacion = Date.now()
     const linksNoticias = await identificarNoticiasConIA(snapshot, medio.nombre)
+    metricas.tiempoIdentificacionLLMMs += Date.now() - inicioIdentificacion
+    metricas.llamadasLLM.identificacion++
 
     log('🔗', `${linksNoticias.length} noticias policiales identificadas en ${medio.nombre}`)
 
     if (linksNoticias.length === 0) {
       log('⚠️', `No se encontraron noticias policiales en ${medio.nombre}`)
-      return []
+      return { noticias: [], duplicadasTempranas }
     }
 
     log('🔗', `${linksNoticias.length} links de noticias encontrados en ${medio.nombre}`)
@@ -308,7 +353,7 @@ async function scrapearMedio(medio: MedioConfig, yaPrewarmed: boolean): Promise<
     if (linksNoticias.length === 0) {
       log('⚠️', `No se encontraron noticias. Snapshot preview:`)
       log('📝', snapshot.slice(0, 500))
-      return []
+      return { noticias: [], duplicadasTempranas }
     }
 
     // 4. Visitar cada noticia con Tab Isolation Pattern
@@ -337,7 +382,13 @@ async function scrapearMedio(medio: MedioConfig, yaPrewarmed: boolean): Promise<
 
         // Cambiar a tab 1 (la del detalle)
         ab(comandos.tab(1))
-        ab(comandos.esperarCarga(), 10000)
+        // 5000ms, no 10000: con domcontentloaded (ver el comentario en
+        // comandos.esperarCarga) la condición se cumple apenas el DOM está
+        // armado, mucho antes de lo que tardaba networkidle. El timeout
+        // viejo de 10s estaba calibrado para una espera que casi nunca se
+        // cumplía sola (37 timeouts en la corrida del 22/8); con
+        // domcontentloaded ese presupuesto ya no hace falta.
+        ab(comandos.esperarCarga(), 5000)
 
         // Obtener URL del artículo
         const urlArticulo = ab(comandos.getUrl())
@@ -355,6 +406,23 @@ async function scrapearMedio(medio: MedioConfig, yaPrewarmed: boolean): Promise<
         // extrae termina en el prompt del modelo y en la base.
         if (!esDestinoPermitido(urlArticulo)) {
           log('🛑', `Destino no permitido tras el click, se descarta: ${urlArticulo.slice(0, 120)}`)
+          ab(comandos.cerrarTab())
+          ab(comandos.tab(0))
+          continue
+        }
+
+        // ¿Ya está esta URL en la base?
+        //
+        // Chequeo movido hacia acá desde deduplicar() (paso 1 de ese flujo,
+        // que sigue existiendo — ver el comentario en urlYaRegistrada). En
+        // producción el 44% de las llamadas de extracción del LLM (32 de 72
+        // en la corrida del 22/8) terminaban descartadas por "URL ya
+        // procesada": se pagaba texto + LLM completo para descubrir al final
+        // algo que ya sabíamos apenas conocimos la URL. Cortando acá se evita
+        // extraer texto Y la llamada de extracción para esos casos.
+        if (await urlYaRegistrada(urlArticulo)) {
+          log('⏭️', `URL ya procesada (se evita extracción): ${urlArticulo.slice(0, 60)}`)
+          duplicadasTempranas++
           ab(comandos.cerrarTab())
           ab(comandos.tab(0))
           continue
@@ -433,13 +501,13 @@ async function scrapearMedio(medio: MedioConfig, yaPrewarmed: boolean): Promise<
 
     log('📊', `${medio.nombre}: ${noticias.length} noticias extraídas`)
 
-    return noticias
+    return { noticias, duplicadasTempranas }
 
   } catch (error) {
     log('❌', `Error general en ${medio.nombre}: ${String(error).slice(0, 150)}`)
   }
 
-  return noticias
+  return { noticias, duplicadasTempranas }
 }
 
 // ════════════════════════════════════════════
@@ -584,14 +652,22 @@ async function main() {
   for (const medio of medios) {
     log('', '─'.repeat(60))
 
-    const noticiasRaw = await scrapearMedio(medio, yaPrewarmed)
+    const { noticias: noticiasRaw, duplicadasTempranas } = await scrapearMedio(medio, yaPrewarmed)
     totalScrapeadas += noticiasRaw.length
+    // Duplicados detectados antes de extraer (ver el comentario en
+    // scrapearMedio): cuentan igual que los que antes descubría deduplicar()
+    // después de la extracción — el campo `duplicados` del resumen no cambia
+    // de semántica, solo se adelanta CUÁNDO se detectan.
+    totalDuplicadas += duplicadasTempranas
 
     for (const noticia of noticiasRaw) {
 
       // ── Extracción IA ──
       log('🤖', `Extrayendo datos de: ${noticia.titulo.slice(0, 60)}...`)
+      const inicioExtraccion = Date.now()
       const datos = await extraerDatosNoticia(noticia.texto, noticia.url)
+      metricas.tiempoExtraccionLLMMs += Date.now() - inicioExtraccion
+      metricas.llamadasLLM.extraccion++
 
       if (!datos.esHechoDelictivo) {
         log('⏭️', `No es hecho delictivo: "${noticia.titulo.slice(0, 60)}" — ${noticia.url}`)
@@ -615,6 +691,10 @@ async function main() {
       totalExtraidas++
 
       // ── Deduplicación inteligente ──
+      // Se mide el tiempo de la fase completa, no una llamada LLM garantizada:
+      // deduplicar() solo consulta al modelo cuando el caso es ambiguo (ver el
+      // comentario en deduplicador.ts), así que no se suma a llamadasLLM.
+      const inicioDedup = Date.now()
       const dedup = await deduplicar({
         tipoHecho: datos.tipoHecho || '',
         // != null y no la verdad del valor: el código SNIC 0 es válido y falsy.
@@ -628,6 +708,7 @@ async function main() {
         url: noticia.url,
         nombreVictima: datos.nombreVictima,
       })
+      metricas.tiempoDedupMs += Date.now() - inicioDedup
 
       if (dedup.urlDuplicada) {
         log('⏭️', `URL ya procesada: ${noticia.url.slice(0, 50)}`)
@@ -829,6 +910,19 @@ async function main() {
     duplicados: totalDuplicadas,
     descartados: totalDescartadas,
     modo: DRY_RUN ? 'DRY RUN' : 'PRODUCCIÓN',
+    // Tiempos por fase y llamadas al LLM — sin esto no se puede comparar
+    // contra la línea de base (79 min, 66 medios, 22/8). Ver el comentario
+    // en la constante `metricas`.
+    tiemposMs: {
+      browser: metricas.tiempoBrowserMs,
+      identificacionLLM: metricas.tiempoIdentificacionLLMMs,
+      extraccionLLM: metricas.tiempoExtraccionLLMMs,
+      dedup: metricas.tiempoDedupMs,
+    },
+    llamadasLLM: {
+      identificacion: metricas.llamadasLLM.identificacion,
+      extraccion: metricas.llamadasLLM.extraccion,
+    },
   })
 
   // Actualizar fecha de la fuente
