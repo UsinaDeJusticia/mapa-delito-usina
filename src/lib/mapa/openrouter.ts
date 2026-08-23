@@ -6,8 +6,8 @@
  *   local               → Ollama (OLLAMA_MODEL + OLLAMA_BASE_URL)
  */
 
-import { getConfigActiva } from '@/config/modelos-pipeline'
-import { crearClienteLLM, credencialFaltante } from '@/lib/mapa/cliente-llm'
+import { completarConMotor } from '@/lib/mapa/cliente-llm'
+import { resolverPoliticaDisponible, credencialFaltanteDeMotor } from '@/config/motores-llm'
 import {
   parsearJsonLLM,
   validarExtraccion,
@@ -329,17 +329,18 @@ export async function extraerDatosNoticia(
   textoNoticia: string,
   urlFuente: string,
 ): Promise<HechoExtraido> {
-  const configActiva = getConfigActiva()
-  console.log(`🤖 ${configActiva.descripcion}`)
+  // Orden de preferencia para extracción: el motor legacy activo
+  // (PIPELINE_PERFIL_MODELO) primero — así el intento 1 es idéntico al de
+  // antes de que existiera esta política —, y los motores de
+  // config/motores-llm.json después, como escalada real si el primero falla.
+  const motores = resolverPoliticaDisponible('extraccion')
+  console.log(`🤖 extracción — motores disponibles: ${motores.map(m => m.id).join(', ') || 'ninguno'}`)
 
-  // Validar API key para proveedores remotos
-  const faltante = credencialFaltante(configActiva)
-  if (faltante) {
-    console.error(`❌ ${faltante} no configurada en .env`)
+  if (motores.length === 0) {
+    const legacyFaltante = credencialFaltanteDeMotor({ apiKeyEnv: 'OPENCODE_API_KEY' })
+    console.error(`❌ Sin ningún motor LLM disponible para extracción (${legacyFaltante ?? 'revisar config/motores-llm.json'})`)
     return RESPUESTA_FALLBACK
   }
-
-  const { cliente, config } = crearClienteLLM('Mapa Nacional del Delito - Usina de Justicia')
 
   const ejemplos = await getFewShotEjemplos()
   const fewShotMessages = construirEjemplosFewShot(ejemplos)
@@ -352,17 +353,17 @@ export async function extraerDatosNoticia(
     // límite—, pero era un segundo problema real esperando su turno.
     const resultado = await obtenerContenidoLLM({
       etiqueta: urlFuente,
+      motores,
       registrarUso: d => {
         const linea = formatearUso(d, urlFuente)
         if (linea) console.log(linea)
       },
       // Un JSON cortado es justo el caso que un segundo intento suele resolver.
       aceptar: contenido => parsearJsonLLM(contenido).ok,
-      ejecutar: () =>
-        cliente.chat.completions.create({
-          model: config.modelo,
-          messages: [
-            { role: 'system', content: PROMPT_SISTEMA },
+      ejecutar: motor =>
+        completarConMotor(motor!, {
+          system: PROMPT_SISTEMA,
+          mensajes: [
             ...fewShotMessages,
             {
               role: 'user',

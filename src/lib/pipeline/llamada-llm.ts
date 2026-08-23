@@ -133,9 +133,34 @@ export function formatearUso(d: DiagnosticoLLM, etiqueta: string): string | null
   return `📊 ${etiqueta} | usage=${JSON.stringify(d.usage)} largo_contenido=${d.largoContenido}`
 }
 
-export interface OpcionesLlamada {
-  /** Hace la llamada al proveedor. Se invoca una vez por intento. */
-  ejecutar: () => Promise<unknown>
+/**
+ * Lo mínimo que el router de escalada necesita saber de un motor: un id para
+ * loguear a cuál se escaló. No importa acá si es un `MotorLLMConfig` del
+ * JSON, el motor legacy de `PIPELINE_PERFIL_MODELO`, o un motor de prueba —
+ * cualquier forma con `id` funciona.
+ */
+export interface MotorParaEscalada {
+  id: string
+}
+
+export interface OpcionesLlamada<M extends MotorParaEscalada = MotorParaEscalada> {
+  /**
+   * Hace la llamada al proveedor. Se invoca una vez por intento.
+   *
+   * Recibe el motor de ese intento cuando se pasa `motores` (ver abajo) —
+   * `undefined` si no. Los tres consumidores viejos (`openrouter.ts`,
+   * `deduplicador.ts`, `scrapear-medios.ts`) pasan una función de cero
+   * argumentos que ya captura su propio cliente; sigue funcionando igual
+   * porque TypeScript acepta una función con menos parámetros donde se
+   * espera una con más — cero cambio de comportamiento para quien no pasa
+   * `motores`.
+   *
+   * `M` es el tipo genérico del motor: los consumidores que escalan entre
+   * motores de `config/motores-llm.json` lo instancian con `MotorLLMConfig`
+   * (pasando `motores: MotorLLMConfig[]`) para tener el tipo completo acá
+   * adentro, sin castear.
+   */
+  ejecutar: (motor?: M) => Promise<unknown>
   /** Para los logs: la URL de la noticia, o el nombre del medio. */
   etiqueta: string
   /**
@@ -144,7 +169,19 @@ export interface OpcionesLlamada {
    * Si no se pasa, alcanza con que no esté vacío.
    */
   aceptar?: (contenido: string) => boolean
-  /** Intentos totales, no reintentos. Default 3. */
+  /**
+   * Motores a probar, en orden. Si se pasan, el intento N usa
+   * `motores[(N-1) % motores.length]` — o sea que el intento 2 sale por el
+   * SIGUIENTE motor de la lista, no por el mismo que ya falló. Es la escalada
+   * real: el 20/8 Diario Popular se perdió entero porque los tres intentos
+   * pegaron contra el mismo OpenCode Go y los tres dieron 500.
+   *
+   * Si no se pasa (el caso de los tres consumidores sin migrar todavía), el
+   * comportamiento es exactamente el de antes: mismo `ejecutar()`, mismo
+   * proveedor, en todos los intentos.
+   */
+  motores?: M[]
+  /** Intentos totales, no reintentos. Default: `motores?.length ?? 3`. */
   intentos?: number
   /** Espera antes del intento N (1-based). Default: 500ms × intento. */
   esperaMs?: (intentoFallido: number) => number
@@ -186,22 +223,26 @@ const dormirReal = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
  * Y con `registrarUso`, también el consumo del intento que salió bien — que es
  * el único dato con el que se pueden elegir los recortes de entrada.
  */
-export async function obtenerContenidoLLM({
+export async function obtenerContenidoLLM<M extends MotorParaEscalada = MotorParaEscalada>({
   ejecutar,
   etiqueta,
   aceptar,
-  intentos = 3,
+  motores,
+  intentos = motores?.length ?? 3,
   esperaMs = intento => 500 * intento,
   dormir = dormirReal,
   registrar = console.error,
   registrarUso,
-}: OpcionesLlamada): Promise<ResultadoLlamada> {
+}: OpcionesLlamada<M>): Promise<ResultadoLlamada> {
   let ultimoMotivo = 'sin intentos'
 
   for (let intento = 1; intento <= intentos; intento++) {
+    // Sin `motores`, motorActual queda undefined y ejecutar() se comporta
+    // exactamente igual que antes de que existiera la escalada.
+    const motorActual = motores?.[(intento - 1) % motores.length]
     let diagnostico: DiagnosticoLLM | null = null
     try {
-      const respuesta = await ejecutar()
+      const respuesta = await ejecutar(motorActual)
       diagnostico = diagnosticar(respuesta)
 
       if (!diagnostico.vacio && (!aceptar || aceptar(diagnostico.contenido))) {
@@ -220,12 +261,18 @@ export async function obtenerContenidoLLM({
       }`
     }
 
+    const motorTexto = motorActual ? ` motor=${motorActual.id}` : ''
     const detalle = diagnostico
       ? formatearDiagnostico(diagnostico, etiqueta)
       : `${etiqueta} | ${ultimoMotivo}`
-    registrar(`⚠️ intento ${intento}/${intentos} — ${ultimoMotivo} — ${detalle}`)
+    registrar(`⚠️ intento ${intento}/${intentos}${motorTexto} — ${ultimoMotivo} — ${detalle}`)
 
     if (intento < intentos) {
+      // Sin motores (o con uno solo) el backoff sigue siendo el de siempre.
+      // Escalar a un motor distinto no dice nada sobre si conviene esperar
+      // más o menos, así que se mantiene la misma política — evita tener dos
+      // curvas de backoff que mantener, y sigue aplicando si `motores.length`
+      // es menor que `intentos` y el ciclo vuelve a pegarle al mismo motor.
       await dormir(esperaMs(intento))
     }
   }
