@@ -11,7 +11,7 @@ on:
         type: string
         default: ''
       snapshot_max_chars:
-        description: 'Override de PIPELINE_SNAPSHOT_MAX_CHARS (vacío = default del código, hoy 30000)'
+        description: 'Override de PIPELINE_SNAPSHOT_MAX_CHARS (vacío = 10000, el default de esta rama piloto)'
         type: string
         default: ''
       dry_run:
@@ -24,10 +24,15 @@ jobs:
     runs-on: ubuntu-latest
     # Salvavidas: el 20/8 esta corrida quedó casi 2h colgada dentro del propio
     # paso, sin que nada la cortara — GitHub la habría dejado seguir hasta las
-    # 6h de default. 90 min es generoso para los ~66 medios corriendo secuencial
-    # con LLM real; si algún día se pasa de eso, algo está genuinamente mal y
-    # conviene que el job falle visible en vez de gastar horas en silencio.
-    timeout-minutes: 90
+    # 6h de default.
+    #
+    # 120 y no 90: esta rama (estable-premio) reduce la lista a 13 medios pero
+    # sube SNAPSHOT_MAX_CHARS a 10000 (ver el step "Correr pipeline"), y el
+    # experimento del 22/8 midió que un solo medio a 30000 chars puede tardar
+    # hasta ~12 min cuando encuentra varias noticias reales (cada una es una
+    # extracción LLM aparte). Con 13 medios a un valor intermedio, 120 min deja
+    # margen real sin ser un cheque en blanco.
+    timeout-minutes: 120
 
     steps:
       - name: Checkout código
@@ -81,9 +86,9 @@ jobs:
           echo "OPENROUTER_API_KEY set (respaldo): ${{ secrets.OPENROUTER_API_KEY != '' }}"
 
       # El cron diario NUNCA manda inputs (no existen fuera de workflow_dispatch),
-      # así que esta rama no cambia nada de la corrida programada: sigue en
-      # PIPELINE_DRY_RUN=false sobre todos los medios. Los tres inputs son para
-      # cuando se dispara a mano — típicamente para medir un solo medio.
+      # así que PIPELINE_DRY_RUN y --medio no cambian en la corrida programada:
+      # sigue en modo real sobre todos los medios activos. Los tres inputs son
+      # para cuando se dispara a mano — típicamente para medir un solo medio.
       - name: Correr pipeline
         run: >
           npx tsx scripts/pipeline/scrapear-medios.ts
@@ -101,7 +106,15 @@ jobs:
           PIPELINE_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
           PIPELINE_MAX_NOTICIAS: '10'
           PIPELINE_PERFIL_MODELO: 'economico'
-          PIPELINE_SNAPSHOT_MAX_CHARS: ${{ inputs.snapshot_max_chars }}
+          # 10000 fijo para la corrida programada, no el 3000 que quedó como
+          # default en el código. A 3000 la corrida real del 22/8 (66 medios)
+          # midió que lavoz, rosario3, eltribuno y norte daban CERO — el
+          # snapshot solo alcanza el logo y el menú. Con la lista reducida a 13
+          # medios (ver medios-config.ts) el costo de un valor más alto es
+          # asumible. Sigue siendo overrideable a mano vía el input, para poder
+          # afinar el valor con datos sin editar el workflow.
+          PIPELINE_SNAPSHOT_MAX_CHARS: >-
+            ${{ (github.event_name == 'workflow_dispatch' && inputs.snapshot_max_chars) || '10000' }}
 
       - name: Notificar resultado
         if: always()

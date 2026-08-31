@@ -192,4 +192,24 @@ describe('workflow_dispatch de pipeline.yml permite experimentar sin tocar produ
     const bloque = YML.slice(YML.indexOf('dry_run:'), YML.indexOf('jobs:'))
     assert.match(bloque, /default:\s*true/)
   })
+
+  test('el cron real usa 10000 chars, no el 3000 que quedó de default en el código', () => {
+    // Rama estable-premio: a 3000 la corrida real del 22/8 midió que la mitad
+    // de los medios (lavoz, rosario3, eltribuno, norte entre otros) daban
+    // CERO noticias — el snapshot solo alcanza el logo y el menú. Con la
+    // lista reducida a 13 medios, subir el valor es asumible en tiempo. Este
+    // test fija que el fallback aplique tanto en el cron (sin inputs) como en
+    // un dispatch manual sin el override explícito.
+    assert.match(YML, /PIPELINE_SNAPSHOT_MAX_CHARS:/)
+    const bloque = YML.slice(
+      YML.indexOf('PIPELINE_SNAPSHOT_MAX_CHARS:'),
+      YML.indexOf('Notificar resultado')
+    )
+    assert.match(bloque, /'10000'/, 'el fallback para el cron dejó de ser 10000')
+    assert.match(
+      bloque,
+      /github\.event_name == 'workflow_dispatch' && inputs\.snapshot_max_chars/,
+      'el override manual por input dejó de tener prioridad sobre el default'
+    )
+  })
 })
