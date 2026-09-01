@@ -1,10 +1,6 @@
 {
   "crons": [
     {
-      "path": "/api/pipeline/run",
-      "schedule": "0 6 * * *"
-    },
-    {
       "path": "/api/pipeline/refresh-views",
       "schedule": "30 6 * * *"
     }
