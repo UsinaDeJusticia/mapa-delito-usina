@@ -19,7 +19,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/mapa/queries'
 import { crearClienteLLM } from '@/lib/mapa/cliente-llm'
 import { parsearJsonLLM, validarDeduplicacion } from '@/lib/pipeline/schemas-llm'
-import { obtenerContenidoLLM } from '@/lib/pipeline/llamada-llm'
+import { obtenerContenidoLLM, formatearUso } from '@/lib/pipeline/llamada-llm'
 
 // ════════════════════════════════════════════
 // TIPOS
@@ -270,11 +270,19 @@ o
     const resultado = await obtenerContenidoLLM({
       etiqueta: 'deduplicación',
       aceptar: contenido => parsearJsonLLM(contenido).ok,
+      registrarUso: d => {
+        const linea = formatearUso(d, 'deduplicación')
+        if (linea) console.log(linea)
+      },
       ejecutar: () => cliente.chat.completions.create({
         model: config.modelo,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.1,
-        max_tokens: 300,
+        // 600 y no 300: la salida es JSON con un campo `razon` en prosa, y 300
+        // dejaba el corte al alcance de una explicación un poco larga. Un corte
+        // acá no es cosmético — el fallback asume "es un hecho nuevo", así que
+        // duplica el caso en el mapa.
+        max_tokens: 600,
       }),
     })
 
@@ -354,12 +362,40 @@ export const FALLBACK_DEDUP: ResultadoConfirmacionIA = {
  *    cobertura del hecho existente (sin consultar IA)
  * 5. Ambiguo → confirmar con IA
  */
+/**
+ * Única consulta de "¿esta URL ya está en la base?", compartida por
+ * `deduplicar()` y por el scraper.
+ *
+ * Existe como función separada (no inline en deduplicar) porque el scraper
+ * necesita el mismo chequeo ANTES de gastar la extracción con el LLM: en
+ * producción el 44% de las llamadas de extracción (32 de 72 en la corrida del
+ * 22/8) terminaban descartadas por "URL ya procesada" — se pagaban y se
+ * tiraban porque el chequeo vivía únicamente acá, después de extraer. Si cada
+ * lado escribiera su propio `findUnique`, podrían divergir con el tiempo;
+ * exportar una sola función evita esa deriva.
+ */
+async function buscarCoberturaPorUrl(url: string) {
+  return prisma.coberturaMediatica.findUnique({ where: { url } })
+}
+
+/**
+ * true si la URL ya tiene una cobertura registrada.
+ *
+ * Pensada para el scraper: se llama apenas se conoce la URL final del
+ * artículo (tras el click y la validación de destino), y ANTES de extraer
+ * texto o llamar al LLM de extracción. `deduplicar()` sigue haciendo su
+ * propio chequeo — es idempotente y es quien protege el camino que no pasa
+ * por el scraper (p.ej. una re-ejecución manual de deduplicación).
+ */
+export async function urlYaRegistrada(url: string): Promise<boolean> {
+  const cobertura = await buscarCoberturaPorUrl(url)
+  return cobertura !== null
+}
+
 export async function deduplicar(datos: DatosNoticia): Promise<ResultadoDeduplicacion> {
 
   // 1. Verificar URL duplicada
-  const coberturaExistente = await prisma.coberturaMediatica.findUnique({
-    where: { url: datos.url },
-  })
+  const coberturaExistente = await buscarCoberturaPorUrl(datos.url)
 
   if (coberturaExistente) {
     return {

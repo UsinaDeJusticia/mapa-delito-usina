@@ -173,3 +173,38 @@ describe('el .gitignore cubre las copias temporales del export', () => {
     assert.match(gitignore, /^export_temp\.sql$/m)
   })
 })
+
+describe('hechos_sat.parquet no publica el UUID de fila', () => {
+  // Hallazgo #11 del plan de seguridad: este Parquet se sirve como archivo
+  // estático público desde Vercel, con microdato fila por fila (sexo,
+  // vínculo, femicidio, contexto). El UUID no aporta nada a las consultas del
+  // mapa (src/hooks/useMapaData.ts y useH3Density.ts siempre piden columnas
+  // explícitas, nunca SELECT *) y sí facilita cruzar una fila pública con el
+  // registro interno correspondiente. Antes de un premio público es
+  // exactamente el tipo de columna que no debería estar ahí.
+  // El corte arranca en el `COPY (` de este bloque, no en "hd.anio," ni en el
+  // comentario de arriba: anclar en la primera columna esperada es frágil
+  // (si algún día hd.id vuelve como PRIMERA columna, quedaría antes del
+  // ancla y el test no lo vería) y el comentario menciona "hd.id" en prosa
+  // para explicar por qué no está. `lastIndexOf` sobre 'DETACH neon' agarra
+  // el último `COPY (` del archivo, que es justo el de hechos_sat —el único
+  // bloque después del cual sigue `DETACH neon`.
+  const finDetach = SQL.indexOf('DETACH neon')
+  const bloque = SQL.slice(SQL.lastIndexOf('COPY (', finDetach), finDetach)
+
+  test('el SELECT de hechos_sat no incluye hd.id', () => {
+    assert.ok(!/\bhd\.id\b/.test(bloque), 'volvió a exportarse hd.id (UUID) en el Parquet público')
+  })
+
+  test('sigue exportando las columnas que el mapa sí usa', () => {
+    // Guarda contra el error opuesto: sacar el UUID y de paso romper una
+    // columna real que useMapaData.ts o useH3Density.ts sí consultan.
+    for (const columna of [
+      'hd.anio', 'provincia_id', 'u.latitud', 'u.longitud',
+      'cantidad_victimas', 'victima_sexo', 'medio_comision',
+      'hd.femicidio', 'vinculo', 'lugar_hecho',
+    ]) {
+      assert.ok(bloque.includes(columna), `falta ${columna} en el SELECT de hechos_sat`)
+    }
+  })
+})

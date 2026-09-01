@@ -23,7 +23,9 @@ import {
   diagnosticar,
   formatearDiagnostico,
   obtenerContenidoLLM,
+  formatearUso,
   MAX_CHARS_LOG,
+  type DiagnosticoLLM,
 } from '../../src/lib/pipeline/llamada-llm'
 
 /** Respuesta con la forma que devuelve la API de OpenAI. */
@@ -253,5 +255,92 @@ describe('obtenerContenidoLLM', () => {
     assert.equal(r.ok, false)
     assert.equal(llamadas, 1)
     assert.deepEqual(e.esperas, [])
+  })
+})
+
+describe('registrarUso mide el camino de éxito', () => {
+  /**
+   * POR QUÉ HACE FALTA
+   * El diagnóstico se registraba solo en los intentos fallidos. Servía para
+   * encontrar por qué fallaban, pero cuando los fallos bajaron no quedó un solo
+   * `prompt_tokens` real con el que decidir cuánto texto mandarle al modelo — y
+   * esos recortes son justo donde se pierden femicidios. Medir el éxito es la
+   * única forma de elegir esos límites con datos en vez de a ojo.
+   */
+  function espias() {
+    const usos: DiagnosticoLLM[] = []
+    return {
+      usos,
+      registrar: () => {},
+      dormir: async () => {},
+      registrarUso: (d: DiagnosticoLLM) => usos.push(d),
+    }
+  }
+
+  test('se llama con el usage del intento que salió bien', async () => {
+    const e = espias()
+    await obtenerContenidoLLM({
+      ejecutar: async () =>
+        respuesta({ content: '{"ok":1}' }, { usage: { prompt_tokens: 1200, completion_tokens: 90 } }),
+      etiqueta: 'nota', ...e,
+    })
+    assert.equal(e.usos.length, 1)
+    assert.deepEqual(e.usos[0].usage, { prompt_tokens: 1200, completion_tokens: 90 })
+  })
+
+  test('NO se llama cuando la llamada termina fallando', async () => {
+    // Si se llamara igual, cada fallo dejaría dos líneas de log contradictorias.
+    const e = espias()
+    const r = await obtenerContenidoLLM({
+      ejecutar: async () => respuesta({ content: '' }),
+      etiqueta: 'nota', intentos: 2, ...e,
+    })
+    assert.equal(r.ok, false)
+    assert.deepEqual(e.usos, [])
+  })
+
+  test('se llama una sola vez, con el intento bueno, cuando hubo reintentos', async () => {
+    const e = espias()
+    let n = 0
+    await obtenerContenidoLLM({
+      ejecutar: async () => {
+        n++
+        return n === 1
+          ? respuesta({ content: '' })
+          : respuesta({ content: '{"ok":1}' }, { usage: { prompt_tokens: 7 } })
+      },
+      etiqueta: 'nota', ...e,
+    })
+    assert.equal(e.usos.length, 1, 'un éxito, una medición')
+    assert.deepEqual(e.usos[0].usage, { prompt_tokens: 7 })
+  })
+
+  test('sin la opción no se rompe nada: el default es no loguear', async () => {
+    // Los consumidores que no la pasan tienen que seguir funcionando igual.
+    const r = await obtenerContenidoLLM({
+      ejecutar: async () => respuesta({ content: '{"ok":1}' }),
+      etiqueta: 'nota', registrar: () => {}, dormir: async () => {},
+    })
+    assert.equal(r.ok, true)
+  })
+})
+
+describe('formatearUso', () => {
+  test('devuelve null si el proveedor no manda usage', () => {
+    // Una línea vacía por nota es peor que ninguna línea.
+    const d = diagnosticar(respuesta({ content: 'x' }))
+    assert.equal(formatearUso(d, 'nota'), null)
+  })
+
+  test('trae el usage y la etiqueta, y NO el contenido crudo', () => {
+    // En un éxito el crudo es la extracción completa: loguearla por cada nota
+    // taparía justamente lo que se quiere leer.
+    const d = diagnosticar(
+      respuesta({ content: 'un json larguísimo con datos de la victima' }, { usage: { prompt_tokens: 900 } })
+    )
+    const linea = formatearUso(d, 'https://medio/nota')!
+    assert.match(linea, /prompt_tokens/)
+    assert.match(linea, /https:\/\/medio\/nota/)
+    assert.ok(!linea.includes('victima'), 'el contenido crudo no debería ir en el log de éxito')
   })
 })

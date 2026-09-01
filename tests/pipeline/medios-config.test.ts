@@ -6,6 +6,16 @@
  * forma. Al extraer MEDIOS a ./medios-config —que el health-check también
  * necesita— pasó a poder importarse de verdad: con tipos, sin regex, y sin que
  * un cambio de formato del archivo rompa el test por el motivo equivocado.
+ *
+ * RAMA `estable-premio`: esta rama reduce deliberadamente los 66 medios activos
+ * de producción a 13, uno fuerte por región geográfica, para la presentación al
+ * premio. No es una regresión de cobertura — es una decisión explícita: con 66
+ * medios la corrida diaria pasó a usar GitHub Actions como si fuera un servidor
+ * (~80 min/día contra sitios de terceros), lo cual viola sus políticas de uso.
+ * La migración a un host propio con descubrimiento por feeds sigue en curso en
+ * `claude/gifted-rubin-ad1Tg`; esta rama prioriza estabilidad y bajo riesgo
+ * operativo para la demo, no escala. Los tests de abajo reflejan ESTE recorte
+ * a propósito, no el de producción — no restaurarlos "por las dudas".
  */
 
 import { test, describe } from 'node:test'
@@ -58,44 +68,46 @@ describe('la lista MEDIOS no tiene entradas rotas', () => {
   })
 })
 
-describe('los medios de Buenos Aires quedaron según lo que dijo el health-check', () => {
-  // La corrida de verificar-medios.yml (run 32397123698) resolvió los 9
-  // candidatos que estaban esperando. Este test fija ese resultado: no es una
-  // decisión de diseño, es lo que devolvió la verificación real.
-  const ACTIVADOS = [
+describe('los 7 candidatos de Buenos Aires del health-check existen igual, aunque acá estén desactivados', () => {
+  // En producción (master) el health-check activó estos 7. En esta rama piloto
+  // se desactivaron a propósito junto con el resto de Buenos Aires: la
+  // cobertura geográfica de 13 medios no puede darle 8 entradas a una sola
+  // provincia. Solo se verifica que sigan existiendo en la lista (no se
+  // perdieron por accidente al recortar), no que estén activos.
+  const CANDIDATOS_BA = [
     'mdp0223', 'elmarplatense', 'lanueva', '0221laplata',
     'elcomercioonline', 'vivieloeste', 'minutouno',
+    'elpopularolav', 'ecosdiarios',
   ]
-  const RECHAZADOS = {
-    // Dominio que no resuelve — el health-check evitó activar un medio muerto.
-    elpopularolav: 'DNS muerto',
-    // 403 más el indicio de paywall que ya venía marcado.
-    ecosdiarios: '403 + paywall',
-  }
 
   test('todos existen en la lista', () => {
     const ids = new Set(MEDIOS.map(m => m.id))
-    for (const id of [...ACTIVADOS, ...Object.keys(RECHAZADOS)]) {
+    for (const id of CANDIDATOS_BA) {
       assert.ok(ids.has(id), `falta el medio "${id}"`)
     }
   })
+})
 
-  test('los 7 que respondieron OK quedaron activos', () => {
-    for (const id of ACTIVADOS) {
-      assert.notEqual(
-        MEDIOS.find(m => m.id === id)?.activo, false,
-        `${id} pasó el health-check pero sigue desactivado`
-      )
-    }
-  })
+describe('la cobertura piloto es exactamente la elegida para la presentación', () => {
+  // 13 medios, uno fuerte por región, cruzados contra la corrida de producción
+  // real del 22/8 antes de elegirlos (ver el plan de la rama estable-premio).
+  // Si esta lista cambia, tiene que ser una decisión explícita, no un efecto
+  // secundario de tocar medios-config.ts por otra razón.
+  // Actualizado tras el dry-run del 31/8 a 10000 chars: lavoz, rosario3,
+  // eltribuno, norte, losandes y unoentrerios dieron 0 noticias reales (el LLM
+  // corrió y no encontró nada, no un timeout de red) y se reemplazaron por
+  // otro medio de la misma provincia. infobae y lmneuquen fallaron por
+  // ETIMEDOUT al sacar el snapshot en esa corrida — un problema de
+  // infraestructura, no de contenido — así que se dejaron sin tocar.
+  const PILOTO = [
+    'infobae', 'eldia', 'cadena3', 'airedesantafe', 'diariouno',
+    'nuevodiariasalta', 'lagaceta', 'diariochaco', 'ellitoralcorrientes',
+    'ahoraentrerios', 'lmneuquen', 'rionegro', 'diariodecuyo',
+  ]
 
-  test('los 2 que fallaron siguen desactivados', () => {
-    for (const [id, motivo] of Object.entries(RECHAZADOS)) {
-      assert.equal(
-        MEDIOS.find(m => m.id === id)?.activo, false,
-        `${id} se activó pese a fallar el health-check (${motivo})`
-      )
-    }
+  test('son exactamente estos 13, ni uno más ni uno menos', () => {
+    const activos = MEDIOS.filter(m => m.activo !== false).map(m => m.id).sort()
+    assert.deepEqual(activos, [...PILOTO].sort())
   })
 })
 
@@ -115,21 +127,34 @@ describe('los medios con fallo inequívoco están desactivados', () => {
   }
 })
 
-describe('cobertura por provincia', () => {
-  test('Formosa quedó sin medios: hay que reemplazar lamanana', () => {
-    // Se documenta el hueco en vez de dejarlo pasar en silencio. Cuando se
-    // agregue un medio de Formosa, este test se invierte.
-    const formosa = MEDIOS.filter(m => m.provincia === 'Formosa' && m.activo !== false)
-    assert.equal(
-      formosa.length, 0,
-      'ya hay un medio de Formosa activo: actualizar este test y cerrar el hueco'
-    )
+describe('cobertura por provincia — piloto de estable-premio', () => {
+  // En producción (master) Buenos Aires tiene ≥12 medios activos porque es la
+  // provincia con más homicidios. Acá, con solo 13 medios totales, la meta
+  // explícita es UN medio fuerte por región (ver el plan de estable-premio) —
+  // darle 12 a Buenos Aires dejaría a la mitad del país sin ningún pin en la
+  // demo. Formosa, CABA propia, Misiones, Jujuy, etc. quedan fuera del piloto
+  // a propósito: es una cobertura reducida, no un hueco accidental.
+  test('Buenos Aires tiene exactamente 1 medio activo en el piloto', () => {
+    const ba = MEDIOS.filter(m => m.provincia === 'Buenos Aires' && m.activo !== false)
+    assert.deepEqual(ba.map(m => m.id), ['eldia'])
   })
 
-  test('Buenos Aires tiene al menos 12 medios activos', () => {
-    // Es la provincia con más homicidios y la audiencia principal del mapa.
-    const ba = MEDIOS.filter(m => m.provincia === 'Buenos Aires' && m.activo !== false)
-    assert.ok(ba.length >= 12, `solo ${ba.length} medios activos en Buenos Aires`)
+  test('cada provincia del piloto aporta como máximo 1 medio activo', () => {
+    // Es la propiedad que define "cobertura geográfica, no volumen": si algún
+    // día se activa un segundo medio de la misma provincia sin desactivar el
+    // primero, este test avisa en vez de dejarlo pasar en silencio.
+    const porProvincia = new Map<string, string[]>()
+    for (const m of MEDIOS) {
+      if (m.activo === false || !m.provincia) continue
+      const lista = porProvincia.get(m.provincia) ?? []
+      lista.push(m.id)
+      porProvincia.set(m.provincia, lista)
+    }
+    const conMasDeUno = [...porProvincia.entries()].filter(([, ids]) => ids.length > 1)
+    assert.deepEqual(
+      conMasDeUno, [],
+      `provincias con más de 1 medio activo: ${conMasDeUno.map(([p, ids]) => `${p}: ${ids.join(', ')}`).join(' | ')}`
+    )
   })
 })
 

@@ -118,6 +118,21 @@ export function formatearDiagnostico(
   return `${etiqueta} | ${partes.join(' ')}`
 }
 
+/**
+ * Línea de log del camino de éxito: solo el consumo.
+ *
+ * No reusa `formatearDiagnostico` a propósito: ese incluye el contenido crudo,
+ * que en un éxito es la extracción completa. Loguearla por cada nota llenaría
+ * la corrida de ruido y taparía justamente lo que se quiere leer.
+ *
+ * Devuelve null si el proveedor no manda `usage`: no hay nada que medir y una
+ * línea vacía por nota es peor que ninguna.
+ */
+export function formatearUso(d: DiagnosticoLLM, etiqueta: string): string | null {
+  if (!d.usage) return null
+  return `📊 ${etiqueta} | usage=${JSON.stringify(d.usage)} largo_contenido=${d.largoContenido}`
+}
+
 export interface OpcionesLlamada {
   /** Hace la llamada al proveedor. Se invoca una vez por intento. */
   ejecutar: () => Promise<unknown>
@@ -137,6 +152,21 @@ export interface OpcionesLlamada {
   dormir?: (ms: number) => Promise<void>
   /** Inyectable para no ensuciar la salida en los tests. */
   registrar?: (mensaje: string) => void
+  /**
+   * Se invoca con el diagnóstico del intento que SALIÓ BIEN.
+   *
+   * POR QUÉ EXISTE
+   * El diagnóstico se registraba solo en los intentos fallidos. Eso alcanzaba
+   * para encontrar por qué fallaban, pero cuando los fallos bajaron quedamos
+   * sin un solo `prompt_tokens` real con el que elegir cuánto texto mandarle al
+   * modelo — y esos recortes (el snapshot del sitio, el cuerpo de la nota) son
+   * justo donde se pierden femicidios. Sin medir el éxito, los límites se
+   * eligen a ojo.
+   *
+   * Default `undefined` = no loguea nada, para que ningún consumidor herede
+   * ruido que no pidió.
+   */
+  registrarUso?: (diagnostico: DiagnosticoLLM) => void
 }
 
 export type ResultadoLlamada =
@@ -152,6 +182,9 @@ const dormirReal = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
  * Deja registrado el diagnóstico de CADA intento fallido: si el problema es del
  * proveedor, el patrón se ve en los logs (por ejemplo, `finish_reason=length`
  * en todos, o un `usage` con muchos tokens de salida y contenido vacío).
+ *
+ * Y con `registrarUso`, también el consumo del intento que salió bien — que es
+ * el único dato con el que se pueden elegir los recortes de entrada.
  */
 export async function obtenerContenidoLLM({
   ejecutar,
@@ -161,6 +194,7 @@ export async function obtenerContenidoLLM({
   esperaMs = intento => 500 * intento,
   dormir = dormirReal,
   registrar = console.error,
+  registrarUso,
 }: OpcionesLlamada): Promise<ResultadoLlamada> {
   let ultimoMotivo = 'sin intentos'
 
@@ -171,6 +205,8 @@ export async function obtenerContenidoLLM({
       diagnostico = diagnosticar(respuesta)
 
       if (!diagnostico.vacio && (!aceptar || aceptar(diagnostico.contenido))) {
+        // Antes del `return`: es la única rama donde el éxito se puede medir.
+        registrarUso?.(diagnostico)
         if (intento > 1) {
           registrar(`✅ ${etiqueta} | resuelto en el intento ${intento}/${intentos}`)
         }

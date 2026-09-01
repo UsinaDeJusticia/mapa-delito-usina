@@ -66,9 +66,18 @@ COPY (
 (FORMAT PARQUET, COMPRESSION ZSTD);
 
 -- ─── Hechos SAT individuales (para filtros client-side) ──
+--
+-- Sin hd.id (UUID) a propósito. Este Parquet se sirve como archivo estático
+-- público desde Vercel: es microdato fila por fila (sexo, vínculo, femicidio,
+-- contexto) de la base SAT. El UUID no aporta nada a las consultas del mapa
+-- (ninguna en src/hooks/useMapaData.ts ni useH3Density.ts lo selecciona; todas
+-- piden columnas explícitas, nunca SELECT *) y sí facilita cruzar una fila de
+-- este archivo público con el registro interno correspondiente en la base. Es
+-- el hallazgo #11 del plan de seguridad — las coordenadas ya eran centroides
+-- provinciales, no domicilios, pero el resto de la recomendación (agregación
+-- a nivel celda, supresión de celdas chicas) queda para más adelante.
 COPY (
   SELECT
-    hd.id,
     hd.anio,
     u.provincia_id,
     u.provincia,

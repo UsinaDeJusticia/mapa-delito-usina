@@ -209,7 +209,23 @@ export const comandos = {
   version: (): string[] => ['--version'],
   abrir: (url: string): string[] => ['open', validarUrlNavegable(url)],
   abrirEnBlanco: (): string[] => ['open', 'about:blank'],
-  esperarCarga: (): string[] => ['wait', '--load', 'networkidle'],
+  /**
+   * `domcontentloaded` en vez de `networkidle`.
+   *
+   * Verificado con `npx agent-browser wait --help`: `--load` acepta
+   * `load | domcontentloaded | networkidle`, así que el valor SÍ está
+   * soportado — no es un fallback por falta de soporte.
+   *
+   * El cambio es porque `networkidle` casi nunca llega a cumplirse en un
+   * sitio de noticias: publicidad, tracking y widgets siguen haciendo
+   * requests en segundo plano indefinidamente, así que la espera agota
+   * siempre el timeout completo. En la corrida de producción del 22/8 eso se
+   * vio como 37 timeouts de `wait` (~30s cada uno, ~18-20 de los 79 minutos
+   * totales). `domcontentloaded` se cumple apenas el DOM está armado, que es
+   * lo que necesitan los pasos siguientes (snapshot, click, getUrl, getTexto)
+   * — no dependen de que la publicidad termine de cargar.
+   */
+  esperarCarga: (): string[] => ['wait', '--load', 'domcontentloaded'],
   snapshotInteractivo: (): string[] => ['snapshot', '-i', '-c'],
   snapshotSelector: (selector: string): string[] => ['snapshot', '-s', selector, '-c'],
   getUrl: (): string[] => ['get', 'url'],
