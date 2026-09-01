@@ -9,9 +9,10 @@
  *                    <base>, ni se embebe en iframes.
  *
  *   CSP_OBSERVADA  → se envía como `Content-Security-Policy-Report-Only`
- *                    (NO bloquea, solo reporta en la consola del navegador).
- *                    Todo lo que toca cómo carga el mapa: script-src,
- *                    connect-src, img-src, worker-src.
+ *                    (NO bloquea, solo reporta — a /api/csp-report). Todo lo
+ *                    que toca cómo carga el mapa y depende de una lista de
+ *                    dominios de terceros: script-src, connect-src, img-src,
+ *                    style-src, font-src, default-src, form-action.
  *
  * POR QUÉ NO VA TODO EN MODO BLOQUEO
  * Google Maps carga scripts, tiles e imágenes desde una lista de dominios que
@@ -27,14 +28,21 @@
  * bloquea.
  *
  * CÓMO PASAR CSP_OBSERVADA A MODO BLOQUEO (el paso que queda pendiente)
- *   1. Abrir el mapa desplegado con la consola del navegador abierta.
- *      Recorrer: modo SNIC, modo SAT, filtros, click en provincia, zoom hasta
- *      que carguen los departamentos, y el panel /admin.
- *   2. Anotar cada mensaje que empiece con
- *      "[Report Only] Refused to ..." — cada uno es un dominio que falta.
+ *   1. Mirar los logs de /api/csp-report en producción durante unos días de
+ *      tráfico real (antes no había ningún endpoint recolectando esto — el
+ *      Report-Only mandaba las violaciones a la consola de cada visitante,
+ *      que nadie estaba mirando).
+ *   2. Cada línea "[Report Only] Refused to ..." es un dominio que falta.
  *   3. Agregarlo a la directiva correspondiente de acá.
- *   4. Repetir hasta que no aparezca ninguno.
+ *   4. Repetir hasta que no aparezca ninguno en un período representativo.
  *   5. Recién entonces mover esas directivas a CSP_ESTRICTA.
+ *
+ * `worker-src`, `media-src` y `frame-src` ya se movieron a CSP_ESTRICTA sin
+ * pasar por este proceso: a diferencia de script-src/connect-src/img-src/
+ * style-src, las tres son verificables por lectura de código sin ambigüedad
+ * (no hay <video>/<audio>, no hay <iframe>, y el worker de DuckDB solo usa
+ * 'self' y blob:) — no dependen de una lista de dominios de terceros que
+ * Google pueda cambiar sin aviso.
  */
 
 /** Une directivas en el formato de header. */
@@ -64,10 +72,23 @@ function serializar(directivas) {
 //                         que redirige a accounts.google.com, y el trato de los
 //                         redirects en form-action difiere entre navegadores.
 //                         Va en la capa observada hasta confirmarlo.
+//   worker-src            La app solo crea workers propios ('self', el de
+//                         DuckDB) o vía blob: (el fallback a jsDelivr sigue
+//                         armando el worker como blob local). No hay ningún
+//                         caso de uso de un worker servido directo desde un
+//                         host de terceros.
+//   media-src 'none'      No hay <video> ni <audio> en ningún componente.
+//   frame-src 'none'      No hay <iframe> en ningún componente — coherente
+//                         con frame-ancestors 'none' de arriba (esta app ni
+//                         embebe ni se deja embeber).
 const DIRECTIVAS_ESTRICTAS = {
   'object-src': ["'none'"],
   'base-uri': ["'self'"],
   'frame-ancestors': ["'none'"],
+  'worker-src': ["'self'", 'blob:'],
+  'media-src': ["'none'"],
+  'frame-src': ["'none'"],
+  'report-uri': ['/api/csp-report'],
 }
 
 // ════════════════════════════════════════════
@@ -104,10 +125,13 @@ const DIRECTIVAS_OBSERVADAS = {
   // venir un script, que es lo que corta la exfiltración a un host externo.
   'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'", ...GOOGLE_MAPS_SCRIPTS, ...DUCKDB_CDN],
 
-  // Tailwind y los estilos inline de infowindow-dom.ts (que setean el atributo
-  // style de cada nodo) necesitan 'unsafe-inline' acá.
-  'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-  'font-src': ["'self'", 'data:', 'https://fonts.gstatic.com'],
+  // Tailwind necesita 'unsafe-inline' acá. Sin dominio de Google Fonts: el
+  // layout usa fuentes locales (GeistVF.woff vía next/font/local), y el audit
+  // de seguridad de agosto no encontró ningún @import ni <link> a
+  // fonts.googleapis.com en el código — era una entrada preventiva sin uso
+  // real detectado, y de más ensancha la política sin necesidad.
+  'style-src': ["'self'", "'unsafe-inline'"],
+  'font-src': ["'self'", 'data:'],
 
   // data: es imprescindible: los marcadores circulares del mapa son SVG
   // embebidos como data URI (ver MarcadoresCirculares.tsx).
@@ -116,15 +140,12 @@ const DIRECTIVAS_OBSERVADAS = {
   // 'self' cubre las rutas /api/* y los Parquet de /data/.
   'connect-src': ["'self'", ...GOOGLE_MAPS_SCRIPTS, ...DUCKDB_CDN],
 
-  // El worker de DuckDB: local ('self') o, en el fallback a CDN, un blob.
-  'worker-src': ["'self'", 'blob:'],
-
-  'media-src': ["'none'"],
   'manifest-src': ["'self'"],
 
   // Ver la nota de form-action arriba: acá se observa antes de bloquear.
   'form-action': ["'self'"],
-  'frame-src': ["'none'"],
+
+  'report-uri': ['/api/csp-report'],
 }
 
 export const CSP_ESTRICTA = serializar(DIRECTIVAS_ESTRICTAS)
