@@ -93,10 +93,16 @@ describe('la cobertura piloto es exactamente la elegida para la presentación', 
   // real del 22/8 antes de elegirlos (ver el plan de la rama estable-premio).
   // Si esta lista cambia, tiene que ser una decisión explícita, no un efecto
   // secundario de tocar medios-config.ts por otra razón.
+  // Actualizado tras el dry-run del 31/8 a 10000 chars: lavoz, rosario3,
+  // eltribuno, norte, losandes y unoentrerios dieron 0 noticias reales (el LLM
+  // corrió y no encontró nada, no un timeout de red) y se reemplazaron por
+  // otro medio de la misma provincia. infobae y lmneuquen fallaron por
+  // ETIMEDOUT al sacar el snapshot en esa corrida — un problema de
+  // infraestructura, no de contenido — así que se dejaron sin tocar.
   const PILOTO = [
-    'infobae', 'eldia', 'lavoz', 'rosario3', 'losandes', 'eltribuno',
-    'lagaceta', 'norte', 'ellitoralcorrientes', 'unoentrerios',
-    'lmneuquen', 'rionegro', 'diariodecuyo',
+    'infobae', 'eldia', 'cadena3', 'airedesantafe', 'diariouno',
+    'nuevodiariasalta', 'lagaceta', 'diariochaco', 'ellitoralcorrientes',
+    'ahoraentrerios', 'lmneuquen', 'rionegro', 'diariodecuyo',
   ]
 
   test('son exactamente estos 13, ni uno más ni uno menos', () => {
