@@ -65,8 +65,10 @@ jobs:
           AUTH_SECRET: ci-placeholder-secret-de-32-caracteres-minimo
           NEXTAUTH_URL: http://localhost:3000
 
-      # Informativo: no bloquea el PR. Las vulnerabilidades pendientes de
-      # Next.js se tratan en su propia rama de migración.
+      # Informativo: no bloquea el PR. Las vulnerabilidades pendientes hoy
+      # (postcss vía next, deepmerge-ts vía la CLI de prisma) están evaluadas
+      # y aceptadas como riesgo — ver la tabla en docs/security-hardening.md,
+      # sección "Vulnerabilidades de npm aceptadas (y por qué)".
       - name: npm audit
         run: npm audit
         continue-on-error: true

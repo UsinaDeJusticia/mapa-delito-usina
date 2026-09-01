@@ -42,6 +42,30 @@ secretos, strings de conexion ni credenciales parcialmente censuradas.
 9. Coordinar migraciones y despliegue para que el codigo nuevo no reciba trafico
    antes de que el esquema requerido este aplicado.
 
+## Vulnerabilidades de npm aceptadas (y por qué)
+
+`npm audit --omit=dev --json` reporta hoy dos cadenas en severidad `high` (más
+el aviso `moderate` de `next` que arrastra la de `postcss`). Ninguna de las dos
+es explotable en producción: ambas requieren un insumo (CSS o config) que solo
+el propio equipo controla, nunca un visitante del sitio.
+
+| Cadena | Severidad | Dónde corre | Input | Por qué no es explotable en producción | Cuándo se cierra |
+|---|---|---|---|---|---|
+| `postcss@8.4.31`, copia interna de `next@15.5.25` | high | build time (`next build` procesa Tailwind + `globals.css`) | CSS propio del repo | Los CVE (GHSA-qx2v-qp2m-jg93 XSS en stringify; GHSA-6g55-p6wh-862q / GHSA-fxqj-rqcc-2cmp / GHSA-r28c-9q8g-f849 lectura de archivos vía `sourceMappingURL`) requieren CSS controlado por un atacante entrando al stringifier. Nadie externo mete CSS en nuestro build. | Migración a Next 16 (proyecto aparte, fuera de esta ronda) |
+| `deepmerge-ts@7.1.5` vía `@prisma/config` vía `prisma` (CLI) | high | build/CI time (`prisma generate`, `prisma migrate`) — `@prisma/config` hace `await import("deepmerge-ts")` para mergear `prisma.config` | archivo de config propio | GHSA-ggr8-5vv4-36mx es stack exhaustion al mergear un objeto recursivo; el único input es nuestro propio config. `@prisma/client` (el runtime que corre en producción) no lo usa en absoluto. | No hay fix upstream: `@prisma/config` pinea `deepmerge-ts@7.1.5` exacto hasta la 7.10.0 (ya un major de Prisma). Se revisa en cada bump de Prisma. |
+
+Notas:
+
+- `sharp` **ya quedó resuelto**: el bump de `next` a `15.5.25` trajo
+  `sharp@0.35.4` (verificado con `npm ls sharp`), que no tiene los CVE
+  anteriores. No requiere ninguna acción más.
+- `npm audit fix --force` propone bajar `prisma` a `6.12.0` para "resolver"
+  `deepmerge-ts`. Es un artefacto del resolver de npm buscando cualquier árbol
+  sin el aviso, no una solución real — **no hacerlo**: es un downgrade de
+  major que no toca la causa (la CLI de Prisma sigue important-eando
+  `deepmerge-ts` en versiones futuras también) y puede romper el schema o los
+  comandos de migración.
+
 ## Decision sobre el incidente
 
 El repositorio permanece publico y no se reescribe su historial. La rotacion es
