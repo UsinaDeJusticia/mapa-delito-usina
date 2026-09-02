@@ -1,0 +1,63 @@
+name: Auditar CSP
+
+# Junta datos reales para decidir la Fase F del plan de seguridad: qué
+# directivas de la CSP (hoy en Report-Only en src/config/csp.mjs) se pueden
+# pasar a bloqueo sin dejar el mapa en blanco.
+#
+# POR QUÉ EN ACTIONS Y NO A MANO
+# `/api/csp-report` existe, pero sus logs se pierden en 1h en el plan Hobby de
+# Vercel — no hay forma práctica de juntar violaciones ahí. Este workflow
+# automatiza lo que csp.mjs describe como paso manual: recorrer el sitio con
+# un browser real y capturar cada "Refused to ..." de la consola.
+#
+# CERO RIESGO DE PRODUCCIÓN: no escribe nada, solo navega y lee. Sirve tanto
+# contra producción (default) como contra un preview de Vercel — pasale su URL
+# en el input.
+#
+# NUNCA a schedule: es una herramienta de diagnóstico que se corre cuando se
+# necesita el dato (antes de la Fase F, o para revalidar un preview), no una
+# corrida periódica.
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'URL a auditar (producción por defecto; también sirve un preview de Vercel)'
+        type: string
+        default: 'https://mapa-delito-usina.vercel.app'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: auditar-csp
+  cancel-in-progress: true
+
+jobs:
+  auditar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Instalar Chromium (playwright)
+        run: npx playwright install --with-deps chromium
+
+      # `tee` y no `>>`: el reporte va al job summary —donde se lee cómodo— Y
+      # TAMBIÉN al log del step, que es lo que se puede grepear, descargar y
+      # consultar por API. Mismo patrón que verificar-medios.yml.
+      - name: Auditar CSP
+        run: |
+          npx tsx scripts/ci/auditar-csp.ts --url="${{ inputs.url }}" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
