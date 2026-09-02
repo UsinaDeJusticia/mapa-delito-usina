@@ -8,6 +8,15 @@ const nextConfig = {
   // muerta. Si algún día hay que excluir un paquete del bundle del servidor, la
   // clave nueva es `serverExternalPackages`.
   compress: true,
+  // El proyecto no usa `next/image` en ningún archivo (verificado: `grep -rn
+  // "next/image" src/` no devuelve nada). El optimizador `/_next/image` queda
+  // habilitado por defecto igual, procesando cualquier URL que se le pase con
+  // `sharp`/libvips — superficie de ataque expuesta sin un solo uso real.
+  // Apagarlo con `unoptimized: true` no cambia nada visible y garantiza que
+  // ese código no corra en runtime, más allá de que hoy ya esté parcheado.
+  images: {
+    unoptimized: true,
+  },
   async headers() {
     return [
       {
