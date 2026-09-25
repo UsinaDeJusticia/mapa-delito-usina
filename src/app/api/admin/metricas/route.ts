@@ -16,7 +16,13 @@ export async function GET() {
   try {
     ;[resumenSemanas, precisionPorMedio, ultimasCorridas, pendientes] = await Promise.all([
 
-    // Resumen semanal: scrapeados, extraídos, verificados, descartados
+    // Resumen semanal: scrapeados, extraídos, verificados, descartados.
+    //
+    // Solo hechos de la fuente periodística: `es_agregado = false` también
+    // incluye los ~16.700 microdatos oficiales del SAT, que se contaban como
+    // "scrapeados" (en la semana de cada reingesta, y en el total siempre).
+    // Las semanas se cortan en hora argentina: DATE_TRUNC sobre la columna en
+    // UTC cerraba la semana el domingo a las 21 hs.
     prisma.$queryRaw<Array<{
       semana: string
       scrapeados: bigint
@@ -25,8 +31,8 @@ export async function GET() {
       falsos_positivos: bigint
     }>>`
       SELECT
-        TO_CHAR(DATE_TRUNC('week', hd.created_at), 'DD/MM') AS semana,
-        COUNT(*) FILTER (WHERE hd.es_agregado = false) AS scrapeados,
+        TO_CHAR(DATE_TRUNC('week', hd.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires'), 'DD/MM') AS semana,
+        COUNT(*) AS scrapeados,
         COUNT(*) FILTER (WHERE hd.confianza = 'VERIFICADO') AS verificados,
         COUNT(*) FILTER (WHERE hd.confianza = 'PRELIMINAR') AS preliminares,
         COUNT(*) FILTER (
@@ -38,10 +44,11 @@ export async function GET() {
           )
         ) AS falsos_positivos
       FROM hechos_delictivos hd
+      JOIN fuentes f ON f.id = hd.fuente_id AND f.tipo = 'PERIODISTICA'
       WHERE hd.es_agregado = false
         AND hd.created_at >= NOW() - INTERVAL '8 weeks'
-      GROUP BY DATE_TRUNC('week', hd.created_at)
-      ORDER BY DATE_TRUNC('week', hd.created_at) DESC
+      GROUP BY 1, DATE_TRUNC('week', hd.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires')
+      ORDER BY DATE_TRUNC('week', hd.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires') DESC
       LIMIT 8
     `,
 
@@ -70,7 +77,8 @@ export async function GET() {
       LIMIT 20
     `,
 
-    // Totales generales
+    // Totales generales. COUNT(DISTINCT): el LEFT JOIN con revisiones_pipeline
+    // da una fila por revisión, y cada corrección contaba el hecho dos veces.
     prisma.$queryRaw<[{
       total_pipeline: bigint
       verificados: bigint
@@ -78,11 +86,12 @@ export async function GET() {
       revisados: bigint
     }]>`
       SELECT
-        COUNT(*) FILTER (WHERE es_agregado = false) AS total_pipeline,
-        COUNT(*) FILTER (WHERE confianza = 'VERIFICADO') AS verificados,
-        COUNT(*) FILTER (WHERE confianza = 'PRELIMINAR') AS preliminares,
+        COUNT(DISTINCT hd.id) AS total_pipeline,
+        COUNT(DISTINCT hd.id) FILTER (WHERE hd.confianza = 'VERIFICADO') AS verificados,
+        COUNT(DISTINCT hd.id) FILTER (WHERE hd.confianza = 'PRELIMINAR') AS preliminares,
         COUNT(DISTINCT rp.hecho_id) AS revisados
       FROM hechos_delictivos hd
+      JOIN fuentes f ON f.id = hd.fuente_id AND f.tipo = 'PERIODISTICA'
       LEFT JOIN revisiones_pipeline rp ON rp.hecho_id = hd.id
       WHERE hd.es_agregado = false
     `,
@@ -91,6 +100,7 @@ export async function GET() {
     prisma.$queryRaw<[{ pendientes: bigint }]>`
       SELECT COUNT(*)::bigint AS pendientes
       FROM hechos_delictivos hd
+      JOIN fuentes f ON f.id = hd.fuente_id AND f.tipo = 'PERIODISTICA'
       WHERE hd.confianza = 'PRELIMINAR'
         AND hd.es_agregado = false
         AND NOT EXISTS (
