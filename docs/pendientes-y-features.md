@@ -105,7 +105,7 @@ Fuente: `analisis-2026-09.md` §4.4 y `CLAUDE.md` §11.
 
 ## 7. Cobertura de medios del pipeline
 
-Fuente: `docs/medios-auditoria.md` y `scripts/pipeline/medios-config.ts`.
+Fuente: `docs/medios-auditoria.md` y `src/config/medios-pipeline.ts`.
 
 1. **Medios activos:** 13, uno fuerte por región (recorte de la rama `estable-premio`). El resto está en `activo: false`; desde el panel se pueden sumar a una corrida enfocada con "Incluir medios no verificados".
 2. **Medios bloqueados por paywall** (`activo: false`): `clarin`, `lanacion`, `lacapitalrosario` (Santa Fe). Se pueden invocar manualmente con `--medio=id` si se consigue acceso.

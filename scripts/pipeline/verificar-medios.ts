@@ -30,7 +30,7 @@
  * contenedor de desarrollo no tiene salida a internet.
  */
 
-import { MEDIOS, type MedioConfig } from './medios-config'
+import { MEDIOS, type MedioConfig } from '../../src/config/medios-pipeline'
 
 const TIMEOUT_MS = 20_000
 

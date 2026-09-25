@@ -25,7 +25,7 @@ import {
   UMBRAL_DIAS_FRESCURA,
   type ResultadoFeed,
 } from '../../scripts/pipeline/probar-feeds'
-import { MEDIOS } from '../../scripts/pipeline/medios-config'
+import { MEDIOS } from '../../src/config/medios-pipeline'
 
 const RAIZ = process.cwd()
 

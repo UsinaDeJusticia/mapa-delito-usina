@@ -22,7 +22,7 @@ export interface MedioSeleccionable {
 export interface ParametrosCorrida {
   /** Ids puntuales. Si hay alguno, manda sobre `provincias`. */
   medios: string[]
-  /** Provincias en foco, como figuran en medios-config. Vacío = corrida completa. */
+  /** Provincias en foco, como figuran en MEDIOS (src/config/medios-pipeline.ts). Vacío = corrida completa. */
   provincias: string[]
   /** Sumar los medios nacionales (Infobae y otros) a una corrida por provincias. */
   incluirNacionales: boolean
@@ -102,7 +102,7 @@ function sinRepetidos(items: string[]): string[] {
 
 export interface CatalogoValidacion {
   idsMedios: ReadonlySet<string>
-  /** Provincias válidas, con el nombre canónico que usa medios-config. */
+  /** Provincias válidas, con el nombre canónico que usa MEDIOS. */
   provincias: readonly string[]
 }
 

@@ -17,7 +17,7 @@ import {
   validarParametros,
   type MedioSeleccionable,
 } from '../../src/lib/pipeline/opciones-corrida'
-import { MEDIOS } from '../../scripts/pipeline/medios-config'
+import { MEDIOS } from '../../src/config/medios-pipeline'
 
 const MEDIOS_PRUEBA: MedioSeleccionable[] = [
   { id: 'infobae', nombre: 'Infobae', tipo: 'nacional', activo: true },

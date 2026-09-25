@@ -82,6 +82,7 @@ mapa-delito-usina/
 │   │           └── useGeolocalizacion.ts# GPS del browser, no bloquea carga
 │   ├── config/
 │   │   ├── mapStyles.ts                 # Estilos Google Maps + helpers de color
+│   │   ├── medios-pipeline.ts           # Lista MEDIOS (pipeline, health-check y panel; en src/ por Vercel, ver §9)
 │   │   └── modelos-pipeline.ts          # Perfiles de modelo LLM (economico/preciso/openrouter/local)
 │   ├── lib/
 │   │   ├── auth/
@@ -132,7 +133,6 @@ mapa-delito-usina/
 │   ├── pipeline/
 │   │   ├── scrapear-medios.ts           # Pipeline de scraping (13 medios activos; alcance por argumentos)
 │   │   ├── agente-local.ts              # Agente que ejecuta corridas en la PC del equipo (npm run agente)
-│   │   ├── medios-config.ts             # Lista MEDIOS (compartida con health-check y panel)
 │   │   ├── cargar-env.ts                # Carga .env/.env.local antes que cualquier otro módulo
 │   │   ├── verificar-medios.ts          # Health-check de las URLs de los medios
 │   │   └── probar-feeds.ts              # Probe de feeds RSS/sitemap
@@ -272,7 +272,7 @@ Los IDs de modelo de Go son overridables por env var (`OPENCODE_MODELO_ECONOMICO
 `openrouter.ts` consulta los últimos 3 casos verificados por humanos en `revisiones_pipeline` y los inyecta como ejemplos en cada llamada al LLM. Se cachea 5 minutos para no repetir la query en cada noticia.
 
 ### Medios activos
-13 medios con `activo: true`, uno fuerte por región (`scripts/pipeline/medios-config.ts`). El resto está en `activo: false`: una corrida enfocada del panel puede sumar los no verificados de una provincia. Clarín, La Nación y La Capital Rosario están desactivados por paywall y nunca entran en una corrida por provincia.
+13 medios con `activo: true`, uno fuerte por región (`src/config/medios-pipeline.ts`). El resto está en `activo: false`: una corrida enfocada del panel puede sumar los no verificados de una provincia. Clarín, La Nación y La Capital Rosario están desactivados por paywall y nunca entran en una corrida por provincia.
 
 ---
 
@@ -364,6 +364,7 @@ Chips de filtros (Sexo, Arma, Vínculo, Lugar). **No tiene posicionamiento propi
 - **IDs de provincias**: código INDEC 2 dígitos con cero (`'06'` = Buenos Aires). Siempre `padStart(2, '0')`.
 - **SSE**: reconecta automáticamente cuando el servidor cierra la conexión (límite Vercel 270s). Usar con polling de respaldo para cubrir múltiples instancias. El cursor es un id entero y cada evento lleva `id:` (el navegador retoma con `Last-Event-ID`); nunca un timestamp de JS, que pierde los microsegundos de Postgres.
 - **Columnas DATE en el cliente** (`fecha_hecho`): formatear con `timeZone: 'UTC'`. En la zona del navegador (UTC-3) la medianoche UTC cae el día anterior.
+- **Vercel no sube `scripts/` ni `docs/`** (`.vercelignore`): nada de `src/` puede importar de ahí. Lo que comparten la app y los scripts va en `src/` (`src/config/medios-pipeline.ts`, `src/lib/pipeline/`). La CI de GitHub compila con el repo completo y no lo ve; lo vigila `tests/ci/vercelignore.test.ts`.
 - **Procesos externos**: siempre `execFile`/`spawn` con array de argumentos y `shell: false` (ver `browser-cmd.ts`). En Windows no se pueden lanzar `.cmd` sin shell: apuntar al binario nativo.
 
 ---

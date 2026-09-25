@@ -19,7 +19,7 @@ import {
   esNacional,
   validarParametros,
 } from '@/lib/pipeline/opciones-corrida'
-import { MEDIOS } from '../../../../../scripts/pipeline/medios-config'
+import { MEDIOS } from '@/config/medios-pipeline'
 
 export const dynamic = 'force-dynamic'
 

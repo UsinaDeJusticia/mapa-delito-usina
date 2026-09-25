@@ -26,7 +26,7 @@ import os from 'node:os'
 import path from 'node:path'
 import type { CorridaPipeline } from '@prisma/client'
 import { prisma } from '../../src/lib/mapa/queries'
-import { MEDIOS } from './medios-config'
+import { MEDIOS } from '../../src/config/medios-pipeline'
 import {
   agregarLineas,
   cerrarHuerfanas,

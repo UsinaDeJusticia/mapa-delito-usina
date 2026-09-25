@@ -6,6 +6,11 @@
  * (verificar-medios.ts) la necesita, y los tests la parseaban con regex sobre el
  * texto del archivo — frágil y sin tipos.
  *
+ * Vive en src/ y no en scripts/ porque el panel /admin/pipeline también la
+ * importa, y Vercel no sube scripts/ (.vercelignore): desde ahí el build de
+ * producción fallaba con "Module not found" aunque la CI pasara. Lo vigila
+ * tests/ci/vercelignore.test.ts.
+ *
  * La URL que el pipeline visita de verdad es `urlPoliciales || url`: `url` es el
  * campo legado de los 10 medios originales, `urlPoliciales` el de los 64 que se
  * agregaron después. `urlBase` está declarado en esos 64 y NUNCA se lee: es dato

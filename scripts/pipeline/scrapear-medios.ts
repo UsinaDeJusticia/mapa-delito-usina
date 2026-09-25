@@ -52,7 +52,7 @@ import {
   EjecutableNoEncontradoError,
 } from '../../src/lib/pipeline/browser-cmd'
 import { esDestinoPermitido } from '../../src/lib/pipeline/url-segura'
-import { MEDIOS, type MedioConfig } from './medios-config'
+import { MEDIOS, type MedioConfig } from '../../src/config/medios-pipeline'
 import { obtenerContenidoLLM, formatearUso } from '../../src/lib/pipeline/llamada-llm'
 import {
   parsearJsonLLM,
