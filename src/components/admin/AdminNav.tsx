@@ -7,6 +7,7 @@ import { signOut } from 'next-auth/react'
 const LINKS = [
   { href: '/admin/dashboard', label: 'Métricas' },
   { href: '/admin/revisiones', label: 'Revisiones' },
+  { href: '/admin/pipeline', label: 'Pipeline' },
   { href: '/admin/feedback', label: 'Feedback' },
 ]
 
@@ -15,7 +16,9 @@ export default function AdminNav() {
 
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
-      <div className="max-w-4xl mx-auto px-4 py-2.5 flex items-center gap-3">
+      {/* En celulares los links bajan a su propia fila: con cuatro secciones
+          ya no entraban al lado de la marca y "Salir", y quedaban cortados. */}
+      <div className="max-w-4xl mx-auto px-4 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
         <Link
           href="/admin/dashboard"
           className="font-bold text-sm shrink-0"
@@ -24,7 +27,7 @@ export default function AdminNav() {
           Usina de Justicia
         </Link>
 
-        <nav className="flex items-center gap-1.5 overflow-x-auto">
+        <nav className="order-last w-full sm:order-none sm:w-auto flex items-center gap-1.5 overflow-x-auto">
           {LINKS.map(link => {
             const activo = pathname === link.href || pathname?.startsWith(link.href + '/')
             return (
