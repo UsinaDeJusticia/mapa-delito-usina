@@ -3,7 +3,7 @@
  *
  * Antes este test parseaba el texto de scrapear-medios.ts con regex, porque ese
  * archivo ejecuta el pipeline al importarse y no se podía leer la lista de otra
- * forma. Al extraer MEDIOS a ./medios-config —que el health-check también
+ * forma. Al extraer MEDIOS a un módulo propio —que el health-check también
  * necesita— pasó a poder importarse de verdad: con tipos, sin regex, y sin que
  * un cambio de formato del archivo rompa el test por el motivo equivocado.
  *
@@ -20,7 +20,7 @@
 
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { MEDIOS } from '../../scripts/pipeline/medios-config'
+import { MEDIOS } from '../../src/config/medios-pipeline'
 
 /** La URL que el pipeline visita: urlPoliciales gana, url es el legado. */
 function urlDe(m: (typeof MEDIOS)[number]): string {
@@ -92,7 +92,7 @@ describe('la cobertura piloto es exactamente la elegida para la presentación', 
   // 13 medios, uno fuerte por región, cruzados contra la corrida de producción
   // real del 22/8 antes de elegirlos (ver el plan de la rama estable-premio).
   // Si esta lista cambia, tiene que ser una decisión explícita, no un efecto
-  // secundario de tocar medios-config.ts por otra razón.
+  // secundario de tocar medios-pipeline.ts por otra razón.
   // Actualizado tras el dry-run del 31/8 a 10000 chars: lavoz, rosario3,
   // eltribuno, norte, losandes y unoentrerios dieron 0 noticias reales (el LLM
   // corrió y no encontró nada, no un timeout de red) y se reemplazaron por

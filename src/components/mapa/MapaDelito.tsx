@@ -49,6 +49,12 @@ const ARGENTINA_CENTER = { lat: -38.4161, lng: -63.6167 }
 const ARGENTINA_ZOOM = 4
 const QUILMES_DEPTO_ID = '06658'
 
+/** Cifra corta para el encabezado mobile: "283", "1,7 mil", "15,3 mil". */
+function cifraCompacta(n: number): string {
+  if (n < 1000) return n.toLocaleString('es-AR')
+  return `${(n / 1000).toLocaleString('es-AR', { maximumFractionDigits: 1 })} mil`
+}
+
 // ─── Componente interno para precarga inteligente ────────
 function PrecargaInteligente() {
   const map = useMap()
@@ -277,7 +283,9 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
             {/* Stats ultra-compactas — solo mobile cuando colapsado */}
             {!controlesExpandidos && !loading && totalNacional > 0 && (
               <span className="text-[10px] text-gray-500 sm:hidden truncate">
-                {(totalNacional / 1000).toFixed(0)}k hechos
+                {/* "283", "1,7 mil". Antes era (total/1000).toFixed(0)+"k":
+                    283 hechos se mostraban como "0k". */}
+                {cifraCompacta(totalNacional)} hechos
               </span>
             )}
           </div>

@@ -29,6 +29,28 @@
  *    para siempre.
  */
 
+import { saludLLM, type ErrorProveedor, type MonitorSaludLLM } from './salud-llm'
+
+/**
+ * Códigos HTTP que no se arreglan repitiendo la misma request.
+ *
+ * El caso que lo motivó: el 400 "missing x-opencode-session" de OpenCode Go.
+ * Se reintentaba tres veces por llamada (más los reintentos propios del SDK),
+ * así que cada medio sumaba seis requests inútiles antes de rendirse. 429 y 5xx
+ * quedan afuera a propósito: esos sí suelen pasar con un segundo intento.
+ */
+export const ESTADOS_NO_REINTENTABLES: ReadonlySet<number> = new Set([400, 401, 403, 404, 422])
+
+/** El SDK de OpenAI adjunta `status` a sus errores HTTP. null si no hubo respuesta. */
+export function estadoHttpDeError(error: unknown): number | null {
+  const status = (error as { status?: unknown } | null)?.status
+  return typeof status === 'number' ? status : null
+}
+
+export function mensajeDeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
 /** Campos que la API de OpenAI define en `choices[0].message`. */
 const CAMPOS_ESTANDAR_MENSAJE = new Set([
   'role',
@@ -167,11 +189,23 @@ export interface OpcionesLlamada {
    * ruido que no pidió.
    */
   registrarUso?: (diagnostico: DiagnosticoLLM) => void
+  /**
+   * Dónde se anota el resultado de la llamada para la salud de la corrida.
+   * Default: el monitor del proceso, así ningún consumidor nuevo queda afuera
+   * del conteo por olvidarse de pasarlo. `null` = no anotar.
+   */
+  salud?: MonitorSaludLLM | null
 }
 
 export type ResultadoLlamada =
   | { ok: true; contenido: string; intentos: number }
-  | { ok: false; motivo: string; intentos: number }
+  | {
+      ok: false
+      motivo: string
+      intentos: number
+      /** Presente si el último intento terminó en error del proveedor. */
+      errorProveedor?: ErrorProveedor
+    }
 
 const dormirReal = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
 
@@ -195,14 +229,17 @@ export async function obtenerContenidoLLM({
   dormir = dormirReal,
   registrar = console.error,
   registrarUso,
+  salud = saludLLM,
 }: OpcionesLlamada): Promise<ResultadoLlamada> {
   let ultimoMotivo = 'sin intentos'
+  let ultimoError: ErrorProveedor | undefined
 
   for (let intento = 1; intento <= intentos; intento++) {
     let diagnostico: DiagnosticoLLM | null = null
     try {
       const respuesta = await ejecutar()
       diagnostico = diagnosticar(respuesta)
+      ultimoError = undefined
 
       if (!diagnostico.vacio && (!aceptar || aceptar(diagnostico.contenido))) {
         // Antes del `return`: es la única rama donde el éxito se puede medir.
@@ -210,14 +247,23 @@ export async function obtenerContenidoLLM({
         if (intento > 1) {
           registrar(`✅ ${etiqueta} | resuelto en el intento ${intento}/${intentos}`)
         }
+        salud?.registrarExito()
         return { ok: true, contenido: diagnostico.contenido, intentos: intento }
       }
 
       ultimoMotivo = diagnostico.vacio ? 'respuesta vacía' : 'contenido no usable'
     } catch (error) {
-      ultimoMotivo = `error del proveedor: ${
-        error instanceof Error ? error.message : String(error)
-      }`
+      ultimoError = { status: estadoHttpDeError(error), mensaje: mensajeDeError(error) }
+      ultimoMotivo = `error del proveedor: ${ultimoError.mensaje}`
+
+      if (ultimoError.status !== null && ESTADOS_NO_REINTENTABLES.has(ultimoError.status)) {
+        registrar(
+          `⚠️ intento ${intento}/${intentos} — ${ultimoMotivo} — ${etiqueta} | ` +
+            `no se reintenta: un HTTP ${ultimoError.status} no se arregla repitiendo la misma request`
+        )
+        salud?.registrarFalloProveedor(ultimoError)
+        return { ok: false, motivo: ultimoMotivo, intentos: intento, errorProveedor: ultimoError }
+      }
     }
 
     const detalle = diagnostico
@@ -230,5 +276,10 @@ export async function obtenerContenidoLLM({
     }
   }
 
+  if (ultimoError) {
+    salud?.registrarFalloProveedor(ultimoError)
+    return { ok: false, motivo: ultimoMotivo, intentos, errorProveedor: ultimoError }
+  }
+  salud?.registrarFalloContenido()
   return { ok: false, motivo: ultimoMotivo, intentos }
 }

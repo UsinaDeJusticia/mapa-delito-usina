@@ -25,7 +25,7 @@ import {
   resumen,
   type Resultado,
 } from '../../scripts/pipeline/verificar-medios'
-import { MEDIOS } from '../../scripts/pipeline/medios-config'
+import { MEDIOS } from '../../src/config/medios-pipeline'
 
 const RAIZ = process.cwd()
 

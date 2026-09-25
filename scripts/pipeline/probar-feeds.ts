@@ -43,7 +43,7 @@
  */
 
 import { JSDOM } from 'jsdom'
-import { MEDIOS, type MedioConfig } from './medios-config'
+import { MEDIOS, type MedioConfig } from '../../src/config/medios-pipeline'
 import { urlEfectiva, clasificarError, type Estado as EstadoError } from './verificar-medios'
 
 const TIMEOUT_MS = 12_000

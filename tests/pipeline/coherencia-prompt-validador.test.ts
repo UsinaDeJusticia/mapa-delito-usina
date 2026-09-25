@@ -36,9 +36,12 @@ const SCRAPER = readFileSync(path.join(RAIZ, 'scripts/pipeline/scrapear-medios.t
 function bloqueFormato(): string {
   const inicio = SCRAPER.indexOf('FORMATO DE SALIDA')
   assert.ok(inicio > 0, 'no se encontró el bloque de formato del Prompt 1')
-  const fin = SCRAPER.indexOf('Máximo 10 resultados', inicio)
-  assert.ok(fin > inicio, 'no se encontró el cierre del bloque de formato')
-  return SCRAPER.slice(inicio, fin)
+  // El cierre dice "Máximo N resultados"; N sale de la profundidad de la
+  // corrida (PIPELINE_MAX_NOTICIAS o el panel), así que en el código es una
+  // interpolación.
+  const cierre = SCRAPER.slice(inicio).search(/Máximo (\d+|\$\{\w+\}) resultados/)
+  assert.ok(cierre > 0, 'no se encontró el cierre del bloque de formato')
+  return SCRAPER.slice(inicio, inicio + cierre)
 }
 
 /** Los ejemplos de `ref` que el prompt le muestra al modelo. */

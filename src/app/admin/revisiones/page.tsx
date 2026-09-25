@@ -237,8 +237,9 @@ function CardRevision({
   // La API topea el array en 12; avisamos si hay más para no truncar en silencio
   const coberturasOcultas = Math.max(0, (hecho.coberturas_total ?? 0) - coberturas.length)
 
+  // fecha_hecho es un DATE: se formatea en UTC para no correrlo al día anterior (UTC-3).
   const fechaFormateada = fechaHecho
-    ? new Date(fechaHecho).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    ? new Date(fechaHecho).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' })
     : 'Fecha desconocida'
 
   return (
@@ -361,6 +362,11 @@ export default function RevisionesPage() {
   const usuarioRef = useRef(usuarioActual)
   usuarioRef.current = usuarioActual
   const ultimoTimestamp = useRef<string>(new Date(Date.now() - 60_000).toISOString())
+  // Ids de los pendientes cargados, para que un evento del SSE solo descuente
+  // del total si el caso estaba en la cola (una corrección de un caso ya
+  // revisado no es un pendiente menos).
+  const pendientesIdsRef = useRef<Set<string>>(new Set())
+  pendientesIdsRef.current = new Set(hechos.map(h => h.id))
 
   const cargar = useCallback(async () => {
     try {
@@ -421,8 +427,11 @@ export default function RevisionesPage() {
           if (msg.revisado_por === usuarioRef.current) return
 
           // Quitar de pendientes si está ahí (revisión de otro usuario)
-          setHechos(prev => prev.filter(h => h.id !== msg.hecho_id))
-          setTotal(prev => Math.max(0, prev - 1))
+          if (pendientesIdsRef.current.has(msg.hecho_id)) {
+            pendientesIdsRef.current.delete(msg.hecho_id)
+            setHechos(prev => prev.filter(h => h.id !== msg.hecho_id))
+            setTotal(prev => Math.max(0, prev - 1))
+          }
 
           // Agregar/actualizar en revisados
           setRevisados(prev => {

@@ -73,12 +73,71 @@ export const PERFILES_MODELO: Record<PerfilModelo, ConfigModelo> = {
   },
 }
 
+export function esPerfilValido(valor: string | undefined | null): valor is PerfilModelo {
+  return valor === 'economico' || valor === 'preciso' || valor === 'openrouter' || valor === 'local'
+}
+
+/**
+ * Perfil impuesto en tiempo de ejecución, por encima de PIPELINE_PERFIL_MODELO.
+ *
+ * Lo usa el pipeline cuando el perfil principal no pasa la verificación inicial
+ * y hay un respaldo con credenciales: la corrida sigue con el respaldo en vez de
+ * morir. Vive en memoria del proceso a propósito — no se escribe en process.env
+ * para que un test o una corrida siguiente no hereden el cambio sin querer.
+ */
+let perfilForzado: PerfilModelo | null = null
+
+/** `null` vuelve a respetar PIPELINE_PERFIL_MODELO. */
+export function forzarPerfil(perfil: PerfilModelo | null): void {
+  perfilForzado = perfil
+}
+
 export function getPerfilActivo(): PerfilModelo {
+  if (perfilForzado) return perfilForzado
   const perfil = process.env.PIPELINE_PERFIL_MODELO
-  if (perfil === 'preciso' || perfil === 'local' || perfil === 'openrouter') return perfil
-  return 'economico'
+  return esPerfilValido(perfil) ? perfil : 'economico'
 }
 
 export function getConfigActiva(): ConfigModelo {
   return PERFILES_MODELO[getPerfilActivo()]
+}
+
+/**
+ * Perfil de respaldo configurado, sin mirar credenciales (eso lo decide
+ * cliente-llm.ts, que es el único que sabe qué env var usa cada proveedor).
+ *
+ * PIPELINE_PERFIL_RESPALDO manda si está seteado. Si no, se ofrece
+ * 'openrouter', que es el respaldo histórico: si no tiene key, quien llama lo
+ * descarta. Nunca devuelve el mismo perfil que está activo.
+ */
+export function getPerfilRespaldoConfigurado(env: Record<string, string | undefined> = process.env): PerfilModelo | null {
+  const explicito = env.PIPELINE_PERFIL_RESPALDO?.trim()
+  const candidato: PerfilModelo | null = explicito
+    ? (esPerfilValido(explicito) ? explicito : null)
+    : 'openrouter'
+  return candidato && candidato !== getPerfilActivo() ? candidato : null
+}
+
+/**
+ * Cuánto "piensa" el modelo antes de responder.
+ *
+ * deepseek-v4-flash es un modelo de razonamiento con esfuerzo alto por defecto.
+ * En la última corrida sana (06/09/2026) una identificación que devolvía ~1.000
+ * caracteres llegó a gastar 13.190 tokens de salida y entre 3 y 6 minutos: 40
+ * de los 70 minutos de la corrida fueron el LLM pensando. Para clasificar una
+ * nota y devolver un JSON eso sobra.
+ *
+ * Es opt-in y NO tiene default: el parámetro depende del proveedor
+ * (`reasoning_effort` es de la API de OpenAI; `thinking` es propio de DeepSeek)
+ * y no se pudo probar contra OpenCode Go sin key. Vacío = no se manda nada y
+ * decide el proveedor, que es el comportamiento que ya se sabe que funciona. Si
+ * el proveedor rechaza el parámetro, la verificación inicial del pipeline lo
+ * detecta y sigue sin él (ver verificarProveedorLLM en cliente-llm.ts).
+ */
+export type NivelRazonamiento = 'desactivado' | 'bajo' | 'alto' | 'max'
+
+export function getNivelRazonamiento(env: Record<string, string | undefined> = process.env): NivelRazonamiento | null {
+  const valor = env.PIPELINE_LLM_RAZONAMIENTO?.trim().toLowerCase()
+  if (valor === 'desactivado' || valor === 'bajo' || valor === 'alto' || valor === 'max') return valor
+  return null
 }

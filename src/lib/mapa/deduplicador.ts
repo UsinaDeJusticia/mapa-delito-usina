@@ -17,7 +17,7 @@
 
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/mapa/queries'
-import { crearClienteLLM } from '@/lib/mapa/cliente-llm'
+import { crearClienteLLM, parametrosExtraLLM } from '@/lib/mapa/cliente-llm'
 import { parsearJsonLLM, validarDeduplicacion } from '@/lib/pipeline/schemas-llm'
 import { obtenerContenidoLLM, formatearUso } from '@/lib/pipeline/llamada-llm'
 
@@ -141,10 +141,30 @@ function normalizarNombre(nombre: string): string {
 
 const PARTICULAS = new Set(['de', 'del', 'la', 'las', 'los', 'y', 'el', 'da', 'do', 'van', 'di'])
 
+/**
+ * Palabras que aparecen en `nombre_victima` cuando el modelo pone una
+ * DESCRIPCIÓN en lugar de un nombre: "un joven", "una mujer de 35 años",
+ * "No identificado", "menor de edad". Sin este filtro "un joven" y "un joven
+ * de 17 años" eran "la misma persona" (dos tokens, todos contenidos) y la
+ * nota de un homicidio nuevo se vinculaba a otro con confianza 97, sin pasar
+ * por la IA ni por revisión: el caso desaparecía del mapa.
+ */
+const PALABRAS_GENERICAS = new Set([
+  'un', 'una', 'uno', 'unos', 'unas', 'joven', 'jovenes', 'hombre', 'hombres', 'mujer', 'mujeres',
+  'menor', 'menores', 'nene', 'nena', 'nino', 'nina', 'bebe', 'beba', 'adolescente', 'anciano',
+  'anciana', 'abuelo', 'abuela', 'senor', 'senora', 'sujeto', 'persona', 'personas', 'victima',
+  'victimas', 'desconocido', 'desconocida', 'identificado', 'identificada', 'identificar', 'no',
+  'sin', 'nn', 'masculino', 'femenino', 'anos', 'ano', 'meses', 'edad', 'policia', 'efectivo',
+  'agente', 'delincuente', 'vecino', 'vecina', 'trabajador', 'trabajadora', 'conductor',
+  'motociclista', 'peaton', 'chofer', 'taxista', 'remisero', 'comerciante', 'jubilado', 'jubilada',
+  'hijo', 'hija', 'padre', 'madre', 'pareja', 'expareja', 'esposa', 'esposo', 'novio', 'novia',
+  'hermano', 'hermana', 'reservado', 'reservada', 'dato', 'datos', 'trascendio',
+])
+
 function tokensNombre(nombre: string): string[] {
   return normalizarNombre(nombre)
     .split(' ')
-    .filter(t => t.length >= 2 && !PARTICULAS.has(t))
+    .filter(t => t.length >= 2 && !PARTICULAS.has(t) && !PALABRAS_GENERICAS.has(t) && !/\d/.test(t))
 }
 
 /**
@@ -283,6 +303,7 @@ o
         // acá no es cosmético — el fallback asume "es un hecho nuevo", así que
         // duplica el caso en el mapa.
         max_tokens: 600,
+        ...(parametrosExtraLLM(config) as object),
       }),
     })
 
