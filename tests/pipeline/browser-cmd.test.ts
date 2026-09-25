@@ -18,6 +18,12 @@ import {
   RefInvalidoError,
   EjecutableNoEncontradoError,
   resolverEjecutable,
+  nombreBinarioNativo,
+  parsearContenidoExtraido,
+  resolverHref,
+  mismaPagina,
+  SELECTORES_CONTENIDO,
+  MAX_CHARS_CONTENIDO,
   type Ejecutor,
 } from '../../src/lib/pipeline/browser-cmd'
 
@@ -159,16 +165,83 @@ describe('comandos — construcción como array, nunca string', () => {
     assert.deepEqual(comandos.tab(1), ['tab', '1'])
   })
 
-  test('esperarCarga espera domcontentloaded, no networkidle', () => {
-    // networkidle casi nunca se cumple en un sitio de noticias real: la
-    // publicidad y el tracking siguen pidiendo recursos indefinidamente, así
-    // que la espera agota siempre el timeout completo. En la corrida de
-    // producción del 22/8 eso fueron 37 timeouts de `wait` (~30s cada uno,
-    // ~18-20 de los 79 minutos totales). `--load domcontentloaded` SÍ está
-    // soportado por agent-browser (confirmado con `wait --help`: acepta
-    // load|domcontentloaded|networkidle) y se cumple apenas el DOM está
-    // armado, que es lo único que necesitan los pasos siguientes.
-    assert.deepEqual(comandos.esperarCarga(), ['wait', '--load', 'domcontentloaded'])
+  test('esperarCarga evalúa el estado actual del DOM, no espera un evento de carga', () => {
+    // Historia: `--load networkidle` casi nunca se cumple en un sitio de
+    // noticias (37 timeouts el 22/8). Se pasó a `--load domcontentloaded`,
+    // que en agent-browser 0.21.4 espera un evento de carga NUEVO: sobre una
+    // página que ya cargó (siempre, después de `open`) agota sus 25 s y
+    // devuelve "Done" igual — medido en local: 25,16 s. En Actions eso era el
+    // ETIMEDOUT de `agent-browser wait` en 12 de 13 medios por corrida.
+    // `wait --fn` sobre readyState vuelve al instante si ya se cumple (0,16 s
+    // medido) y espera si la pestaña todavía está cargando.
+    assert.deepEqual(comandos.esperarCarga(), ['wait', '--fn', "document.readyState !== 'loading'"])
+    assert.ok(!comandos.esperarCarga().includes('--load'), 'volvió `--load`: agota el timeout completo')
+  })
+
+  test('getHref valida el ref antes de construir', () => {
+    assert.deepEqual(comandos.getHref('e12'), ['get', 'attr', '@e12', 'href'])
+    assert.throws(() => comandos.getHref('e1; rm -rf /'), RefInvalidoError)
+  })
+
+  test('extraerContenido es un eval de un script constante', () => {
+    const args = comandos.extraerContenido()
+    assert.equal(args[0], 'eval')
+    assert.equal(args.length, 2)
+    // Recorre los mismos selectores que el loop anterior de `get text`.
+    for (const s of SELECTORES_CONTENIDO) assert.ok(args[1].includes(JSON.stringify(s)), `falta ${s}`)
+    // Es el mismo string en cada llamada: no interpola nada externo.
+    assert.equal(comandos.extraerContenido()[1], args[1])
+  })
+})
+
+describe('parsearContenidoExtraido', () => {
+  test('acepta la salida doblemente serializada de agent-browser eval', () => {
+    const interno = JSON.stringify({ titulo: 'Mataron a un joven', texto: 'Un joven de 22 años...' })
+    assert.deepEqual(parsearContenidoExtraido(JSON.stringify(interno)), {
+      titulo: 'Mataron a un joven',
+      texto: 'Un joven de 22 años...',
+    })
+  })
+
+  test('acepta también el objeto serializado una sola vez', () => {
+    assert.deepEqual(parsearContenidoExtraido('{"titulo":"T","texto":"X"}'), { titulo: 'T', texto: 'X' })
+  })
+
+  test('devuelve vacío ante salida inesperada, sin lanzar', () => {
+    for (const s of ['', 'no es json', 'null', '42', '"texto suelto"', '{"titulo":5}']) {
+      const r = parsearContenidoExtraido(s)
+      assert.equal(typeof r.titulo, 'string')
+      assert.equal(typeof r.texto, 'string')
+    }
+    assert.deepEqual(parsearContenidoExtraido('no es json'), { titulo: '', texto: '' })
+  })
+
+  test('recorta el texto al máximo aunque la página devuelva más', () => {
+    const largo = 'x'.repeat(MAX_CHARS_CONTENIDO * 2)
+    const r = parsearContenidoExtraido(JSON.stringify({ titulo: 't', texto: largo }))
+    assert.equal(r.texto.length, MAX_CHARS_CONTENIDO)
+  })
+})
+
+describe('resolverHref y mismaPagina', () => {
+  test('resuelve hrefs relativos contra el listado', () => {
+    assert.equal(
+      resolverHref('/policiales/nota-123', 'https://www.medio.com.ar/policiales/'),
+      'https://www.medio.com.ar/policiales/nota-123'
+    )
+    assert.equal(resolverHref('nota.html', 'https://m.com/sec/'), 'https://m.com/sec/nota.html')
+  })
+
+  test('descarta lo que no es http(s)', () => {
+    for (const href of ['', '   ', 'javascript:void(0)', 'mailto:a@b.com', 'tel:123']) {
+      assert.equal(resolverHref(href, 'https://m.com/'), null, href)
+    }
+  })
+
+  test('mismaPagina ignora query, fragmento y barra final', () => {
+    assert.ok(mismaPagina('https://m.com/policiales/', 'https://m.com/policiales?utm=x#top'))
+    assert.ok(!mismaPagina('https://m.com/policiales/', 'https://m.com/policiales/nota-1'))
+    assert.ok(!mismaPagina('https://m.com/a', 'https://otro.com/a'))
   })
 })
 
@@ -278,10 +351,33 @@ describe('resolverEjecutable', () => {
     )
   })
 
-  test('encuentra el ejecutable instalado en este repo', () => {
-    // agent-browser es dependencia del proyecto, así que debe estar en .bin
+  test('encuentra el binario nativo instalado en este repo, no el shim de .bin', () => {
+    // agent-browser es dependencia del proyecto. Se apunta al binario de la
+    // plataforma: el shim de .bin agrega un proceso de Node por comando, y en
+    // Windows es un .cmd que execFileSync no lanza sin shell (EINVAL).
     const ruta = resolverEjecutable(process.cwd())
-    assert.match(ruta, /node_modules[/\\]\.bin[/\\]agent-browser/)
+    assert.match(ruta, /node_modules[/\\]agent-browser[/\\]bin[/\\]agent-browser-/)
+  })
+
+  test('en Windows resuelve el .exe nativo y nunca el shim .cmd', () => {
+    assert.equal(nombreBinarioNativo('win32', 'x64'), 'agent-browser-win32-x64.exe')
+    // El binario de Windows viene en el paquete aunque se instale en Linux,
+    // así que la resolución se puede verificar acá mismo.
+    const ruta = resolverEjecutable(process.cwd(), 'win32', 'x64')
+    assert.match(ruta, /agent-browser-win32-x64\.exe$/)
+    assert.ok(!/\.cmd$/i.test(ruta))
+  })
+
+  test('elige el binario por plataforma y arquitectura', () => {
+    assert.equal(nombreBinarioNativo('darwin', 'arm64'), 'agent-browser-darwin-arm64')
+    assert.equal(nombreBinarioNativo('linux', 'x64', () => false), 'agent-browser-linux-x64')
+    assert.equal(nombreBinarioNativo('linux', 'x64', () => true), 'agent-browser-linux-musl-x64')
+    assert.equal(nombreBinarioNativo('win32', 'arm64'), null)
+    assert.equal(nombreBinarioNativo('freebsd' as NodeJS.Platform, 'x64'), null)
+  })
+
+  test('en Windows sin binario nativo falla explícito en vez de caer al .cmd', () => {
+    assert.throws(() => resolverEjecutable('/directorio/que/no/existe', 'win32', 'x64'), EjecutableNoEncontradoError)
   })
 })
 
@@ -367,5 +463,28 @@ describe('entornoMinimo — no filtra secretos al subproceso', () => {
   test('preserva la ruta de Chromium si está definida', () => {
     const minimo = entornoMinimo({ PATH: '/usr/bin', PLAYWRIGHT_BROWSERS_PATH: '/opt/pw' })
     assert.equal(minimo.PLAYWRIGHT_BROWSERS_PATH, '/opt/pw')
+  })
+
+  test('pasa las variables que Windows necesita para que Chrome arranque', () => {
+    const minimo = entornoMinimo({
+      Path: 'C:\\Windows', SystemRoot: 'C:\\Windows', USERPROFILE: 'C:\\Users\\x',
+      LOCALAPPDATA: 'C:\\Users\\x\\AppData\\Local', APPDATA: 'C:\\Users\\x\\AppData\\Roaming',
+    })
+    assert.equal(minimo.SystemRoot, 'C:\\Windows')
+    assert.equal(minimo.USERPROFILE, 'C:\\Users\\x')
+    assert.equal(minimo.LOCALAPPDATA, 'C:\\Users\\x\\AppData\\Local')
+  })
+
+  test('pasa la configuración AGENT_BROWSER_* y fija un cierre por inactividad', () => {
+    const minimo = entornoMinimo({ PATH: '/usr/bin', AGENT_BROWSER_EXECUTABLE_PATH: '/opt/chrome', AGENT_BROWSER_SESSION: 's1' })
+    assert.equal(minimo.AGENT_BROWSER_EXECUTABLE_PATH, '/opt/chrome')
+    assert.equal(minimo.AGENT_BROWSER_SESSION, 's1')
+    // Sin esto, un pipeline cancelado dejaba Chrome abierto para siempre.
+    assert.equal(minimo.AGENT_BROWSER_IDLE_TIMEOUT_MS, String(10 * 60 * 1000))
+    assert.equal(
+      entornoMinimo({ AGENT_BROWSER_IDLE_TIMEOUT_MS: '5000' }).AGENT_BROWSER_IDLE_TIMEOUT_MS,
+      '5000',
+      'un valor explícito se respeta'
+    )
   })
 })

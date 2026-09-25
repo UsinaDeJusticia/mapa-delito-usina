@@ -179,6 +179,7 @@ describe('las migraciones nuevas son idempotentes', () => {
     '20260804120000_add_nombre_victima',
     '20260804130000_indices_revisiones',
     '20260806120000_add_requiere_revision',
+    '20260925120000_corridas_pipeline',
   ]
 
   for (const nombre of MIGRACIONES_POSTERIORES) {

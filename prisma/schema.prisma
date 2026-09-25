@@ -13,16 +13,16 @@ datasource db {
 // TABLA: Fuentes de datos
 // ============================================
 model Fuente {
-  id               String   @id @default(uuid())
-  nombre           String   @unique // "SNIC", "SAT", "Infobae", "Caso Usina", etc.
-  tipo             TipoFuente
-  urlBase          String?  @map("url_base")
-  frecuencia       String?  // "anual", "mensual", "diaria", "continua"
-  confianzaDefault NivelConfianza @default(OFICIAL) @map("confianza_default")
-  ultimaActualizacion DateTime? @map("ultima_actualizacion")
-  activa           Boolean  @default(true)
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  id                  String         @id @default(uuid())
+  nombre              String         @unique // "SNIC", "SAT", "Infobae", "Caso Usina", etc.
+  tipo                TipoFuente
+  urlBase             String?        @map("url_base")
+  frecuencia          String? // "anual", "mensual", "diaria", "continua"
+  confianzaDefault    NivelConfianza @default(OFICIAL) @map("confianza_default")
+  ultimaActualizacion DateTime?      @map("ultima_actualizacion")
+  activa              Boolean        @default(true)
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
 
   hechos HechoDelictivo[]
 
@@ -30,69 +30,69 @@ model Fuente {
 }
 
 enum TipoFuente {
-  OFICIAL        // SNIC, SAT, INDEC
-  PERIODISTICA   // Medios de noticias
-  CIUDADANA      // robo.mdp, plataformas vecinales
-  USINA          // Casos acompañados por Usina de Justicia
-  ACADEMICA      // CELIV, universidades
+  OFICIAL // SNIC, SAT, INDEC
+  PERIODISTICA // Medios de noticias
+  CIUDADANA // robo.mdp, plataformas vecinales
+  USINA // Casos acompañados por Usina de Justicia
+  ACADEMICA // CELIV, universidades
 }
 
 enum NivelConfianza {
-  OFICIAL        // Dato del SNIC/SAT confirmado
-  VERIFICADO     // Cruzado entre 2+ fuentes
-  PRELIMINAR     // Solo 1 fuente periodística, pendiente de confirmación
+  OFICIAL // Dato del SNIC/SAT confirmado
+  VERIFICADO // Cruzado entre 2+ fuentes
+  PRELIMINAR // Solo 1 fuente periodística, pendiente de confirmación
 }
 
 // ============================================
 // TABLA: Tipos de delito (Catálogo SNIC)
 // ============================================
 model TipoDelito {
-  id          String  @id @default(uuid())
-  codigoSnic  String  @unique @map("codigo_snic") // "1", "2", "11_1", "21_3", etc.
-  nombre      String  // "Homicidios dolosos", "Robos", etc.
+  id          String          @id @default(uuid())
+  codigoSnic  String          @unique @map("codigo_snic") // "1", "2", "11_1", "21_3", etc.
+  nombre      String // "Homicidios dolosos", "Robos", etc.
   categoria   CategoriaDelito
   descripcion String?
-  activo      Boolean @default(true)
+  activo      Boolean         @default(true)
 
-  hechos           HechoDelictivo[]
-  subTipos         SubTipoDelito[]
+  hechos   HechoDelictivo[]
+  subTipos SubTipoDelito[]
 
   @@map("tipos_delito")
 }
 
 model SubTipoDelito {
-  id           String @id @default(uuid())
+  id           String     @id @default(uuid())
   nombre       String // "Femicidio", "Robo seguido de muerte", etc.
-  tipoDelitoId String @map("tipo_delito_id")
+  tipoDelitoId String     @map("tipo_delito_id")
   tipoDelito   TipoDelito @relation(fields: [tipoDelitoId], references: [id])
 
   @@map("sub_tipos_delito")
 }
 
 enum CategoriaDelito {
-  CONTRA_PERSONAS        // Homicidios, lesiones
-  CONTRA_PROPIEDAD       // Robos, hurtos
+  CONTRA_PERSONAS // Homicidios, lesiones
+  CONTRA_PROPIEDAD // Robos, hurtos
   CONTRA_INTEGRIDAD_SEXUAL // Violaciones, abusos
-  CONTRA_LIBERTAD        // Amenazas, secuestros
-  OTROS                  // Estupefacientes, otros
-  VIAL                   // Muertes en siniestros viales
+  CONTRA_LIBERTAD // Amenazas, secuestros
+  OTROS // Estupefacientes, otros
+  VIAL // Muertes en siniestros viales
 }
 
 // ============================================
 // TABLA: Ubicaciones (normalizada con Georef)
 // ============================================
 model Ubicacion {
-  id              String  @id @default(uuid())
+  id              String   @id @default(uuid())
   provincia       String
-  provinciaId     String? @map("provincia_id") // Código INDEC
+  provinciaId     String?  @map("provincia_id") // Código INDEC
   departamento    String?
-  departamentoId  String? @map("departamento_id") // Código INDEC
+  departamentoId  String?  @map("departamento_id") // Código INDEC
   localidad       String?
   direccion       String?
   fuenteUbicacion String?  @map("fuente_ubicacion")
-  latitud         Decimal @db.Decimal(10, 7)
-  longitud        Decimal @db.Decimal(10, 7)
-  esCentroide     Boolean @default(false) @map("es_centroide") // true = centroide departamental, false = ubicación exacta
+  latitud         Decimal  @db.Decimal(10, 7)
+  longitud        Decimal  @db.Decimal(10, 7)
+  esCentroide     Boolean  @default(false) @map("es_centroide") // true = centroide departamental, false = ubicación exacta
   createdAt       DateTime @default(now()) @map("created_at")
 
   hechos HechoDelictivo[]
@@ -107,76 +107,76 @@ model Ubicacion {
 // TABLA PRINCIPAL: Hechos delictivos
 // ============================================
 model HechoDelictivo {
-  id                String   @id @default(uuid())
+  id String @id @default(uuid())
 
   // Clasificación
-  tipoDelitoId      String   @map("tipo_delito_id")
-  tipoDelito        TipoDelito @relation(fields: [tipoDelitoId], references: [id])
+  tipoDelitoId String     @map("tipo_delito_id")
+  tipoDelito   TipoDelito @relation(fields: [tipoDelitoId], references: [id])
 
   // Temporal
-  fechaHecho        DateTime @map("fecha_hecho") @db.Date
-  horaHecho         DateTime? @map("hora_hecho") @db.Time()
-  anio              Int      // Año extraído para queries rápidas
-  mes               Int?     // Mes extraído para queries rápidas
+  fechaHecho DateTime  @map("fecha_hecho") @db.Date
+  horaHecho  DateTime? @map("hora_hecho") @db.Time()
+  anio       Int // Año extraído para queries rápidas
+  mes        Int? // Mes extraído para queries rápidas
 
   // Geográfico
-  ubicacionId       String   @map("ubicacion_id")
-  ubicacion         Ubicacion @relation(fields: [ubicacionId], references: [id])
+  ubicacionId String    @map("ubicacion_id")
+  ubicacion   Ubicacion @relation(fields: [ubicacionId], references: [id])
 
   // Datos del hecho
-  cantidadVictimas  Int      @default(1) @map("cantidad_victimas")
-  cantidadHechos    Int      @default(1) @map("cantidad_hechos") // Para datos agregados del SNIC
-  medioUtilizado    String?  @map("medio_utilizado") // "Arma de fuego", "Arma blanca", etc.
-  franjaHoraria     FranjaHoraria? @map("franja_horaria")
+  cantidadVictimas Int            @default(1) @map("cantidad_victimas")
+  cantidadHechos   Int            @default(1) @map("cantidad_hechos") // Para datos agregados del SNIC
+  medioUtilizado   String?        @map("medio_utilizado") // "Arma de fuego", "Arma blanca", etc.
+  franjaHoraria    FranjaHoraria? @map("franja_horaria")
 
   // Trazabilidad
-  fuenteId          String   @map("fuente_id")
-  fuente            Fuente   @relation(fields: [fuenteId], references: [id])
-  confianza         NivelConfianza @default(OFICIAL)
-  requiereRevision  Boolean  @default(false) @map("requiere_revision")
-  urlFuente         String?  @map("url_fuente") // URL de la noticia o dataset
-  esAgregado        Boolean  @default(false) @map("es_agregado") // true = dato anual SNIC, false = microdato/hecho individual
+  fuenteId         String         @map("fuente_id")
+  fuente           Fuente         @relation(fields: [fuenteId], references: [id])
+  confianza        NivelConfianza @default(OFICIAL)
+  requiereRevision Boolean        @default(false) @map("requiere_revision")
+  urlFuente        String?        @map("url_fuente") // URL de la noticia o dataset
+  esAgregado       Boolean        @default(false) @map("es_agregado") // true = dato anual SNIC, false = microdato/hecho individual
 
   // Clasificación detallada (SAT)
-  subtipo                  String?
-  diaSemana                String?
-  hora                     String?
-  lugarHecho               String?
+  subtipo    String?
+  diaSemana  String?
+  hora       String?
+  lugarHecho String?
 
   // Medio empleado / arma
-  medioComision            String?
-  medioDetalle             String?
+  medioComision String?
+  medioDetalle  String?
 
   // Datos víctima
-  victimaSexo              String?
-  victimaEdad              Int?
-  victimaRangoEdad         String?
-  victimaNacionalidad      String?
+  victimaSexo         String?
+  victimaEdad         Int?
+  victimaRangoEdad    String?
+  victimaNacionalidad String?
 
   // Contexto del hecho
   contexto                 String?
   vinculoVictimaVictimario String?
   femicidio                String?
-  nombreVictima            String?  @map("nombre_victima")
+  nombreVictima            String? @map("nombre_victima")
 
   // Datos victimario/inculpado
-  victimarioSexo           String?
-  victimarioEdad           Int?
-  situacionVictimario      String?
+  victimarioSexo      String?
+  victimarioEdad      Int?
+  situacionVictimario String?
 
   // Cantidades
-  cantidadImputados        Int?
+  cantidadImputados Int?
 
   // Capa Usina
-  esCasoUsina       Boolean  @default(false) @map("es_caso_usina")
-  casoUsinaId       String?  @map("caso_usina_id")
-  casoUsina         CasoUsina? @relation(fields: [casoUsinaId], references: [id])
+  esCasoUsina Boolean    @default(false) @map("es_caso_usina")
+  casoUsinaId String?    @map("caso_usina_id")
+  casoUsina   CasoUsina? @relation(fields: [casoUsinaId], references: [id])
 
   // Auditoría
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  coberturas        CoberturaMediatica[]
+  coberturas CoberturaMediatica[]
 
   @@index([anio])
   @@index([tipoDelitoId])
@@ -191,25 +191,25 @@ model HechoDelictivo {
 }
 
 enum FranjaHoraria {
-  MADRUGADA    // 00:00 - 05:59
-  MANANA       // 06:00 - 11:59
-  TARDE        // 12:00 - 17:59
-  NOCHE        // 18:00 - 23:59
+  MADRUGADA // 00:00 - 05:59
+  MANANA // 06:00 - 11:59
+  TARDE // 12:00 - 17:59
+  NOCHE // 18:00 - 23:59
 }
 
 // ============================================
 // TABLA: Casos acompañados por Usina
 // ============================================
 model CasoUsina {
-  id                String   @id @default(uuid())
-  nombreFamilia     String   @map("nombre_familia") // Solo con consentimiento
-  descripcion       String?  @db.Text
-  estadoJudicial    String?  @map("estado_judicial")
-  fechaInicio       DateTime? @map("fecha_inicio") @db.Date
-  consentimiento    Boolean  @default(false) // Publicación autorizada por la familia
-  urlCasoUsina      String?  @map("url_caso_usina") // Link al caso en usinadejusticia.org.ar
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  id             String    @id @default(uuid())
+  nombreFamilia  String    @map("nombre_familia") // Solo con consentimiento
+  descripcion    String?   @db.Text
+  estadoJudicial String?   @map("estado_judicial")
+  fechaInicio    DateTime? @map("fecha_inicio") @db.Date
+  consentimiento Boolean   @default(false) // Publicación autorizada por la familia
+  urlCasoUsina   String?   @map("url_caso_usina") // Link al caso en usinadejusticia.org.ar
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   hechos HechoDelictivo[]
 
@@ -220,18 +220,18 @@ model CasoUsina {
 // TABLA: Estadísticas agregadas (cache)
 // ============================================
 model EstadisticaAgregada {
-  id              String @id @default(uuid())
-  anio            Int
-  provinciaId     String? @map("provincia_id")
-  provincia       String?
-  departamentoId  String? @map("departamento_id")
-  departamento    String?
-  tipoDelitoId    String? @map("tipo_delito_id")
-  cantidadHechos  Int    @map("cantidad_hechos")
-  cantidadVictimas Int?  @map("cantidad_victimas")
-  tasaPor100k     Decimal? @db.Decimal(8, 2) @map("tasa_por_100k")
-  poblacion       Int?
-  createdAt       DateTime @default(now()) @map("created_at")
+  id               String   @id @default(uuid())
+  anio             Int
+  provinciaId      String?  @map("provincia_id")
+  provincia        String?
+  departamentoId   String?  @map("departamento_id")
+  departamento     String?
+  tipoDelitoId     String?  @map("tipo_delito_id")
+  cantidadHechos   Int      @map("cantidad_hechos")
+  cantidadVictimas Int?     @map("cantidad_victimas")
+  tasaPor100k      Decimal? @map("tasa_por_100k") @db.Decimal(8, 2)
+  poblacion        Int?
+  createdAt        DateTime @default(now()) @map("created_at")
 
   @@unique([anio, provinciaId, departamentoId, tipoDelitoId])
   @@index([anio])
@@ -244,25 +244,25 @@ model EstadisticaAgregada {
 // TABLA: Coberturas mediáticas (N por hecho)
 // ============================================
 model CoberturaMediatica {
-  id              String   @id @default(uuid())
+  id String @id @default(uuid())
 
   // Vínculo al hecho real
-  hechoDelictivoId String  @map("hecho_delictivo_id")
+  hechoDelictivoId String         @map("hecho_delictivo_id")
   hechoDelictivo   HechoDelictivo @relation(fields: [hechoDelictivoId], references: [id])
 
   // Datos de la nota periodística
-  medio           String   // "Infobae", "Rosario3", "Clarín", etc.
-  medioTipo       String   @map("medio_tipo") // "nacional", "provincial"
-  titulo          String
-  url             String   @unique // Deduplicación: una URL = una cobertura
+  medio            String // "Infobae", "Rosario3", "Clarín", etc.
+  medioTipo        String   @map("medio_tipo") // "nacional", "provincial"
+  titulo           String
+  url              String   @unique // Deduplicación: una URL = una cobertura
   fechaPublicacion DateTime @map("fecha_publicacion")
-  resumen         String?  @db.Text // Resumen generado por IA
+  resumen          String?  @db.Text // Resumen generado por IA
 
   // Clasificación del contenido de la nota
-  tipoCobertura   TipoCobertura @default(HECHO_INICIAL) @map("tipo_cobertura")
+  tipoCobertura TipoCobertura @default(HECHO_INICIAL) @map("tipo_cobertura")
 
   // Auditoría
-  createdAt       DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@index([hechoDelictivoId])
   @@index([medio])
@@ -273,12 +273,71 @@ model CoberturaMediatica {
 }
 
 enum TipoCobertura {
-  HECHO_INICIAL      // Primera nota que reporta el crimen
-  ACTUALIZACION      // Nuevos datos sobre el mismo hecho
-  DETENCION          // Detención de sospechoso/s
-  MARCHA_RECLAMO     // Marcha de familiares, pedido de justicia
-  PROCESO_JUDICIAL   // Elevación a juicio, audiencias
-  SENTENCIA          // Condena o absolución
-  ANIVERSARIO        // Notas a 1 año, 5 años, etc.
-  OPINION_EDITORIAL  // Columnas de opinión, editoriales
+  HECHO_INICIAL // Primera nota que reporta el crimen
+  ACTUALIZACION // Nuevos datos sobre el mismo hecho
+  DETENCION // Detención de sospechoso/s
+  MARCHA_RECLAMO // Marcha de familiares, pedido de justicia
+  PROCESO_JUDICIAL // Elevación a juicio, audiencias
+  SENTENCIA // Condena o absolución
+  ANIVERSARIO // Notas a 1 año, 5 años, etc.
+  OPINION_EDITORIAL // Columnas de opinión, editoriales
+}
+
+// ============================================
+// TABLA: Corridas del pipeline de medios
+// ============================================
+// Cola e historial en una sola tabla. El panel /admin/pipeline encola corridas
+// ('pendiente'); el agente local (scripts/pipeline/agente-local.ts) las toma,
+// las ejecuta en la computadora del equipo y va dejando latido, progreso y
+// log. Las corridas de GitHub Actions y de la línea de comandos se registran
+// acá también, para que el historial sea uno solo. Ver docs/agente-local.md.
+model CorridaPipeline {
+  id                    String    @id @default(uuid())
+  // pendiente | en_curso | completada | fallida | cancelada
+  estado                String    @default("pendiente")
+  // panel | programada | github-actions | cli
+  origen                String
+  solicitadaPor         String?   @map("solicitada_por")
+  // ParametrosCorrida (src/lib/pipeline/opciones-corrida.ts)
+  parametros            Json      @default("{}")
+  // Evita duplicar la corrida programada de un día: 'programada:AAAA-MM-DD'
+  claveUnica            String?   @unique @map("clave_unica")
+  agente                String?
+  progreso              Json?
+  resumen               Json?
+  error                 String?
+  exitCode              Int?      @map("exit_code")
+  cancelacionSolicitada Boolean   @default(false) @map("cancelacion_solicitada")
+  creadaAt              DateTime  @default(now()) @map("creada_at")
+  iniciadaAt            DateTime? @map("iniciada_at")
+  finalizadaAt          DateTime? @map("finalizada_at")
+  latidoAt              DateTime? @map("latido_at")
+
+  lineas CorridaPipelineLinea[]
+
+  @@index([estado, creadaAt])
+  @@index([creadaAt(sort: Desc)])
+  @@map("corridas_pipeline")
+}
+
+model CorridaPipelineLinea {
+  id        Int             @id @default(autoincrement())
+  corridaId String          @map("corrida_id")
+  corrida   CorridaPipeline @relation(fields: [corridaId], references: [id], onDelete: Cascade)
+  ts        DateTime        @default(now())
+  texto     String
+
+  @@index([corridaId, id])
+  @@map("corridas_pipeline_lineas")
+}
+
+// Latido de cada agente local, para que el panel sepa si hay alguien
+// escuchando la cola antes de encolar.
+model AgentePipeline {
+  nombre    String   @id
+  latidoAt  DateTime @map("latido_at")
+  info      Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("agentes_pipeline")
 }

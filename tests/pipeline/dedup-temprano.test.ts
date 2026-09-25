@@ -62,24 +62,43 @@ describe('el chequeo de URL duplicada corre antes de la extracción por LLM', ()
     )
   })
 
-  test('el chequeo temprano corre después de validar el destino (esDestinoPermitido) y antes de extraer título/texto', () => {
+  test('el chequeo sobre la URL final corre después de validar el destino y antes de extraer título/texto', () => {
     const posicionDestino = indiceDe(
       /esDestinoPermitido\(urlArticulo\)/,
       'no se encontró la validación de destino tras el click'
     )
-    const posicionChequeoTemprano = indiceDe(/await urlYaRegistrada\(/, 'no se encontró urlYaRegistrada(')
+    const posicionChequeoTemprano = indiceDe(
+      /await urlYaRegistrada\(urlArticulo\)/,
+      'no se encontró urlYaRegistrada(urlArticulo)'
+    )
+    const posicionExtraccion = indiceDe(
+      /ab\(comandos\.extraerContenido\(\)/,
+      'no se encontró la extracción de título y texto — ¿cambió el flujo de extracción?'
+    )
     const posicionGetTitulo = indiceDe(
       /ab\(comandos\.getTitulo\(\)\)/,
-      'no se encontró la obtención de título — ¿cambió el flujo de extracción?'
+      'no se encontró la obtención de título de respaldo'
     )
     assert.ok(
       posicionDestino < posicionChequeoTemprano,
       'el chequeo de duplicado corre antes de saber a qué URL aterrizó el click'
     )
     assert.ok(
-      posicionChequeoTemprano < posicionGetTitulo,
+      posicionChequeoTemprano < posicionExtraccion && posicionChequeoTemprano < posicionGetTitulo,
       'el chequeo de duplicado quedó después de empezar a extraer título/texto: no se ahorra nada'
     )
+  })
+
+  test('antes del click se valida el href: destino permitido y URL no registrada, sin navegar', () => {
+    // Paso previo que evita hasta el click: en la corrida del 6/9, 17 de 44
+    // links eran notas ya registradas y cada una costaba abrirla.
+    const posicionHref = indiceDe(/comandos\.getHref\(currentRef\)/, 'no se lee el href antes del click')
+    const posicionDestinoPrevio = indiceDe(/esDestinoPermitido\(destino\)/, 'no se valida el destino del href')
+    const posicionDupPrevio = indiceDe(/await urlYaRegistrada\(destino\)/, 'no se chequea el href contra la base')
+    const posicionClick = indiceDe(/comandos\.clickNuevaTab\(currentRef\)/, 'no se encontró el click')
+    assert.ok(posicionHref < posicionDestinoPrevio, 'se valida el destino antes de conocerlo')
+    assert.ok(posicionDestinoPrevio < posicionDupPrevio, 'se consulta la base con un destino sin validar')
+    assert.ok(posicionDupPrevio < posicionClick, 'el chequeo previo quedó después del click: no ahorra nada')
   })
 
   test('al detectar duplicado temprano, cierra la tab y hace continue sin extraer texto', () => {

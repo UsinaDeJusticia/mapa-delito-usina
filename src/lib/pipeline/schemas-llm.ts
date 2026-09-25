@@ -135,6 +135,7 @@ export interface LinkIdentificado {
 /** El formato de ref de agent-browser. Duplicado a propósito para no acoplar. */
 const PATRON_REF = /^e[0-9]+$/
 const MAX_LINKS = 10
+const MAX_LINKS_TECHO = 25
 
 /**
  * Valida el array que devuelve el prompt de identificación de links.
@@ -144,12 +145,19 @@ const MAX_LINKS = 10
  * Cada descarte se reporta en `descartados` para poder observarlo.
  */
 export function validarLinksIdentificados(
-  crudo: unknown
+  crudo: unknown,
+  /**
+   * Cuántos links se aceptan. Lo fija la profundidad de la corrida
+   * (PIPELINE_MAX_NOTICIAS o el panel); 25 es el techo duro para que una
+   * respuesta desbocada no dispare cientos de visitas.
+   */
+  maximo: number = MAX_LINKS
 ): { links: LinkIdentificado[]; descartados: string[] } {
   if (!Array.isArray(crudo)) {
     return { links: [], descartados: ['la respuesta no es un array'] }
   }
 
+  const tope = Math.max(1, Math.min(MAX_LINKS_TECHO, Math.trunc(maximo) || MAX_LINKS))
   const links: LinkIdentificado[] = []
   const descartados: string[] = []
   const refsVistos = new Set<string>()
@@ -158,8 +166,8 @@ export function validarLinksIdentificados(
   // target, así que iterar el iterador requeriría downlevelIteration.
   for (let i = 0; i < crudo.length; i++) {
     const item: unknown = crudo[i]
-    if (links.length >= MAX_LINKS) {
-      descartados.push(`se ignoraron ${crudo.length - i} entradas por exceder el máximo de ${MAX_LINKS}`)
+    if (links.length >= tope) {
+      descartados.push(`se ignoraron ${crudo.length - i} entradas por exceder el máximo de ${tope}`)
       break
     }
     if (!esObjeto(item)) {
