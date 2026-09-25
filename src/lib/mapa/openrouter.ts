@@ -7,7 +7,7 @@
  */
 
 import { getConfigActiva } from '@/config/modelos-pipeline'
-import { crearClienteLLM, credencialFaltante } from '@/lib/mapa/cliente-llm'
+import { crearClienteLLM, credencialFaltante, parametrosExtraLLM } from '@/lib/mapa/cliente-llm'
 import {
   parsearJsonLLM,
   validarExtraccion,
@@ -16,6 +16,7 @@ import {
 import { prisma } from '@/lib/mapa/queries'
 import { efectoDeClasificacion } from '@/lib/mapa/clasificacion-humana'
 import { obtenerContenidoLLM, formatearUso } from '@/lib/pipeline/llamada-llm'
+import { fechaArgentina } from '@/lib/pipeline/fechas'
 
 // Caché de ejemplos few-shot: se invalida cada 5 minutos
 let fewShotCache: { ejemplos: Array<{ resumen: string; clasificacion: string }>; ts: number } | null = null
@@ -366,11 +367,15 @@ export async function extraerDatosNoticia(
             ...fewShotMessages,
             {
               role: 'user',
-              content: `Fecha actual de procesamiento: ${new Date().toISOString().slice(0, 10)}\nURL fuente: ${urlFuente}\n\nExtraé los datos del siguiente texto de noticia policial argentina siguiendo el formato JSON requerido:\n---\n${textoNoticia.slice(0, MAX_CHARS_NOTICIA)}\n---`,
+              // Fecha de Argentina, no UTC: corriendo desde una computadora
+              // local a la noche, toISOString() ya da el día siguiente y el
+              // modelo resolvería mal "ayer" o "esta madrugada".
+              content: `Fecha actual de procesamiento: ${fechaArgentina()}\nURL fuente: ${urlFuente}\n\nExtraé los datos del siguiente texto de noticia policial argentina siguiendo el formato JSON requerido:\n---\n${textoNoticia.slice(0, MAX_CHARS_NOTICIA)}\n---`,
             },
           ],
           temperature: 0.1,
           max_tokens: 1500,
+          ...(parametrosExtraLLM(config) as object),
         }),
     })
 
