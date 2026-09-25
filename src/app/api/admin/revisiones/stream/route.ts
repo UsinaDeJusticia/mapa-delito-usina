@@ -15,9 +15,37 @@ export async function GET(req: NextRequest) {
     return new Response('No autorizado', { status: 401 })
   }
 
+  // Cursor por id (SERIAL), no por revisado_at.
+  //
+  // ANTES el cursor era `desde = última.revisado_at`, un Date de JS con
+  // milisegundos, mientras revisado_at se guarda con NOW() en microsegundos:
+  // `revisado_at > desde` volvía a encontrar la misma fila en cada poll y la
+  // re-emitía cada 4 segundos. Con dos revisores, el contador de pendientes
+  // del otro bajaba 1 cada 4 s hasta que el polling de 30 s lo corregía.
+  //
+  // Cada evento lleva `id:`, así que cuando la conexión se corta (Vercel a los
+  // 270 s) el navegador reconecta mandando Last-Event-ID y se retoma justo
+  // donde quedó, en vez de re-enviar todo desde que se abrió la página.
   const { searchParams } = new URL(req.url)
-  const desdeParam = searchParams.get('desde')
-  let desde = desdeParam ? new Date(desdeParam) : new Date(Date.now() - 60_000)
+  const ultimoIdHeader = Number.parseInt(req.headers.get('last-event-id') ?? '', 10)
+  let ultimoId: number
+  if (Number.isFinite(ultimoIdHeader) && ultimoIdHeader >= 0) {
+    ultimoId = ultimoIdHeader
+  } else {
+    const desdeParam = searchParams.get('desde')
+    const pedido = desdeParam ? new Date(desdeParam).getTime() : NaN
+    // Nunca más de 24 h hacia atrás: `desde=1970-01-01` volcaba todo el historial.
+    const piso = Date.now() - 24 * 60 * 60 * 1000
+    const desde = new Date(Number.isFinite(pedido) ? Math.max(pedido, piso) : Date.now() - 60_000)
+    try {
+      const fila = await prisma.$queryRaw<[{ max: number | null }]>`
+        SELECT MAX(id)::int AS max FROM revisiones_pipeline WHERE revisado_at <= ${desde}
+      `
+      ultimoId = fila[0]?.max ?? 0
+    } catch {
+      return new Response('No se pudo iniciar el stream', { status: 500 })
+    }
+  }
 
   const encoder = new TextEncoder()
   let closed = false
@@ -32,6 +60,7 @@ export async function GET(req: NextRequest) {
 
         try {
           const nuevas = await prisma.$queryRaw<Array<{
+            id: number
             hecho_id: string
             clasificacion_humana: string
             revisado_por: string
@@ -42,6 +71,7 @@ export async function GET(req: NextRequest) {
             confianza_hecho: string
           }>>`
             SELECT
+              rp.id::int AS id,
               rp.hecho_id::text,
               rp.clasificacion_humana,
               rp.revisado_por,
@@ -60,12 +90,13 @@ export async function GET(req: NextRequest) {
               LIMIT 1
             ) cm ON true
             LEFT JOIN ubicaciones u ON hd.ubicacion_id = u.id
-            WHERE rp.revisado_at > ${desde}
-            ORDER BY rp.revisado_at ASC
+            WHERE rp.id > ${ultimoId}
+            ORDER BY rp.id ASC
+            LIMIT 100
           `
 
           if (nuevas.length > 0) {
-            desde = nuevas[nuevas.length - 1].revisado_at
+            ultimoId = nuevas[nuevas.length - 1].id
 
             for (const r of nuevas) {
               const payload = JSON.stringify({
@@ -79,7 +110,7 @@ export async function GET(req: NextRequest) {
                 provincia: r.provincia ?? null,
                 confianza_hecho: r.confianza_hecho,
               })
-              controller.enqueue(encoder.encode(`data: ${payload}\n\n`))
+              controller.enqueue(encoder.encode(`id: ${r.id}\ndata: ${payload}\n\n`))
             }
           } else {
             // Heartbeat para mantener la conexión viva

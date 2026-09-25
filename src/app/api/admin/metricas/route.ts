@@ -132,5 +132,9 @@ export async function GET() {
         ? Math.round((Number(m.verificados) / Number(m.total)) * 100)
         : null,
     })),
-  }, { headers: { 'Cache-Control': 'private, s-maxage=900, stale-while-revalidate=1800' } })
+  // no-store, como toda ruta admin (CLAUDE.md §9). Antes era
+  // `private, s-maxage=900`: s-maxage no hace nada junto a private, y el
+  // navegador podía mostrar métricas de hasta media hora atrás justo después
+  // de una corrida o una tanda de revisiones.
+  }, { headers: { 'Cache-Control': 'no-store' } })
 }

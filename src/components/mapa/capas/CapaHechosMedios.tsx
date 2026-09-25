@@ -76,8 +76,11 @@ export function CapaHechosMedios({ hechos, visible }: Props) {
       })
 
       marker.addListener('click', () => {
+        // fecha_hecho es un DATE (día calendario sin hora): se formatea en UTC.
+        // En la zona del navegador (UTC-3) la medianoche UTC cae el día
+        // anterior y cada pin mostraba la fecha corrida un día.
         const fecha = hecho.fecha_hecho
-          ? new Date(hecho.fecha_hecho).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })
+          ? new Date(hecho.fecha_hecho).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'UTC' })
           : 'Fecha desconocida'
 
         // Contenido como nodos DOM: título, medio, ubicación y URL vienen de

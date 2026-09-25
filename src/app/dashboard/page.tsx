@@ -40,7 +40,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-[#2D1B4E] text-white p-4">
+      <header className="bg-[#1E427C] text-white p-4">
         <h1 className="text-xl font-bold">Mapa Nacional del Delito</h1>
       </header>
 

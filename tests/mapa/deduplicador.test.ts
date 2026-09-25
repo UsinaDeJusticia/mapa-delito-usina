@@ -37,6 +37,22 @@ describe('mismoNombreVictima', () => {
     assert.equal(mismoNombreVictima('Juan', 'Juan'), false)
   })
 
+  test('una descripción no es un nombre: no fusiona homicidios distintos', () => {
+    // Regresión: "un joven" contra "un joven de 17 años" daba true (dos
+    // tokens contenidos) y la nota de un homicidio nuevo se vinculaba a otro
+    // con confianza 97, sin IA ni revisión.
+    assert.equal(mismoNombreVictima('un joven', 'un joven de 17 años'), false)
+    assert.equal(mismoNombreVictima('No identificado', 'No identificado'), false)
+    assert.equal(mismoNombreVictima('Una mujer', 'una mujer de 35 años'), false)
+    assert.equal(mismoNombreVictima('menor de edad', 'Menor de edad'), false)
+    assert.equal(mismoNombreVictima('Hombre de 40 años', 'hombre de 40 años'), false)
+  })
+
+  test('un nombre real rodeado de descripción sigue matcheando', () => {
+    assert.equal(mismoNombreVictima('Juan Pérez, de 22 años', 'Juan Pérez'), true)
+    assert.equal(mismoNombreVictima('el joven Lucas Gómez', 'Lucas Gómez'), true)
+  })
+
   test('maneja null, undefined y cadenas vacías', () => {
     assert.equal(mismoNombreVictima(null, 'Juan Pérez'), false)
     assert.equal(mismoNombreVictima('Juan Pérez', undefined), false)
