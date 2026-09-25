@@ -229,7 +229,7 @@ PIPELINE_AGENTE_INTERVALO_S  # Cada cuánto mira la cola (default 15)
 
 ### Dónde corre
 - **Agente local** (`scripts/pipeline/agente-local.ts`, `npm run agente`) en la computadora del equipo: corrida diaria a las 7 (hora argentina, recupera si la PC estaba apagada) y las corridas que se encolan desde `/admin/pipeline`. Panel y agente se hablan por la tabla `corridas_pipeline`; la PC no necesita puertos abiertos. Ver `docs/agente-local.md`.
-- **GitHub Actions** (`pipeline.yml`) es respaldo: corre a las 12 con `--solo-si-no-corrio-hoy` y solo trabaja si la programada del día no se hizo.
+- **GitHub Actions** (`pipeline.yml`) es respaldo: corre a las 12 con `--solo-si-no-corrio-hoy` y solo trabaja si la programada del día no se hizo. Una programada en cola sin agente conectado la toma él, en la misma fila (`tomarProgramadaParaRespaldo` en `corridas.ts`).
 - Vercel no corre el pipeline (necesita Chrome y tarda más que una función serverless).
 
 ### Flujo general

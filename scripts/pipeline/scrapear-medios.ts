@@ -66,13 +66,13 @@ import {
 } from '../../src/lib/pipeline/opciones-corrida'
 import { fechaArgentina, fechaDelHecho, horaArgentina } from '../../src/lib/pipeline/fechas'
 import {
-  claveProgramada,
   encolarCorrida,
   esOrigenValido,
   estadoFinal,
   finalizarCorrida,
   formatearEvento,
-  programadaDeHoyCubierta,
+  latidoCorrida,
+  tomarProgramadaParaRespaldo,
   type ContadoresCorrida,
   type OrigenCorrida,
   type ProgresoCorrida,
@@ -124,7 +124,7 @@ const ORIGEN: OrigenCorrida = esOrigenValido(process.env.PIPELINE_ORIGEN)
   : 'cli'
 /**
  * Modo respaldo de GitHub Actions: corre solo si la corrida programada del día
- * no la hizo ya el agente local. Ver programadaDeHoyCubierta().
+ * no la hizo ya el agente local. Ver tomarProgramadaParaRespaldo().
  */
 const SOLO_SI_NO_CORRIO_HOY = process.argv.includes('--solo-si-no-corrio-hoy')
 
@@ -1041,29 +1041,65 @@ async function prepararProveedorLLM(): Promise<{ ok: true } | { ok: false; motiv
 /** Fila propia en corridas_pipeline (solo cuando no la maneja el agente). */
 let corridaPropiaId: string | null = null
 
-async function registrarCorridaPropia(): Promise<void> {
-  if (CORRIDA_ID_EXTERNA) return
+/**
+ * Latido de la fila propia, con el progreso. Sin esto el panel mostraba toda
+ * corrida de Actions como "sin señal" a los 10 minutos, con la barra en cero,
+ * y su botón de cancelar no hacía nada.
+ */
+const LATIDO_PROPIO_MS = 30_000
+let latidoPropio: ReturnType<typeof setInterval> | null = null
+
+function empezarLatidoPropio(): void {
+  const id = corridaPropiaId
+  if (!id || latidoPropio) return
+  latidoPropio = setInterval(() => {
+    latidoCorrida(prisma, id, progreso)
+      .then(({ cancelar }) => { if (cancelar) cortar('Cancelación pedida desde el panel') })
+      .catch(() => { /* el historial es un extra: un corte de red no frena la corrida */ })
+  }, LATIDO_PROPIO_MS)
+  latidoPropio.unref()
+}
+
+/**
+ * Registra la corrida en el historial. Devuelve false si no hay que scrapear:
+ * el respaldo de Actions encontró la programada de hoy cubierta por el agente.
+ */
+async function registrarCorridaPropia(): Promise<boolean> {
+  if (CORRIDA_ID_EXTERNA) return true
+  const agente = ORIGEN === 'github-actions' ? 'github-actions' : `cli@${process.pid}`
   try {
-    const datos = {
-      origen: ORIGEN,
-      parametros: PARAMETROS,
-      enCursoPor: ORIGEN === 'github-actions' ? 'github-actions' : `cli@${process.pid}`,
+    if (SOLO_SI_NO_CORRIO_HOY) {
+      // El respaldo se queda con la clave del día (o con la programada que el
+      // agente dejó en cola): si el agente se enciende más tarde, ve que ya se
+      // hizo y no la repite.
+      const respaldo = await tomarProgramadaParaRespaldo(prisma, fechaArgentina(), {
+        origen: ORIGEN,
+        parametros: PARAMETROS,
+        agente,
+      })
+      if (!respaldo.correr) {
+        log('✅', `No hace falta correr el respaldo: ${respaldo.detalle}`)
+        return false
+      }
+      log('▶️', `Corre el respaldo: ${respaldo.detalle}`)
+      corridaPropiaId = respaldo.corridaId
+      return true
     }
-    // El respaldo de Actions toma la clave del día: si el agente local se
-    // enciende más tarde, ve que la programada ya se hizo y no la repite.
-    const corrida = SOLO_SI_NO_CORRIO_HOY
-      ? (await encolarCorrida(prisma, { ...datos, claveUnica: claveProgramada(fechaArgentina()) }))
-        ?? (await encolarCorrida(prisma, datos))
-      : await encolarCorrida(prisma, datos)
+    const corrida = await encolarCorrida(prisma, { origen: ORIGEN, parametros: PARAMETROS, enCursoPor: agente })
     corridaPropiaId = corrida?.id ?? null
   } catch (error) {
     // Sin la tabla (migración no aplicada) la corrida sigue igual: el
     // historial del panel es un extra, no una condición para scrapear.
-    log('⚠️', `No se pudo registrar la corrida en el historial: ${String(error).slice(0, 150)}`)
+    log('⚠️', `No se pudo registrar la corrida en el historial (${String(error).slice(0, 150)}); se corre igual`)
   }
+  return true
 }
 
 async function finalizarCorridaPropia(resumen: ResumenCorrida | null, exitCode: number, cancelada = false) {
+  if (latidoPropio) {
+    clearInterval(latidoPropio)
+    latidoPropio = null
+  }
   if (!corridaPropiaId) return
   try {
     const { estado, error } = estadoFinal(exitCode, cancelada, resumen)
@@ -1087,21 +1123,6 @@ async function main(): Promise<number> {
   log('⚙️', `Confianza mínima: ${CONFIANZA_MINIMA}%`)
   log('⚙️', `Origen: ${ORIGEN}${CORRIDA_ID_EXTERNA ? ' (agente local)' : ''}`)
 
-  // Respaldo de Actions: si la programada de hoy ya la cubrió el agente
-  // local, no hay nada que hacer.
-  if (SOLO_SI_NO_CORRIO_HOY) {
-    try {
-      const { cubierta, detalle } = await programadaDeHoyCubierta(prisma, fechaArgentina())
-      if (cubierta) {
-        log('✅', `No hace falta correr el respaldo: ${detalle}`)
-        return 0
-      }
-      log('▶️', `Corre el respaldo: ${detalle}`)
-    } catch (error) {
-      log('⚠️', `No se pudo consultar el historial de corridas (${String(error).slice(0, 120)}); se corre igual`)
-    }
-  }
-
   // Filtrar medios según el alcance pedido
   const { seleccionados: medios, desconocidos } = seleccionarMedios(MEDIOS, PARAMETROS)
   if (desconocidos.length > 0) log('⚠️', `Medios desconocidos, se ignoran: ${desconocidos.join(', ')}`)
@@ -1112,9 +1133,13 @@ async function main(): Promise<number> {
     return 1
   }
 
+  // Respaldo de Actions: si la programada de hoy ya la cubrió el agente
+  // local, no hay nada que hacer.
+  if (!(await registrarCorridaPropia())) return 0
+  empezarLatidoPropio()
+
   log('📰', `Medios a scrapear (${medios.length}): ${medios.map(m => m.nombre).join(', ')}`)
   emitirProgreso({ totalMedios: medios.length, fase: 'verificando-llm' })
-  await registrarCorridaPropia()
 
   const resultadosMedios: ResultadoMedio[] = []
   let motivoFallo: string | undefined
@@ -1324,20 +1349,22 @@ function cerrarBrowser() {
   ejecutarBrowser(comandos.cerrar(), { timeoutMs: 15000 })
 }
 
-// Cancelación desde el panel (el agente manda SIGTERM) o Ctrl+C en la consola:
-// se cierra el browser para no dejar un Chrome huérfano en la computadora.
+// Cancelación desde el panel (el agente manda SIGTERM; una corrida de Actions
+// o de consola la ve en su latido) o Ctrl+C en la consola: se cierra el browser
+// para no dejar un Chrome huérfano en la computadora.
 let saliendoPorSenal = false
+function cortar(motivo: string): void {
+  if (saliendoPorSenal) return
+  saliendoPorSenal = true
+  log('🛑', `${motivo}: se cierra el browser y se corta la corrida`)
+  cerrarBrowser()
+  setTimeout(() => process.exit(130), 5000).unref()
+  finalizarCorridaPropia(null, 130, true)
+    .finally(() => prisma.$disconnect())
+    .finally(() => process.exit(130))
+}
 for (const senal of ['SIGINT', 'SIGTERM'] as const) {
-  process.on(senal, () => {
-    if (saliendoPorSenal) return
-    saliendoPorSenal = true
-    log('🛑', `Señal ${senal}: se cierra el browser y se corta la corrida`)
-    cerrarBrowser()
-    setTimeout(() => process.exit(130), 5000).unref()
-    finalizarCorridaPropia(null, 130, true)
-      .finally(() => prisma.$disconnect())
-      .finally(() => process.exit(130))
-  })
+  process.on(senal, () => cortar(`Señal ${senal}`))
 }
 
 main()

@@ -146,6 +146,9 @@ inicial y sigue sin él (queda anotado en el log).
 
 - **La computadora estaba apagada a las 7**: el agente hace la programada al
   encenderse. Si a las 12 todavía no se hizo, la hace GitHub Actions.
+- **El agente encoló la programada y se cerró antes de tomarla** (por ejemplo,
+  con otras corridas delante): a las 12 Actions ve que no hay ningún agente
+  conectado y la toma él, en la misma fila; el agente no la repite al volver.
 - **Se apaga o se suspende a mitad de una corrida**: el panel la marca "sin
   señal del agente" a los 10 minutos; al volver a arrancar, el agente la cierra
   como fallida. Lo que ya se había guardado queda guardado.

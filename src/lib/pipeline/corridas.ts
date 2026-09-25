@@ -359,28 +359,112 @@ export async function limpiarLineasViejas(db: Db, dias = 30): Promise<number> {
 }
 
 /**
- * ¿Hace falta que el respaldo de GitHub Actions corra hoy?
+ * ¿La programada del día ya está cubierta, o tiene que correr el respaldo de
+ * GitHub Actions?
  *
- * No, si la corrida programada del día ya existe y no terminó mal: completada,
- * pendiente, o en curso con latido reciente. Una en curso sin latido se trata
- * como interrumpida (la computadora se apagó a mitad de camino).
+ * Cubierta: completada, en curso con latido reciente, o pendiente con algún
+ * agente vivo que la va a tomar. Una pendiente sin agente vivo no cubre nada:
+ * el agente la encoló y se apagó antes de tomarla (o lo cerraron con otras
+ * corridas delante), y darla por buena dejaba el día sin corrida. Una en curso
+ * sin latido se trata como interrumpida (la computadora se apagó a mitad).
  */
-export async function programadaDeHoyCubierta(
+export function evaluarProgramada(
+  corrida: Pick<CorridaPipeline, 'estado' | 'origen' | 'agente' | 'latidoAt'> | null,
+  agenteVivo: boolean,
+  ahora: Date = new Date()
+): { cubierta: boolean; detalle: string } {
+  if (!corrida) return { cubierta: false, detalle: 'no hubo corrida programada hoy' }
+  switch (corrida.estado) {
+    case 'completada':
+      return { cubierta: true, detalle: `la programada de hoy está completada (${corrida.origen})` }
+    case 'pendiente':
+      return agenteVivo
+        ? { cubierta: true, detalle: 'la programada de hoy está en cola y hay un agente conectado' }
+        : { cubierta: false, detalle: 'la programada de hoy quedó en cola sin ningún agente conectado' }
+    case 'en_curso': {
+      const latido = corrida.latidoAt?.getTime() ?? 0
+      return ahora.getTime() - latido < CORRIDA_COLGADA_MS
+        ? { cubierta: true, detalle: `la programada de hoy está en curso en ${corrida.agente ?? 'otro agente'}` }
+        : { cubierta: false, detalle: 'la programada de hoy quedó en curso sin latido' }
+    }
+    default:
+      return { cubierta: false, detalle: `la programada de hoy terminó ${corrida.estado}` }
+  }
+}
+
+/** ¿Algún agente dio señales hace menos de AGENTE_VIVO_MS? Late también mientras ejecuta. */
+export async function hayAgenteVivo(db: Db, ahora: Date = new Date()): Promise<boolean> {
+  const vivo = await db.agentePipeline.findFirst({
+    where: { latidoAt: { gte: new Date(ahora.getTime() - AGENTE_VIVO_MS) } },
+    select: { nombre: true },
+  })
+  return vivo !== null
+}
+
+export type DecisionRespaldo =
+  | { correr: false; detalle: string }
+  | { correr: true; corridaId: string | null; detalle: string }
+
+/**
+ * El respaldo de Actions decide si corre y, si corre, con qué fila del
+ * historial.
+ *
+ * Entre la consulta y el alta puede aparecer el agente (la computadora se
+ * prende justo a esa hora). En vez de sumar una corrida en paralelo, se vuelve
+ * a leer la fila del día y se decide de nuevo. Una programada pendiente sin
+ * agente la toma el respaldo con el mismo candado que usa el agente
+ * (`updateMany` condicionado al estado): nunca la corren los dos.
+ */
+export async function tomarProgramadaParaRespaldo(
   db: Db,
   fecha: string,
-  ahora: Date = new Date()
-): Promise<{ cubierta: boolean; detalle: string }> {
-  const corrida = await db.corridaPipeline.findUnique({ where: { claveUnica: claveProgramada(fecha) } })
-  if (!corrida) return { cubierta: false, detalle: 'no hubo corrida programada hoy' }
-  if (corrida.estado === 'completada' || corrida.estado === 'pendiente') {
-    return { cubierta: true, detalle: `la programada de hoy está ${corrida.estado} (${corrida.origen})` }
-  }
-  if (corrida.estado === 'en_curso') {
-    const latido = corrida.latidoAt?.getTime() ?? 0
-    if (ahora.getTime() - latido < CORRIDA_COLGADA_MS) {
-      return { cubierta: true, detalle: `la programada de hoy está en curso en ${corrida.agente ?? 'otro agente'}` }
+  datos: { origen: OrigenCorrida; parametros: object; agente: string }
+): Promise<DecisionRespaldo> {
+  const claveUnica = claveProgramada(fecha)
+  for (let intento = 0; intento < 3; intento++) {
+    const existente = await db.corridaPipeline.findUnique({ where: { claveUnica } })
+
+    if (!existente) {
+      const creada = await encolarCorrida(db, {
+        origen: datos.origen,
+        parametros: datos.parametros,
+        claveUnica,
+        enCursoPor: datos.agente,
+      })
+      if (creada) return { correr: true, corridaId: creada.id, detalle: 'no hubo corrida programada hoy' }
+      continue // el agente la creó en este instante: se vuelve a leer
     }
-    return { cubierta: false, detalle: 'la programada de hoy quedó en curso sin latido' }
+
+    const agenteVivo = existente.estado === 'pendiente' && (await hayAgenteVivo(db))
+    const { cubierta, detalle } = evaluarProgramada(existente, agenteVivo)
+    if (cubierta) return { correr: false, detalle }
+
+    if (existente.estado === 'pendiente') {
+      const ahora = new Date()
+      const { count } = await db.corridaPipeline.updateMany({
+        where: { id: existente.id, estado: 'pendiente' },
+        data: {
+          estado: 'en_curso',
+          agente: datos.agente,
+          parametros: datos.parametros as Prisma.InputJsonValue,
+          iniciadaAt: ahora,
+          latidoAt: ahora,
+        },
+      })
+      if (count === 1) return { correr: true, corridaId: existente.id, detalle: `${detalle}: la toma el respaldo` }
+      continue // la tomó un agente en este instante
+    }
+
+    // Terminó mal o quedó colgada: el respaldo corre con una fila propia, sin
+    // la clave del día (que sigue en la fila original).
+    const reemplazo = await encolarCorrida(db, {
+      origen: datos.origen,
+      parametros: datos.parametros,
+      enCursoPor: datos.agente,
+    })
+    return { correr: true, corridaId: reemplazo?.id ?? null, detalle }
   }
-  return { cubierta: false, detalle: `la programada de hoy terminó ${corrida.estado}` }
+  // La fila del día cambió tres veces mientras se decidía: otra punta la está
+  // manejando, y correr en paralelo es peor que no correr.
+  return { correr: false, detalle: 'la programada de hoy cambió de estado mientras se consultaba' }
 }
