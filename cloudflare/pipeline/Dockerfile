@@ -30,7 +30,9 @@ ENV AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium
 # Dependencias primero, para aprovechar la caché de capas.
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
-RUN npm ci --ignore-scripts --no-audit --no-fund \
+# --include=dev: tsx y el CLI de prisma son devDependencies y NODE_ENV=production
+# las omitiría.
+RUN npm ci --include=dev --ignore-scripts --no-audit --no-fund \
  && npx prisma generate \
  && npm cache clean --force
 
