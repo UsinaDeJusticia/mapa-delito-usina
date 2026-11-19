@@ -141,7 +141,80 @@ jobs:
           PIPELINE_SNAPSHOT_MAX_CHARS: >-
             ${{ (github.event_name == 'workflow_dispatch' && inputs.snapshot_max_chars) || '10000' }}
 
-      - name: Notificar resultado
-        if: always()
-        run: |
-          echo "Pipeline completado con estado: ${{ job.status }}"
+  # Del 17/10 al 18/11/2026 este workflow falló 33 días seguidos (clave de
+  # OpenCode vencida, modelo retirado del catálogo) y nadie se enteró: el
+  # único "aviso" era un echo en el log. Ahora una falla de la corrida
+  # PROGRAMADA abre un issue (o comenta el que ya está abierto, así no se
+  # acumula uno por día) y la primera corrida programada que sale bien lo
+  # cierra. GitHub notifica a quien vigila el repo y al asignado.
+  #
+  # Solo `schedule`: las corridas a mano son experimentos y quien las dispara
+  # ya está mirando. El repo es público: el issue lleva solo el link al run,
+  # nunca salida del pipeline.
+  #
+  # Para asignar el aviso a alguien: variable de repo PIPELINE_AVISO_ASIGNAR
+  # con uno o más usuarios de GitHub separados por coma.
+  aviso:
+    needs: pipeline
+    if: always() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Abrir, comentar o cerrar el issue de pipeline caído
+        uses: actions/github-script@v8
+        env:
+          RESULTADO: ${{ needs.pipeline.result }}
+          ASIGNAR: ${{ vars.PIPELINE_AVISO_ASIGNAR }}
+        with:
+          script: |
+            const ETIQUETA = 'pipeline-caido'
+            const { owner, repo } = context.repo
+            const resultado = process.env.RESULTADO
+            const run = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`
+            const hoy = new Date().toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })
+
+            const abiertos = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: 'open', labels: ETIQUETA, per_page: 100,
+            })
+            const abierto = abiertos.find((i) => !i.pull_request)
+
+            if (resultado === 'success') {
+              if (abierto) {
+                await github.rest.issues.createComment({ owner, repo, issue_number: abierto.number,
+                  body: `✅ La corrida programada del ${hoy} salió bien: ${run}\n\nSe cierra el aviso.` })
+                await github.rest.issues.update({ owner, repo, issue_number: abierto.number,
+                  state: 'closed', state_reason: 'completed' })
+              }
+              return
+            }
+
+            // failure, cancelled (incluye el timeout de 120 min) o skipped.
+            const detalle = `La corrida programada del ${hoy} terminó en **${resultado}**: ${run}`
+            if (abierto) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: abierto.number,
+                body: `❌ Sigue fallando. ${detalle}` })
+              return
+            }
+
+            try {
+              await github.rest.issues.createLabel({ owner, repo, name: ETIQUETA, color: 'B60205',
+                description: 'El pipeline de medios falló; lo abre y cierra pipeline.yml' })
+            } catch (e) {
+              if (e.status !== 422) throw e // 422 = la etiqueta ya existe
+            }
+            const asignados = (process.env.ASIGNAR || '').split(',').map((u) => u.trim()).filter(Boolean)
+            await github.rest.issues.create({
+              owner, repo, labels: [ETIQUETA], assignees: asignados,
+              title: `Pipeline de medios caído (desde el ${hoy})`,
+              body: [
+                `❌ ${detalle}`,
+                '',
+                'Ni el agente local ni el respaldo de Actions completaron la corrida del día, así que hoy no entran noticias nuevas al mapa.',
+                '',
+                'Para diagnosticar: abrir el run, paso **Correr pipeline**. Causas ya vistas: API key de OpenCode Go vencida (401), modelo retirado del catálogo (400 "Model is unavailable", ver `OPENCODE_MODELO_ECONOMICO`), browser que no abre. También mirar `/admin/pipeline`.',
+                '',
+                'Este issue se comenta en cada falla y se cierra solo con la primera corrida programada que salga bien.',
+              ].join('\n'),
+            })
