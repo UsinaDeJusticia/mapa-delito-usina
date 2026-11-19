@@ -6,6 +6,7 @@
  *   local               → Ollama (OLLAMA_MODEL + OLLAMA_BASE_URL)
  */
 
+import { MAX_TOKENS_LLM } from '@/lib/pipeline/limites-llm'
 import { getConfigActiva } from '@/config/modelos-pipeline'
 import { crearClienteLLM, credencialFaltante, parametrosExtraLLM } from '@/lib/mapa/cliente-llm'
 import {
@@ -346,11 +347,9 @@ export async function extraerDatosNoticia(
   const fewShotMessages = construirEjemplosFewShot(ejemplos)
 
   try {
-    // max_tokens 1500 y no 500: el JSON pedido incluye resumen_hecho ("un
-    // párrafo") y el validador tolera hasta 4000 chars ahí, así que la salida
-    // esperada son 300-500 tokens. 500 dejaba el límite justo en el borde. No
-    // es la causa de los cortes en la posición 207 —eso pasa muy por debajo del
-    // límite—, pero era un segundo problema real esperando su turno.
+    // El JSON pedido son 300-500 tokens, pero el modelo razona antes y ese
+    // razonamiento cuenta en max_tokens: con 1500 llegaba al borde (ver
+    // limites-llm.ts).
     const resultado = await obtenerContenidoLLM({
       etiqueta: urlFuente,
       registrarUso: d => {
@@ -374,7 +373,7 @@ export async function extraerDatosNoticia(
             },
           ],
           temperature: 0.1,
-          max_tokens: 1500,
+          max_tokens: MAX_TOKENS_LLM.extraccion,
           ...(parametrosExtraLLM(config) as object),
         }),
     })

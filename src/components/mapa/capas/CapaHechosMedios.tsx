@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { contenidoHechoMedio } from '@/lib/mapa/infowindow-dom'
+import { esNoDoloso } from '@/lib/mapa/gravedad-hecho'
 import { useMap } from '@vis.gl/react-google-maps'
 
 export interface HechoMedio {
@@ -16,14 +17,18 @@ export interface HechoMedio {
   fecha_hecho: string | null
   confianza: string
   tipo_delito: string | null
+  /** Código SNIC del tipo de delito (3 y 4 = no dolosos, ver gravedad-hecho.ts). */
+  codigo_snic?: string | null
 }
 
 const COLOR_VERIFICADO = '#C0392B'
 const COLOR_PRELIMINAR = '#E67E22'
+/** Muertes no dolosas (culposas y viales): gris secundario de la paleta de Usina. */
+export const COLOR_NO_DOLOSO = '#A7A8AC'
 
-function crearPinSVG(confianza: string): string {
+function crearPinSVG(confianza: string, noDoloso: boolean): string {
   const esVerificado = confianza === 'VERIFICADO'
-  const color = esVerificado ? COLOR_VERIFICADO : COLOR_PRELIMINAR
+  const color = noDoloso ? COLOR_NO_DOLOSO : esVerificado ? COLOR_VERIFICADO : COLOR_PRELIMINAR
   const opacity = esVerificado ? '1' : '0.75'
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="26" viewBox="0 0 20 26">
@@ -60,7 +65,8 @@ export function CapaHechosMedios({ hechos, visible }: Props) {
 
     hechos.forEach(hecho => {
       const esVerificado = hecho.confianza === 'VERIFICADO'
-      const iconUrl = crearPinSVG(hecho.confianza)
+      const noDoloso = esNoDoloso(hecho.codigo_snic)
+      const iconUrl = crearPinSVG(hecho.confianza, noDoloso)
 
       const marker = new google.maps.Marker({
         position: { lat: hecho.latitud, lng: hecho.longitud },
@@ -71,7 +77,8 @@ export function CapaHechosMedios({ hechos, visible }: Props) {
           anchor: new google.maps.Point(10, 26),
         },
         title: hecho.titulo ?? 'Hecho sin título',
-        zIndex: esVerificado ? 200 : 100,
+        // Los no dolosos quedan debajo: no tapan a los homicidios.
+        zIndex: noDoloso ? 50 : esVerificado ? 200 : 100,
         optimized: false,
       })
 
@@ -95,6 +102,7 @@ export function CapaHechosMedios({ hechos, visible }: Props) {
             url_cobertura: hecho.url_cobertura,
             fecha,
             esVerificado,
+            noDoloso,
           })
         )
         infoWindow.open(map, marker)

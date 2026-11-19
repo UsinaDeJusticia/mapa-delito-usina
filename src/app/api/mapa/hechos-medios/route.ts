@@ -16,6 +16,7 @@ export async function GET() {
     fecha_hecho: Date | null
     confianza: string
     tipo_delito: string | null
+    codigo_snic: string | null
   }>>`
     SELECT * FROM (
       SELECT DISTINCT ON (hd.id)
@@ -29,7 +30,8 @@ export async function GET() {
         u.longitud,
         hd.fecha_hecho,
         hd.confianza::text,
-        td.nombre AS tipo_delito
+        td.nombre AS tipo_delito,
+        td.codigo_snic
       FROM hechos_delictivos hd
       LEFT JOIN coberturas_mediaticas cm ON cm.hecho_delictivo_id = hd.id
       LEFT JOIN ubicaciones u ON hd.ubicacion_id = u.id

@@ -76,7 +76,7 @@ mapa-delito-usina/
 │   │       │   ├── CapaProvincias.tsx   # Coroplético provincial (google.maps.Data)
 │   │       │   ├── CapaDepartamentos.tsx# Bordes departamentales + labels (lazy)
 │   │       │   ├── MarcadoresCirculares.tsx # Burbujas SVG por provincia
-│   │       │   └── CapaHechosMedios.tsx # Pins individuales del pipeline (rojo=VERIFICADO, naranja=PRELIMINAR)
+│   │       │   └── CapaHechosMedios.tsx # Pins individuales del pipeline (rojo=VERIFICADO, naranja=PRELIMINAR, gris=no doloso)
 │   │       └── hooks/
 │   │           ├── useGeoJSON.ts        # Fetch + cache en memoria de GeoJSON
 │   │           └── useGeolocalizacion.ts# GPS del browser, no bloquea carga
@@ -93,6 +93,7 @@ mapa-delito-usina/
 │   │   ├── pipeline/
 │   │   │   ├── browser-cmd.ts           # agent-browser sin shell: comandos validados, binario nativo, entorno mínimo
 │   │   │   ├── llamada-llm.ts           # Reintentos y diagnóstico de cada llamada al LLM
+│   │   │   ├── limites-llm.ts           # max_tokens de cada llamada (holgados: el modelo razona dentro del techo)
 │   │   │   ├── salud-llm.ts             # Salud del proveedor en la corrida (corta si cae)
 │   │   │   ├── schemas-llm.ts           # Validación runtime de las respuestas del LLM
 │   │   │   ├── url-segura.ts            # Destinos permitidos (anti-SSRF)
@@ -355,7 +356,7 @@ Estado global: año, tipo de delito, fuente (SNIC/SAT), filtros SAT, provincia s
 **Botón "Revisar"**: flotante en `bottom-[72px] right-4`, encima del botón de recentrar.
 
 ### `capas/CapaHechosMedios.tsx`
-Pins individuales del pipeline. Rojo (`#C0392B`) = VERIFICADO, naranja (`#E67E22`) = PRELIMINAR. InfoWindow con detalles al click. Toggle en la leyenda.
+Pins individuales del pipeline. Rojo (`#C0392B`) = VERIFICADO, naranja (`#E67E22`) = PRELIMINAR, gris (`#A7A8AC`) = no doloso (códigos SNIC 3 y 4, `src/lib/mapa/gravedad-hecho.ts`) con la aclaración "No doloso" en el InfoWindow y en la leyenda. Toggle en la leyenda.
 
 ### `FiltrosSAT.tsx`
 Chips de filtros (Sexo, Arma, Vínculo, Lugar). **No tiene posicionamiento propio** — su padre decide dónde lo ubica. Carga opciones una sola vez desde `/api/mapa/sat-opciones`.
