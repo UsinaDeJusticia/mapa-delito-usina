@@ -80,6 +80,8 @@ interface Agente {
     perfilLLM?: string
     razonamiento?: string
     corridaEnCurso?: string | null
+    /** Agente de Cloudflare: se enciende solo cuando hay trabajo. */
+    bajoDemanda?: boolean
   }
 }
 
@@ -241,10 +243,17 @@ function EstadoAgente({ agentes, corridas, ahora }: { agentes: Agente[]; corrida
       <div className="flex items-start gap-3">
         <span className="mt-1.5 w-2.5 h-2.5 rounded-full bg-green-600 shrink-0" aria-hidden />
         <div className="text-sm text-gray-700 space-y-0.5">
-          <p>
-            <strong>Agente conectado:</strong> {conectado.nombre}{' '}
-            <span className="text-gray-400 text-xs">· último contacto {haceCuanto(conectado.latidoAt, ahora)}</span>
-          </p>
+          {conectado.info.bajoDemanda ? (
+            <p>
+              <strong>Agente en Cloudflare:</strong> se enciende solo a la hora de la corrida diaria y cuando encolás una{' '}
+              <span className="text-gray-400 text-xs">· última corrida {haceCuanto(conectado.latidoAt, ahora)}</span>
+            </p>
+          ) : (
+            <p>
+              <strong>Agente conectado:</strong> {conectado.nombre}{' '}
+              <span className="text-gray-400 text-xs">· último contacto {haceCuanto(conectado.latidoAt, ahora)}</span>
+            </p>
+          )}
           <p className="text-xs text-gray-500">
             {hora
               ? <>Corrida diaria a las {hora} (hora argentina) · {programadaHoy ? 'la de hoy ya se hizo' : 'la de hoy todavía no'}</>

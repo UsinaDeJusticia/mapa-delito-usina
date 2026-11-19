@@ -4,3 +4,5 @@ node_modules
 data/snic/
 scripts/
 docs/
+cloudflare/
+.dockerignore

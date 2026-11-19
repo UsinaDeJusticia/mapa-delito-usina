@@ -108,6 +108,12 @@ mapa-delito-usina/
 │   │       └── deduplicador.ts          # Deduplicación de noticias con IA
 │   └── types/
 │       └── mapa.ts                      # Tipos compartidos del frontend
+├── cloudflare/
+│   └── pipeline/                        # Worker + Container que corre el agente en Cloudflare (ver docs/pipeline-cloudflare.md)
+│       ├── src/index.ts                 # Cron 07:05/10:05 AR + POST /despertar → enciende el contenedor
+│       ├── Dockerfile                   # Node + Chromium de Debian + agente (contexto: raíz, filtrado por .dockerignore)
+│       ├── iniciar.sh                   # Arranque: sandbox de Chromium con respaldo a --no-sandbox
+│       └── wrangler.jsonc               # Config del Worker (tiene su propio package.json; excluido de tsconfig raíz y de Vercel)
 ├── prisma/
 │   ├── schema.prisma                    # Esquema completo (PostgreSQL + postgis)
 │   ├── seed.ts                          # Seed de tipos de delito
@@ -210,6 +216,9 @@ PIPELINE_SNAPSHOT_MAX_CHARS  # Cuánto de cada portada ve el LLM (código: 3000;
 PIPELINE_AGENTE_NOMBRE       # Nombre en el panel (default: hostname)
 PIPELINE_AGENTE_HORA         # Corrida diaria, hora argentina (default 07:00; "no" = sin programada)
 PIPELINE_AGENTE_INTERVALO_S  # Cada cuánto mira la cola (default 15)
+# Agente en Cloudflare (en Vercel, para que el panel lo despierte):
+PIPELINE_NUBE_URL            # URL del Worker usina-pipeline-medios
+PIPELINE_NUBE_TOKEN          # Token compartido con el Worker (secret DESPERTAR_TOKEN)
 ```
 
 ---
@@ -228,6 +237,7 @@ PIPELINE_AGENTE_INTERVALO_S  # Cada cuánto mira la cola (default 15)
 ## 5. Pipeline de medios
 
 ### Dónde corre
+- **Cloudflare Containers** (`cloudflare/pipeline/`, ver `docs/pipeline-cloudflare.md`): motor principal desde nov. 2026. Un Worker enciende un contenedor con el mismo agente (`agente-local.ts --una-vez`) a las 07:05 y 10:05 hora argentina, y cuando el panel encola una corrida (`POST /despertar`, `src/lib/pipeline/nube.ts`). El agente figura en el panel como bajo demanda (`info.bajoDemanda`). Se despliega con `.github/workflows/pipeline-cloudflare.yml`.
 - **Agente local** (`scripts/pipeline/agente-local.ts`, `npm run agente`) en la computadora del equipo: corrida diaria a las 7 (hora argentina, recupera si la PC estaba apagada) y las corridas que se encolan desde `/admin/pipeline`. Panel y agente se hablan por la tabla `corridas_pipeline`; la PC no necesita puertos abiertos. Ver `docs/agente-local.md`.
 - **GitHub Actions** (`pipeline.yml`) es respaldo: corre a las 12 con `--solo-si-no-corrio-hoy` y solo trabaja si la programada del día no se hizo. Una programada en cola sin agente conectado la toma él, en la misma fila (`tomarProgramadaParaRespaldo` en `corridas.ts`).
 - Vercel no corre el pipeline (necesita Chrome y tarda más que una función serverless).
@@ -382,7 +392,7 @@ Chips de filtros (Sexo, Arma, Vínculo, Lugar). **No tiene posicionamiento propi
 ## 11. Estado actual del producto
 
 - ✅ Mapa público desplegado en Vercel con datos SNIC y SAT
-- ✅ Pipeline con 13 medios activos, corriendo a diario desde el agente local (Actions de respaldo)
+- ✅ Pipeline con 13 medios activos, corriendo a diario en Cloudflare Containers (agente local opcional, Actions de respaldo)
 - ✅ Panel admin con revisión humana, métricas, tiempo real (SSE) y control del pipeline (`/admin/pipeline`)
 - ✅ Página de metodología en `/metodologia`
 - ✅ Favicon e identidad visual de Usina
