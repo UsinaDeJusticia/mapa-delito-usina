@@ -193,7 +193,7 @@ GOOGLE_CLIENT_SECRET         # OAuth 2.0 Client Secret
 ALLOWED_EMAILS               # Emails con acceso a /admin, separados por coma
 CRON_SECRET                  # Bearer token de las rutas cron (refresh-views)
 # Opcionales — override de modelo si OpenCode Go renombra alguno:
-OPENCODE_MODELO_ECONOMICO    # default: deepseek-v4-flash
+OPENCODE_MODELO_ECONOMICO    # default: deepseek-v4.1-flash (v4-flash salió del catálogo en oct. 2026)
 OPENCODE_MODELO_PRECISO      # default: deepseek-v4-pro
 # Opcionales para el perfil de respaldo "openrouter":
 OPENROUTER_API_KEY           # API key de OpenRouter
@@ -251,7 +251,7 @@ PIPELINE_AGENTE_INTERVALO_S  # Cada cuánto mira la cola (default 15)
 ### Perfiles de modelo (`src/config/modelos-pipeline.ts`)
 | Perfil | Proveedor | Modelo | USD / 1M entrada |
 |---|---|---|---|
-| `economico` (default) | OpenCode Go | `deepseek-v4-flash` | 0.14 |
+| `economico` (default) | OpenCode Go | `deepseek-v4.1-flash` | ~0.14 (sin confirmar) |
 | `preciso` | OpenCode Go | `deepseek-v4-pro` | 0.435 |
 | `openrouter` | OpenRouter | DeepSeek V3 | 0.14 |
 | `local` | Ollama | configurable | 0 |
