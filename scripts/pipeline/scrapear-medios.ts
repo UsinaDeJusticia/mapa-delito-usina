@@ -30,6 +30,7 @@
  */
 
 import './cargar-env'
+import { MAX_TOKENS_LLM } from '../../src/lib/pipeline/limites-llm'
 import { prisma } from '../../src/lib/mapa/queries'
 import { extraerDatosNoticia } from '../../src/lib/mapa/openrouter'
 import { deduplicar, clasificarCobertura, urlYaRegistrada } from '../../src/lib/mapa/deduplicador'
@@ -346,7 +347,7 @@ async function identificarNoticiasConIA(
           },
         ],
         temperature: 0.1,
-        max_tokens: 800,
+        max_tokens: MAX_TOKENS_LLM.identificacion,
         ...(parametrosExtraLLM(config) as object),
       }),
     })
@@ -1127,7 +1128,7 @@ async function main(): Promise<number> {
   log('⚙️', `Alcance: ${describirAlcance(PARAMETROS)}`)
   log('⚙️', `Máximo noticias por medio: ${MAX_NOTICIAS}`)
   log('⚙️', `Confianza mínima: ${CONFIANZA_MINIMA}%`)
-  log('⚙️', `Origen: ${ORIGEN}${CORRIDA_ID_EXTERNA ? ' (agente local)' : ''}`)
+  log('⚙️', `Origen: ${ORIGEN}${CORRIDA_ID_EXTERNA ? ` (agente ${process.env.PIPELINE_AGENTE_NOMBRE?.trim() || 'local'})` : ''}`)
 
   // Filtrar medios según el alcance pedido
   const { seleccionados: medios, desconocidos } = seleccionarMedios(MEDIOS, PARAMETROS)

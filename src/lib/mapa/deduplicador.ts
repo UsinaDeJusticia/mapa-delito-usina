@@ -15,6 +15,7 @@
  * 5. Ambiguo → confirmación por IA
  */
 
+import { MAX_TOKENS_LLM } from '@/lib/pipeline/limites-llm'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/mapa/queries'
 import { crearClienteLLM, parametrosExtraLLM } from '@/lib/mapa/cliente-llm'
@@ -298,11 +299,9 @@ o
         model: config.modelo,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.1,
-        // 600 y no 300: la salida es JSON con un campo `razon` en prosa, y 300
-        // dejaba el corte al alcance de una explicación un poco larga. Un corte
-        // acá no es cosmético — el fallback asume "es un hecho nuevo", así que
-        // duplica el caso en el mapa.
-        max_tokens: 600,
+        // Holgado (ver limites-llm.ts): un corte acá no es cosmético — el
+        // fallback asume "es un hecho nuevo", así que duplica el caso en el mapa.
+        max_tokens: MAX_TOKENS_LLM.deduplicacion,
         ...(parametrosExtraLLM(config) as object),
       }),
     })

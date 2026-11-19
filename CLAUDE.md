@@ -93,6 +93,7 @@ mapa-delito-usina/
 │   │   ├── pipeline/
 │   │   │   ├── browser-cmd.ts           # agent-browser sin shell: comandos validados, binario nativo, entorno mínimo
 │   │   │   ├── llamada-llm.ts           # Reintentos y diagnóstico de cada llamada al LLM
+│   │   │   ├── limites-llm.ts           # max_tokens de cada llamada (holgados: el modelo razona dentro del techo)
 │   │   │   ├── salud-llm.ts             # Salud del proveedor en la corrida (corta si cae)
 │   │   │   ├── schemas-llm.ts           # Validación runtime de las respuestas del LLM
 │   │   │   ├── url-segura.ts            # Destinos permitidos (anti-SSRF)

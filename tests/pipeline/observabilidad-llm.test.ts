@@ -17,6 +17,7 @@
  * noticias", esa confusión tapaba el problema entero.
  */
 
+import { MAX_TOKENS_LLM } from '../../src/lib/pipeline/limites-llm'
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -95,17 +96,20 @@ describe('el bug de la pérdida silenciosa de medios no vuelve', () => {
 })
 
 describe('los límites de salida dejaron de estar al borde', () => {
-  test('el Prompt 2 pide más de 500 tokens', () => {
-    // El JSON pedido incluye resumen_hecho ("un párrafo") y el validador tolera
-    // 4000 chars ahí, así que la salida esperada son 300-500 tokens: 500 dejaba
-    // el techo justo encima del caso normal.
-    const src = leer('src/lib/mapa/openrouter.ts')
-    const m = src.match(/max_tokens:\s*(\d+)/)
-    assert.ok(m, 'no encontré max_tokens en openrouter.ts')
-    assert.ok(
-      Number(m![1]) >= 1000,
-      `max_tokens quedó en ${m![1]}: muy justo para el JSON que pide el prompt`
-    )
+  // deepseek-v4.1-flash razona dentro de max_tokens: con 800 / 1500 / 600 se
+  // gastaba todo pensando y devolvía vacío (Infobae, 19/11/2026).
+  test('los techos dejan lugar al razonamiento además de la respuesta', () => {
+    assert.ok(MAX_TOKENS_LLM.identificacion >= 8000, 'identificación')
+    assert.ok(MAX_TOKENS_LLM.extraccion >= 6000, 'extracción')
+    assert.ok(MAX_TOKENS_LLM.deduplicacion >= 3000, 'deduplicación')
+  })
+
+  test('las tres llamadas usan los techos centralizados, no números sueltos', () => {
+    for (const archivo of ['scripts/pipeline/scrapear-medios.ts', 'src/lib/mapa/openrouter.ts', 'src/lib/mapa/deduplicador.ts']) {
+      const src = leer(archivo)
+      assert.match(src, /max_tokens:\s*MAX_TOKENS_LLM\./, archivo)
+      assert.doesNotMatch(src, /max_tokens:\s*\d+/, `${archivo} tiene un max_tokens numérico`)
+    }
   })
 })
 
