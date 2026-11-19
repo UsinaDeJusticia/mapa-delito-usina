@@ -119,6 +119,9 @@ function infoAgente(): object {
     intervaloS: INTERVALO_MS / 1000,
     corridaEnCurso: corridaActual?.id ?? null,
     iniciadoAt: INICIADO_AT,
+    // El agente de Cloudflare se enciende solo cuando hay trabajo: el panel lo
+    // muestra disponible aunque su último latido tenga horas (src/lib/pipeline/nube.ts).
+    bajoDemanda: process.env.PIPELINE_AGENTE_BAJO_DEMANDA === '1',
   }
 }
 

@@ -1,0 +1,10 @@
+# Contexto de la imagen del pipeline en Cloudflare (cloudflare/pipeline/Dockerfile).
+# Solo entra lo que el agente necesita: nada de secretos, datos ni builds.
+*
+!package.json
+!package-lock.json
+!tsconfig.json
+!prisma/
+!src/
+!scripts/pipeline/
+!cloudflare/pipeline/iniciar.sh

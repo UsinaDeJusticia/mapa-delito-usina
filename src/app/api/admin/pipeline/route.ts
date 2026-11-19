@@ -2,7 +2,8 @@
  * Panel de control del pipeline: estado y encolado de corridas.
  *
  * GET  → agentes conectados, últimas corridas y catálogo de medios por provincia
- * POST → encola una corrida (la ejecuta el agente local, no este servidor)
+ * POST → encola una corrida y despierta al agente de Cloudflare si está
+ *        configurado (la ejecuta un agente, no este servidor)
  *
  * Vercel no puede correr el pipeline (necesita Chrome y tarda más que cualquier
  * función serverless): esta ruta solo escribe en la cola. Ver
@@ -12,7 +13,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requerirAdmin } from '@/lib/auth/admin'
 import { origenPermitido } from '@/lib/auth/origen'
 import { prisma } from '@/lib/mapa/queries'
-import { AGENTE_VIVO_MS, CORRIDA_COLGADA_MS, encolarCorrida } from '@/lib/pipeline/corridas'
+import { CORRIDA_COLGADA_MS, encolarCorrida } from '@/lib/pipeline/corridas'
+import { agenteDisponible, despertarAgenteNube } from '@/lib/pipeline/nube'
 import {
   LIMITES,
   catalogoPorProvincia,
@@ -62,7 +64,7 @@ export async function GET() {
         agentes: agentes.map(a => ({
           nombre: a.nombre,
           latidoAt: a.latidoAt.toISOString(),
-          conectado: ahora - a.latidoAt.getTime() < AGENTE_VIVO_MS,
+          conectado: agenteDisponible(a, ahora),
           info: a.info,
         })),
         corridas: corridas.map(c => ({
@@ -132,7 +134,12 @@ export async function POST(req: NextRequest) {
       solicitadaPor: session.user.email ?? session.user.name ?? 'desconocido',
     })
 
-    return NextResponse.json({ ok: true, id: corrida?.id ?? null }, { status: 201, headers: SIN_CACHE })
+    // El agente de Cloudflare está apagado entre corridas: se lo despierta.
+    // Si falla, la corrida igual quedó en cola (ver src/lib/pipeline/nube.ts).
+    const nube = await despertarAgenteNube()
+    if (nube.estado === 'error') console.error('No se pudo despertar al agente de Cloudflare:', nube.detalle)
+
+    return NextResponse.json({ ok: true, id: corrida?.id ?? null, nube: nube.estado }, { status: 201, headers: SIN_CACHE })
   } catch (error) {
     console.error('Error en POST /api/admin/pipeline:', error)
     return NextResponse.json({ error: 'No se pudo encolar la corrida' }, { status: 500, headers: SIN_CACHE })

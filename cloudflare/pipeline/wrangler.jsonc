@@ -1,0 +1,40 @@
+// Worker + Container del pipeline de medios (ver src/index.ts y
+// docs/pipeline-cloudflare.md). Se despliega desde GitHub Actions
+// (.github/workflows/pipeline-cloudflare.yml) al llegar cambios a master.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "usina-pipeline-medios",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-19",
+  "account_id": "0f8b22b94676bea93fdf80b94b00c94c",
+  "observability": { "enabled": true },
+  // Hora UTC. 10:05 UTC = 07:05 en Argentina (UTC-3, sin horario de verano):
+  // la corrida diaria. 13:05 UTC = 10:05: segundo intento por si la primera no
+  // arrancó; si la programada ya existe, el agente solo procesa lo pendiente y
+  // sale en un minuto. El respaldo de Actions corre a las 12.
+  "triggers": { "crons": ["5 10 * * *", "5 13 * * *"] },
+  "vars": {
+    // ½ vCPU, 4 GiB, 8 GB de disco: Chromium + Node con margen.
+    "INSTANCIA": "standard-1",
+    "OPENCODE_MODELO_ECONOMICO": "deepseek-v4.1-flash",
+    "PIPELINE_SNAPSHOT_MAX_CHARS": "10000"
+  },
+  "containers": [
+    {
+      "class_name": "AgentePipeline",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "base": {
+          "dockerfile": "./Dockerfile",
+          // La imagen necesita el código del repo: el contexto es la raíz
+          // (filtrado por el .dockerignore de la raíz).
+          "build_context": "../.."
+        }
+      }
+    }
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "AGENTE", "class_name": "AgentePipeline" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AgentePipeline"] }]
+}

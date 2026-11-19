@@ -1,0 +1,123 @@
+name: Pipeline en Cloudflare — imagen y deploy
+
+# Construye la imagen del agente del pipeline (cloudflare/pipeline/Dockerfile)
+# y la despliega en Cloudflare Containers junto con su Worker.
+#
+# - En un PR: solo construye la imagen y la prueba (Chromium, Node, tsx).
+# - Al llegar a master (o a mano): además despliega con wrangler.
+#
+# Secrets que usa el deploy:
+#   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID  → para wrangler
+#   DATABASE_URL, OPENCODE_API_KEY               → los recibe el contenedor
+#   PIPELINE_NUBE_TOKEN                          → el panel lo usa para despertar
+#                                                  al agente (mismo valor en Vercel)
+#   OPENROUTER_API_KEY (opcional)                → perfil de respaldo del LLM
+# Ver docs/pipeline-cloudflare.md.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'cloudflare/pipeline/**'
+      - 'scripts/pipeline/**'
+      - 'src/lib/**'
+      - 'src/config/**'
+      - 'prisma/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.dockerignore'
+      - '.github/workflows/pipeline-cloudflare.yml'
+  pull_request:
+    paths:
+      - 'cloudflare/pipeline/**'
+      - 'scripts/pipeline/**'
+      - 'src/lib/pipeline/**'
+      - 'src/config/**'
+      - 'prisma/**'
+      - 'package-lock.json'
+      - '.dockerignore'
+      - '.github/workflows/pipeline-cloudflare.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: pipeline-cloudflare-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  imagen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Construir la imagen del agente
+        run: docker build -f cloudflare/pipeline/Dockerfile -t usina-pipeline:ci .
+
+      # No corre el agente (necesitaría la base): verifica que todo lo que usa
+      # esté en la imagen y que Chromium abra una página.
+      - name: Probar la imagen
+        run: |
+          docker run --rm usina-pipeline:ci sh -c '
+            set -e
+            node --version
+            chromium --version
+            chromium --headless=new --disable-gpu --no-sandbox --dump-dom "data:text/html,<p>ok</p>" | grep -q "<p>ok</p>"
+            node --import tsx -e "await import(\"./src/lib/pipeline/opciones-corrida.ts\"); console.log(\"tsx ok\")"
+            test -x ./iniciar.sh
+          '
+
+  deploy:
+    needs: imagen
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: cloudflare/pipeline
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: cloudflare/pipeline/package-lock.json
+
+      - run: npm ci
+
+      - name: Verificar secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          PIPELINE_NUBE_TOKEN: ${{ secrets.PIPELINE_NUBE_TOKEN }}
+        run: |
+          falta=0
+          for v in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID DATABASE_URL OPENCODE_API_KEY PIPELINE_NUBE_TOKEN; do
+            if [ -z "$(printenv $v)" ]; then echo "::error::Falta el secret $v"; falta=1; fi
+          done
+          exit $falta
+
+      # Los secrets del Worker van en un archivo temporal fuera del repo que se
+      # borra siempre; nunca pasan por el log.
+      - name: Desplegar Worker y contenedor
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          DESPERTAR_TOKEN: ${{ secrets.PIPELINE_NUBE_TOKEN }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          secretos="$RUNNER_TEMP/secretos-worker.json"
+          trap 'rm -f "$secretos"' EXIT
+          node -e '
+            const claves = ["DATABASE_URL", "OPENCODE_API_KEY", "DESPERTAR_TOKEN", "OPENROUTER_API_KEY"]
+            const s = Object.fromEntries(claves.filter(k => process.env[k]).map(k => [k, process.env[k]]))
+            require("fs").writeFileSync(process.argv[1], JSON.stringify(s), { mode: 0o600 })
+          ' "$secretos"
+          npx wrangler deploy --secrets-file "$secretos"

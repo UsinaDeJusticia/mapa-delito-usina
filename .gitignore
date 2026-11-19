@@ -59,3 +59,7 @@ __pycache__/
 # necesita ninguna, pero esto evita que una improvisación termine commiteada.
 export_temp.sql
 scripts/export/*.tmp.sql
+
+# Worker del pipeline en Cloudflare
+cloudflare/pipeline/node_modules/
+cloudflare/pipeline/.wrangler/
