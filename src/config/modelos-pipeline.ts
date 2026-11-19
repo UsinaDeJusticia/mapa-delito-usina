@@ -36,7 +36,7 @@ export function envOverride(valor: string | undefined, porDefecto: string): stri
 // Los IDs salen del catálogo público https://opencode.ai/zen/go/v1/models y son
 // overridables por env var a propósito: si Go renombra o discontinúa un modelo
 // se corrige cambiando una variable, sin tocar código ni redeployar.
-const MODELO_ECONOMICO = envOverride(process.env.OPENCODE_MODELO_ECONOMICO, 'deepseek-v4-flash')
+const MODELO_ECONOMICO = envOverride(process.env.OPENCODE_MODELO_ECONOMICO, 'deepseek-v4.1-flash')
 const MODELO_PRECISO = envOverride(process.env.OPENCODE_MODELO_PRECISO, 'deepseek-v4-pro')
 
 export const PERFILES_MODELO: Record<PerfilModelo, ConfigModelo> = {
@@ -45,7 +45,7 @@ export const PERFILES_MODELO: Record<PerfilModelo, ConfigModelo> = {
     modelo: MODELO_ECONOMICO,
     baseUrl: OPENCODE_BASE_URL,
     descripcion: `OpenCode Go · ${MODELO_ECONOMICO} — costo mínimo`,
-    costoPorMilTokens: 0.00014, // deepseek-v4-flash: USD 0.14 por 1M de entrada
+    costoPorMilTokens: 0.00014, // deepseek-v4-flash costaba USD 0.14 por 1M de entrada; precio de v4.1-flash sin confirmar
   },
   preciso: {
     proveedor: 'opencode',
@@ -121,7 +121,7 @@ export function getPerfilRespaldoConfigurado(env: Record<string, string | undefi
 /**
  * Cuánto "piensa" el modelo antes de responder.
  *
- * deepseek-v4-flash es un modelo de razonamiento con esfuerzo alto por defecto.
+ * deepseek-v4.1-flash (antes v4-flash) es un modelo de razonamiento con esfuerzo alto por defecto.
  * En la última corrida sana (06/09/2026) una identificación que devolvía ~1.000
  * caracteres llegó a gastar 13.190 tokens de salida y entre 3 y 6 minutos: 40
  * de los 70 minutos de la corrida fueron el LLM pensando. Para clasificar una

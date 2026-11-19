@@ -132,10 +132,10 @@ panel esperan hasta la próxima ejecución.
 | `PIPELINE_SNAPSHOT_MAX_CHARS` | `10000` | Cuánto de cada portada ve el LLM |
 | `PIPELINE_PERFIL_MODELO` | `economico` | `economico` · `preciso` · `openrouter` · `local` |
 | `PIPELINE_PERFIL_RESPALDO` | `openrouter` si hay `OPENROUTER_API_KEY` | A qué perfil caer si el principal no responde |
-| `PIPELINE_LLM_RAZONAMIENTO` | (vacío) | `bajo`/`desactivado` acelera mucho a deepseek-v4-flash; ver abajo |
+| `PIPELINE_LLM_RAZONAMIENTO` | (vacío) | `bajo`/`desactivado` acelera mucho a deepseek-v4.1-flash; ver abajo |
 | `AGENT_BROWSER_HEADED` | `false` | `true` muestra el navegador mientras trabaja |
 
-**Sobre `PIPELINE_LLM_RAZONAMIENTO`**: `deepseek-v4-flash` "piensa" por defecto
+**Sobre `PIPELINE_LLM_RAZONAMIENTO`**: `deepseek-v4.1-flash` "piensa" por defecto
 con esfuerzo alto; en la corrida del 6/9 una sola identificación llegó a 13.190
 tokens y 6 minutos. Con `bajo` debería bajar mucho el tiempo de cada corrida.
 Es opcional porque no se pudo probar contra OpenCode Go sin la key: si el
