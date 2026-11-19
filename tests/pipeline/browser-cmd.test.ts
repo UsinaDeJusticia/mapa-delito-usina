@@ -20,6 +20,8 @@ import {
   resolverEjecutable,
   nombreBinarioNativo,
   parsearContenidoExtraido,
+  interpretarFechaPublicacion,
+  SELECTORES_FECHA_PUBLICACION,
   resolverHref,
   mismaPagina,
   SELECTORES_CONTENIDO,
@@ -200,11 +202,12 @@ describe('parsearContenidoExtraido', () => {
     assert.deepEqual(parsearContenidoExtraido(JSON.stringify(interno)), {
       titulo: 'Mataron a un joven',
       texto: 'Un joven de 22 años...',
+      publicada: '',
     })
   })
 
   test('acepta también el objeto serializado una sola vez', () => {
-    assert.deepEqual(parsearContenidoExtraido('{"titulo":"T","texto":"X"}'), { titulo: 'T', texto: 'X' })
+    assert.deepEqual(parsearContenidoExtraido('{"titulo":"T","texto":"X"}'), { titulo: 'T', texto: 'X', publicada: '' })
   })
 
   test('devuelve vacío ante salida inesperada, sin lanzar', () => {
@@ -213,13 +216,46 @@ describe('parsearContenidoExtraido', () => {
       assert.equal(typeof r.titulo, 'string')
       assert.equal(typeof r.texto, 'string')
     }
-    assert.deepEqual(parsearContenidoExtraido('no es json'), { titulo: '', texto: '' })
+    assert.deepEqual(parsearContenidoExtraido('no es json'), { titulo: '', texto: '', publicada: '' })
   })
 
   test('recorta el texto al máximo aunque la página devuelva más', () => {
     const largo = 'x'.repeat(MAX_CHARS_CONTENIDO * 2)
     const r = parsearContenidoExtraido(JSON.stringify({ titulo: 't', texto: largo }))
     assert.equal(r.texto.length, MAX_CHARS_CONTENIDO)
+  })
+})
+
+describe('fecha de publicación de la nota', () => {
+  const AHORA = new Date('2026-11-19T15:00:00Z')
+
+  test('el script de extracción busca la fecha en los metadatos estándar', () => {
+    const script = comandos.extraerContenido()[1]
+    for (const s of SELECTORES_FECHA_PUBLICACION) assert.ok(script.includes(JSON.stringify(s)), `falta ${s}`)
+    assert.ok(script.includes('datePublished'), 'falta el respaldo JSON-LD')
+  })
+
+  test('parsearContenidoExtraido devuelve la fecha cruda', () => {
+    const r = parsearContenidoExtraido('{"titulo":"T","texto":"X","publicada":"2026-11-02T08:15:00-03:00"}')
+    assert.equal(r.publicada, '2026-11-02T08:15:00-03:00')
+  })
+
+  test('interpreta ISO con zona horaria', () => {
+    assert.equal(interpretarFechaPublicacion('2026-11-02T08:15:00-03:00', AHORA)?.toISOString(), '2026-11-02T11:15:00.000Z')
+  })
+
+  test('una fecha sola es mediodía argentino: no cambia de día', () => {
+    assert.equal(interpretarFechaPublicacion('2026-11-18', AHORA)?.toISOString(), '2026-11-18T15:00:00.000Z')
+  })
+
+  test('descarta lo vacío, lo ilegible, el futuro y lo absurdamente viejo', () => {
+    for (const v of ['', '   ', 'ayer', 'hace 3 horas', '2026-12-25T10:00:00Z', '1970-01-01T00:00:00Z']) {
+      assert.equal(interpretarFechaPublicacion(v, AHORA), null, v)
+    }
+  })
+
+  test('tolera hasta un día de adelanto (zonas horarias mal declaradas)', () => {
+    assert.ok(interpretarFechaPublicacion('2026-11-20T10:00:00Z', AHORA))
   })
 })
 

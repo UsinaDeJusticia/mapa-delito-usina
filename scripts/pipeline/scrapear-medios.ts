@@ -47,6 +47,7 @@ import {
   extraerRefDeSnapshot,
   mismaPagina,
   parsearContenidoExtraido,
+  interpretarFechaPublicacion,
   resolverEjecutable,
   resolverHref,
   EjecutableNoEncontradoError,
@@ -183,6 +184,8 @@ interface NoticiaScrapeada {
   medio: string
   medioTipo: 'provincial' | 'nacional'
   provinciaOrigen?: string
+  /** De los metadatos de la nota; null si no tenía o no era confiable. */
+  fechaPublicacion: Date | null
 }
 
 // ════════════════════════════════════════════
@@ -612,6 +615,7 @@ async function scrapearMedio(
             medio: medio.nombre,
             medioTipo: medio.tipo ?? (medio.provincia && medio.provincia !== 'Nacional' ? 'provincial' : 'nacional'),
             provinciaOrigen: medio.provincia,
+            fechaPublicacion: interpretarFechaPublicacion(contenido.publicada),
           })
           log('✅', `  ${titulo.slice(0, 60)}...`)
         } else {
@@ -911,7 +915,8 @@ async function procesarNoticia(noticia: NoticiaScrapeada, ctx: ContextoInsercion
           medioTipo: noticia.medioTipo,
           titulo: noticia.titulo,
           url: noticia.url,
-          fechaPublicacion: new Date(),
+          // La de la nota; si no la declara, la hora de la corrida (como antes).
+          fechaPublicacion: noticia.fechaPublicacion ?? new Date(),
           resumen: datos.descripcionBreve,
           tipoCobertura: 'HECHO_INICIAL',
         }
@@ -938,7 +943,8 @@ async function procesarNoticia(noticia: NoticiaScrapeada, ctx: ContextoInsercion
           medioTipo: noticia.medioTipo,
           titulo: noticia.titulo,
           url: noticia.url,
-          fechaPublicacion: new Date(),
+          // La de la nota; si no la declara, la hora de la corrida (como antes).
+          fechaPublicacion: noticia.fechaPublicacion ?? new Date(),
           resumen: datos.descripcionBreve,
           tipoCobertura: tipoCobertura as 'HECHO_INICIAL' | 'ACTUALIZACION' | 'DETENCION' | 'MARCHA_RECLAMO' | 'PROCESO_JUDICIAL' | 'SENTENCIA' | 'ANIVERSARIO' | 'OPINION_EDITORIAL',
         }

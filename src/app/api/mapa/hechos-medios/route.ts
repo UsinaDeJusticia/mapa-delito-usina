@@ -67,6 +67,12 @@ export async function GET() {
         -- son un homicidio. Cuando lo hace, el POST cambia tipo_delito_id al
         -- código 1 y el pin aparece solo.
         AND COALESCE(td.codigo_snic, '') <> '0'
+        -- Casos que el pipeline marcó como dudosos (el deduplicador no pudo
+        -- decidir, el LLM no estaba seguro de la provincia, etc.) esperan a
+        -- una persona antes de salir en el mapa público. El POST de
+        -- /api/admin/revisiones pone requiere_revision = false al clasificar,
+        -- así que el pin aparece solo cuando alguien lo confirma.
+        AND hd.requiere_revision = false
       ORDER BY hd.id, cm.created_at DESC
     ) sub
     ORDER BY sub.fecha_hecho DESC

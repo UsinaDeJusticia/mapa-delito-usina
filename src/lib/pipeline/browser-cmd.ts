@@ -407,6 +407,21 @@ export const SELECTORES_CONTENIDO = [
 /** Tope del texto que devuelve la página: 8000, lo mismo que se guardaba antes. */
 export const MAX_CHARS_CONTENIDO = 8000
 
+/**
+ * Dónde buscan los medios argentinos la fecha de publicación, en orden de
+ * confianza. Antes no se leía ninguna: `fecha_publicacion` de cada cobertura
+ * era la hora de la corrida, y una nota de hace un mes recién descubierta
+ * figuraba como publicada hoy.
+ */
+export const SELECTORES_FECHA_PUBLICACION = [
+  'meta[property="article:published_time"]',
+  'meta[itemprop="datePublished"]',
+  'meta[name="date"]',
+  'meta[name="publish-date"]',
+  'meta[name="pubdate"]',
+  'time[datetime]',
+] as const
+
 const SCRIPT_EXTRAER_CONTENIDO = `(() => {
   const selectores = ${JSON.stringify(SELECTORES_CONTENIDO)};
   const limpiar = t => (t || '').replace(/[ \\t]+\\n/g, '\\n').replace(/\\n{3,}/g, '\\n\\n').trim();
@@ -420,7 +435,21 @@ const SCRIPT_EXTRAER_CONTENIDO = `(() => {
     const main = document.querySelector('main');
     texto = main ? limpiar(main.innerText) : '';
   }
-  return JSON.stringify({ titulo: document.title || '', texto: texto.slice(0, ${MAX_CHARS_CONTENIDO}) });
+  // Fecha de publicación: metadatos estándar (Open Graph, schema.org, JSON-LD).
+  // Solo se devuelve el texto crudo; lo valida interpretarFechaPublicacion().
+  let publicada = '';
+  for (const s of ${JSON.stringify(SELECTORES_FECHA_PUBLICACION)}) {
+    const el = document.querySelector(s);
+    const v = el ? (el.getAttribute('content') || el.getAttribute('datetime') || '') : '';
+    if (v.trim()) { publicada = v.trim(); break; }
+  }
+  if (!publicada) {
+    for (const el of document.querySelectorAll('script[type="application/ld+json"]')) {
+      const m = (el.textContent || '').match(/"datePublished"\\s*:\\s*"([^"]{8,40})"/);
+      if (m) { publicada = m[1]; break; }
+    }
+  }
+  return JSON.stringify({ titulo: document.title || '', texto: texto.slice(0, ${MAX_CHARS_CONTENIDO}), publicada: publicada.slice(0, 64) });
 })()`
 
 /**
@@ -432,23 +461,44 @@ const SCRIPT_EXTRAER_CONTENIDO = `(() => {
  * la versión del CLI. Cualquier cosa inesperada da vacío, que el pipeline ya
  * trata como "texto insuficiente".
  */
-export function parsearContenidoExtraido(salida: string): { titulo: string; texto: string } {
-  const vacio = { titulo: '', texto: '' }
+export function parsearContenidoExtraido(salida: string): { titulo: string; texto: string; publicada: string } {
+  const vacio = { titulo: '', texto: '', publicada: '' }
   if (!salida) return vacio
   try {
     let valor: unknown = JSON.parse(salida)
     if (typeof valor === 'string') valor = JSON.parse(valor)
     if (valor && typeof valor === 'object') {
-      const v = valor as { titulo?: unknown; texto?: unknown }
+      const v = valor as { titulo?: unknown; texto?: unknown; publicada?: unknown }
       return {
         titulo: typeof v.titulo === 'string' ? v.titulo : '',
         texto: typeof v.texto === 'string' ? v.texto.slice(0, MAX_CHARS_CONTENIDO) : '',
+        publicada: typeof v.publicada === 'string' ? v.publicada.slice(0, 64) : '',
       }
     }
   } catch {
     // salida no JSON: se descarta
   }
   return vacio
+}
+
+/**
+ * Convierte la fecha cruda que devolvió la página en un Date confiable, o null.
+ *
+ * El valor lo escribe un sitio de terceros, así que se desconfía: se descarta
+ * lo que no parsea, lo que cae más de un día en el futuro (zonas horarias mal
+ * declaradas, fechas de "actualizado" inventadas) y lo anterior a 2000.
+ * Una fecha sola ("2026-11-18") se toma como mediodía argentino para que no
+ * cambie de día según la zona de quien la lea.
+ */
+export function interpretarFechaPublicacion(cruda: string, ahora: Date = new Date()): Date | null {
+  const valor = cruda.trim()
+  if (!valor) return null
+  const soloFecha = /^\d{4}-\d{2}-\d{2}$/.test(valor)
+  const fecha = new Date(soloFecha ? `${valor}T12:00:00-03:00` : valor)
+  if (Number.isNaN(fecha.getTime())) return null
+  if (fecha.getTime() > ahora.getTime() + 86_400_000) return null
+  if (fecha.getUTCFullYear() < 2000) return null
+  return fecha
 }
 
 /**
