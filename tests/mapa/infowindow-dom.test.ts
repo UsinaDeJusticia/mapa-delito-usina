@@ -334,3 +334,15 @@ describe('víctimas sin dato en los globos del mapa', () => {
     assert.ok(!el.textContent!.includes(PARCIAL))
   })
 })
+
+describe('pin de un hecho no doloso', () => {
+  test('agrega la aclaración "No doloso"', () => {
+    const el = contenidoHechoMedio({ titulo: 'Choque fatal', esVerificado: false, noDoloso: true }, doc)
+    assert.match(el.textContent ?? '', /No doloso/)
+  })
+
+  test('los homicidios dolosos no la llevan', () => {
+    const el = contenidoHechoMedio({ titulo: 'Mataron a un joven', esVerificado: true }, doc)
+    assert.doesNotMatch(el.textContent ?? '', /No doloso/)
+  })
+})

@@ -20,6 +20,8 @@ import {
   CapaH3,
 } from './capas'
 import type { HechoMedio } from './capas'
+import { COLOR_NO_DOLOSO } from './capas/CapaHechosMedios'
+import { esNoDoloso } from '@/lib/mapa/gravedad-hecho'
 
 import { useGeolocalizacion } from './hooks/useGeolocalizacion'
 import { precargarGeoJSON } from './hooks/useGeoJSON'
@@ -624,6 +626,12 @@ export default function MapaDelito({ anio: anioProp, tipoDelitoId: tipoDelitoPro
               </span>
               <span className="ml-auto text-gray-300">{mostrarMedias ? '●' : '○'}</span>
             </button>
+            {mostrarMedias && hechosMedias.some(h => esNoDoloso(h.codigo_snic)) && (
+              <p className="flex items-center gap-2 mt-1 text-[9px] sm:text-[10px] text-gray-400">
+                <span className="shrink-0 w-3 h-3 rounded-full" style={{ backgroundColor: COLOR_NO_DOLOSO }} aria-hidden />
+                Gris: muertes no dolosas (culposas y viales)
+              </p>
+            )}
           </div>
         )}
 

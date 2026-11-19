@@ -356,7 +356,7 @@ Estado global: año, tipo de delito, fuente (SNIC/SAT), filtros SAT, provincia s
 **Botón "Revisar"**: flotante en `bottom-[72px] right-4`, encima del botón de recentrar.
 
 ### `capas/CapaHechosMedios.tsx`
-Pins individuales del pipeline. Rojo (`#C0392B`) = VERIFICADO, naranja (`#E67E22`) = PRELIMINAR. InfoWindow con detalles al click. Toggle en la leyenda.
+Pins individuales del pipeline. Rojo (`#C0392B`) = VERIFICADO, naranja (`#E67E22`) = PRELIMINAR, gris (`#A7A8AC`) = no doloso (códigos SNIC 3 y 4, `src/lib/mapa/gravedad-hecho.ts`) con la aclaración "No doloso" en el InfoWindow y en la leyenda. Toggle en la leyenda.
 
 ### `FiltrosSAT.tsx`
 Chips de filtros (Sexo, Arma, Vínculo, Lugar). **No tiene posicionamiento propio** — su padre decide dónde lo ubica. Carga opciones una sola vez desde `/api/mapa/sat-opciones`.

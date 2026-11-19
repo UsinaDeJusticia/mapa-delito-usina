@@ -70,6 +70,8 @@ export interface DatosHechoMedio {
   url_cobertura?: string | null
   fecha?: string | null
   esVerificado: boolean
+  /** Culposo o vial (códigos SNIC 3 y 4): se aclara que no fue intencional. */
+  noDoloso?: boolean
 }
 
 export function contenidoHechoMedio(
@@ -90,6 +92,17 @@ export function contenidoHechoMedio(
     hecho.esVerificado ? '✓ Verificado' : '⏳ Preliminar'
   )
   fila.appendChild(badge)
+
+  if (hecho.noDoloso) {
+    fila.appendChild(
+      crear(
+        doc,
+        'span',
+        'font-size:10px;font-weight:600;padding:2px 7px;border-radius:99px;background:#F3F4F6;color:#4B5563;',
+        'No doloso'
+      )
+    )
+  }
 
   if (hecho.medio) {
     fila.appendChild(crear(doc, 'span', 'font-size:10px;color:#6B7280;', hecho.medio))
