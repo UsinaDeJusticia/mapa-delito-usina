@@ -43,7 +43,7 @@ Fuente: `analisis-2026-09.md` §4.1.
 1. **P0** — Regenerar `public/data/hechos_sat.parquet` (todavía tiene la columna `id`, el arreglo de 7c3970a nunca llegó al archivo) y decidir la precisión de sus coordenadas: 8.704 de 16.734 filas tienen una coordenada única junto a sexo, arma, vínculo y contexto. Agregar un test sobre el Parquet commiteado.
 2. **P0** — Corregir `PROVINCIAS_CENTROIDES` en `scripts/ingesta/sat-homicidios.py` (Buenos Aires cae en La Pampa, Tucumán en Misiones, Santa Fe en La Rioja, entre otras) y reingerir.
 3. **P0 (decisión)** — El aviso de femicidios del modo SAT (`PanelEstadisticas.tsx`, `/metodologia`) dice que no están incluidos en el total, pero `mv_sat_provincia` los cuenta. Definir el criterio y alinear vista, Parquet, panel y metodología.
-4. **P1 (decisión)** — Qué casos del pipeline se publican antes de la revisión humana: hoy se muestran los `requiere_revision` y los códigos 2, 3 y 4, sin advertencia de "no revisado" en el mapa. *(Nov. 2026: los `requiere_revision` ya no se muestran hasta que alguien los clasifica. Sigue abierto qué hacer con los PRELIMINAR de códigos 2, 3 y 4.)*
+4. **P1 (decisión)** — Qué casos del pipeline se publican antes de la revisión humana: hoy se muestran los `requiere_revision` y los códigos 2, 3 y 4, sin advertencia de "no revisado" en el mapa. *(Nov. 2026: los `requiere_revision` ya no se muestran hasta que alguien los clasifica. Desde nov. 2026 los códigos 3 y 4 —viales y culposos— se muestran en gris con la aclaración "No doloso"; decisión del equipo.)*
 5. **P1** — Limpiar las ubicaciones con `es_centroide = true` que creó el pipeline antes del 25/09 (ensucian `/api/mapa/provincias`). La consulta para identificarlas está en §4.1.
 
 ---

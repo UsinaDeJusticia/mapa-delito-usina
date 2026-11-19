@@ -76,7 +76,7 @@ mapa-delito-usina/
 │   │       │   ├── CapaProvincias.tsx   # Coroplético provincial (google.maps.Data)
 │   │       │   ├── CapaDepartamentos.tsx# Bordes departamentales + labels (lazy)
 │   │       │   ├── MarcadoresCirculares.tsx # Burbujas SVG por provincia
-│   │       │   └── CapaHechosMedios.tsx # Pins individuales del pipeline (rojo=VERIFICADO, naranja=PRELIMINAR)
+│   │       │   └── CapaHechosMedios.tsx # Pins individuales del pipeline (rojo=VERIFICADO, naranja=PRELIMINAR, gris=no doloso)
 │   │       └── hooks/
 │   │           ├── useGeoJSON.ts        # Fetch + cache en memoria de GeoJSON
 │   │           └── useGeolocalizacion.ts# GPS del browser, no bloquea carga
