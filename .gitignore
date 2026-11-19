@@ -25,6 +25,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# log del agente local del pipeline (docs/agente-local.md)
+agente.log
+
 # local env files
 .env*.local
 .env
